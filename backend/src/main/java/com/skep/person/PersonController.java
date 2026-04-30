@@ -42,7 +42,10 @@ public class PersonController {
         if (size < 1 || size > 100) size = 20;
         if (page < 0) page = 0;
         var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
-        return PageResponse.of(service.search(actor, supplierId, role, q, pageable), PersonResponse::from);
+        var pg = service.search(actor, supplierId, role, q, pageable);
+        var ids = pg.getContent().stream().map(Person::getId).toList();
+        var counts = service.expiringCountsByPersonIds(ids);
+        return PageResponse.of(pg, p -> PersonResponse.from(p, counts.getOrDefault(p.getId(), 0L)));
     }
 
     @GetMapping("/{id}")

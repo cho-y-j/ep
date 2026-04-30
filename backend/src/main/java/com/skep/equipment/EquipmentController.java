@@ -32,7 +32,12 @@ public class EquipmentController {
             @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) EquipmentCategory category
     ) {
-        return service.list(actor, supplierId, category).stream().map(EquipmentResponse::from).toList();
+        var list = service.list(actor, supplierId, category);
+        var ids = list.stream().map(Equipment::getId).toList();
+        var counts = service.expiringCountsByEquipmentIds(ids);
+        return list.stream()
+                .map(e -> EquipmentResponse.from(e, counts.getOrDefault(e.getId(), 0L)))
+                .toList();
     }
 
     @GetMapping("/{id}")

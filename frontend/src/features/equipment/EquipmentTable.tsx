@@ -27,7 +27,15 @@ export default function EquipmentTable({ equipment, companiesById, showSupplierC
             return (
               <tr key={e.id} onClick={() => onRowClick(e)} className="cursor-pointer hover:bg-slate-50">
                 <td className="px-4 py-3 font-medium">
-                  {e.vehicle_no || <span className="text-slate-400">—</span>}
+                  <span>{e.vehicle_no || <span className="text-slate-400">—</span>}</span>
+                  {e.expiring_count > 0 && (
+                    <span
+                      className="ml-2 inline-flex px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-xs font-normal"
+                      title={`만료 임박 서류 ${e.expiring_count}건`}
+                    >
+                      만료 {e.expiring_count}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-slate-600">{EQUIPMENT_CATEGORY_LABEL[e.category]}</td>
                 <td className="px-4 py-3 text-slate-600">

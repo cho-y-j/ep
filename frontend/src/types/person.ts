@@ -17,6 +17,7 @@ export type PersonResponse = {
   phone?: string | null;
   roles: PersonRole[];
   has_photo: boolean;
+  expiring_count: number;
   created_at: string;
 };
 

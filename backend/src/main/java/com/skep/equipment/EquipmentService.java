@@ -4,6 +4,8 @@ import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyType;
+import com.skep.document.DocumentRepository;
+import com.skep.document.OwnerType;
 import com.skep.equipment.dto.CreateEquipmentRequest;
 import com.skep.equipment.dto.UpdateEquipmentRequest;
 import com.skep.security.AuthenticatedUser;
@@ -14,20 +16,39 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Transactional
 public class EquipmentService {
 
+    private static final int EXPIRING_DAYS = 30;
+
     private final EquipmentRepository repo;
     private final CompanyRepository companies;
+    private final DocumentRepository docRepo;
     private final FileStorage storage;
 
-    public EquipmentService(EquipmentRepository repo, CompanyRepository companies, FileStorage storage) {
+    public EquipmentService(EquipmentRepository repo, CompanyRepository companies,
+                            DocumentRepository docRepo, FileStorage storage) {
         this.repo = repo;
         this.companies = companies;
+        this.docRepo = docRepo;
         this.storage = storage;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, Long> expiringCountsByEquipmentIds(List<Long> ids) {
+        if (ids.isEmpty()) return Map.of();
+        LocalDate maxDate = LocalDate.now().plusDays(EXPIRING_DAYS);
+        Map<Long, Long> map = new HashMap<>();
+        for (Object[] row : docRepo.countExpiringGroupedByOwner(OwnerType.EQUIPMENT, ids, maxDate)) {
+            map.put((Long) row[0], (Long) row[1]);
+        }
+        return map;
     }
 
     @Transactional(readOnly = true)

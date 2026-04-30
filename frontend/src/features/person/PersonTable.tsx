@@ -71,6 +71,14 @@ export default function PersonTable({
                       size={36}
                     />
                     <span className="font-medium">{p.name}</span>
+                    {p.expiring_count > 0 && (
+                      <span
+                        className="inline-flex px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-xs"
+                        title={`만료 임박 서류 ${p.expiring_count}건`}
+                      >
+                        만료 {p.expiring_count}
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-slate-600">{p.birth ?? <span className="text-slate-400">—</span>}</td>

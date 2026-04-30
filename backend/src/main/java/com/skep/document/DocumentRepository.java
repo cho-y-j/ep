@@ -42,4 +42,20 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     List<Document> findExpiringForCompany(@Param("companyId") Long companyId, @Param("maxDate") LocalDate maxDate);
 
     long countByOwnerTypeAndOwnerIdIn(OwnerType ownerType, List<Long> ownerIds);
+
+    /**
+     * 특정 owner들의 만료 임박 서류 수 (group by owner_id).
+     * 결과 List<[ownerId, count]> — 0건은 누락.
+     */
+    @Query("""
+            SELECT d.ownerId, COUNT(d) FROM Document d
+            WHERE d.ownerType = :ownerType AND d.ownerId IN :ownerIds
+              AND d.expiryDate IS NOT NULL AND d.expiryDate <= :maxDate
+            GROUP BY d.ownerId
+            """)
+    List<Object[]> countExpiringGroupedByOwner(
+            @Param("ownerType") OwnerType ownerType,
+            @Param("ownerIds") List<Long> ownerIds,
+            @Param("maxDate") LocalDate maxDate
+    );
 }

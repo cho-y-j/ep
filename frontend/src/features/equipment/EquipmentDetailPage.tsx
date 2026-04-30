@@ -230,49 +230,65 @@ export default function EquipmentDetailPage() {
             </div>
           ) : (
             <div className="flex flex-col md:flex-row gap-6">
-              <div className="flex flex-col items-center gap-2 shrink-0">
-                <Avatar
-                  key={photoNonce}
-                  fetchUrl={equipment.has_photo ? `/api/equipment/${equipment.id}/photo` : undefined}
-                  fallbackText={equipment.vehicle_no || EQUIPMENT_CATEGORY_LABEL[equipment.category]}
-                  alt={equipment.vehicle_no ?? EQUIPMENT_CATEGORY_LABEL[equipment.category]}
-                  size={140}
-                  rounded="lg"
-                />
-                {canEdit && (
-                  <div className="flex flex-col gap-1 w-full">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      hidden
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) void handlePhotoFile(f);
-                        e.target.value = '';
-                      }}
+              {(equipment.has_photo || canEdit) && (
+                <div className="flex flex-col items-center gap-2 shrink-0">
+                  {equipment.has_photo ? (
+                    <Avatar
+                      key={photoNonce}
+                      fetchUrl={`/api/equipment/${equipment.id}/photo`}
+                      fallbackText={equipment.vehicle_no || EQUIPMENT_CATEGORY_LABEL[equipment.category]}
+                      alt={equipment.vehicle_no ?? EQUIPMENT_CATEGORY_LABEL[equipment.category]}
+                      size={140}
+                      rounded="lg"
                     />
+                  ) : (
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={photoBusy}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+                      className="w-[140px] h-[140px] rounded-lg border-2 border-dashed border-slate-300 hover:border-brand-500 hover:bg-slate-50 text-xs text-slate-500 disabled:opacity-50 flex flex-col items-center justify-center gap-1"
                     >
-                      {photoBusy ? '업로드 중...' : equipment.has_photo ? '사진 변경' : '사진 추가'}
+                      <span className="text-2xl text-slate-400">+</span>
+                      <span>사진 추가</span>
                     </button>
-                    {equipment.has_photo && (
-                      <button
-                        type="button"
-                        onClick={() => void deletePhoto()}
-                        disabled={photoBusy}
-                        className="text-xs px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
-                      >
-                        사진 삭제
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+                  )}
+                  {canEdit && (
+                    <div className="flex flex-col gap-1 w-full">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void handlePhotoFile(f);
+                          e.target.value = '';
+                        }}
+                      />
+                      {equipment.has_photo && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={photoBusy}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+                          >
+                            {photoBusy ? '업로드 중...' : '사진 변경'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void deletePhoto()}
+                            disabled={photoBusy}
+                            className="text-xs px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            사진 삭제
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex-1 min-w-0">
                 <div className="mb-4">

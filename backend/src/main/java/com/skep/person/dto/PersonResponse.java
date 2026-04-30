@@ -15,9 +15,14 @@ public record PersonResponse(
         String phone,
         Set<PersonRole> roles,
         boolean hasPhoto,
+        long expiringCount,
         LocalDateTime createdAt
 ) {
     public static PersonResponse from(Person p) {
+        return from(p, 0L);
+    }
+
+    public static PersonResponse from(Person p, long expiringCount) {
         return new PersonResponse(
                 p.getId(),
                 p.getSupplierId(),
@@ -26,6 +31,7 @@ public record PersonResponse(
                 p.getPhone(),
                 p.getRoles(),
                 p.getPhotoKey() != null,
+                expiringCount,
                 p.getCreatedAt()
         );
     }

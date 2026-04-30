@@ -4,30 +4,54 @@ import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyType;
+import com.skep.document.DocumentRepository;
+import com.skep.document.OwnerType;
 import com.skep.person.dto.CreatePersonRequest;
 import com.skep.person.dto.UpdatePersonRequest;
 import com.skep.security.AuthenticatedUser;
 import com.skep.storage.FileStorage;
 import com.skep.user.Role;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
 @Transactional
 public class PersonService {
 
+    private static final int EXPIRING_DAYS = 30;
+
     private final PersonRepository repo;
     private final CompanyRepository companies;
+    private final DocumentRepository docRepo;
     private final FileStorage storage;
 
-    public PersonService(PersonRepository repo, CompanyRepository companies, FileStorage storage) {
+    public PersonService(PersonRepository repo, CompanyRepository companies,
+                         DocumentRepository docRepo, FileStorage storage) {
         this.repo = repo;
         this.companies = companies;
+        this.docRepo = docRepo;
         this.storage = storage;
+    }
+
+    /** 인원 ID 리스트에 대해 만료 임박 서류 수를 owner_id별로 그룹핑해서 반환. */
+    @Transactional(readOnly = true)
+    public Map<Long, Long> expiringCountsByPersonIds(List<Long> personIds) {
+        if (personIds.isEmpty()) return Map.of();
+        LocalDate maxDate = LocalDate.now().plusDays(EXPIRING_DAYS);
+        Map<Long, Long> map = new HashMap<>();
+        for (Object[] row : docRepo.countExpiringGroupedByOwner(OwnerType.PERSON, personIds, maxDate)) {
+            map.put((Long) row[0], (Long) row[1]);
+        }
+        return map;
     }
 
     @Transactional(readOnly = true)

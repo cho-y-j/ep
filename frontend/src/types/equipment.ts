@@ -18,6 +18,7 @@ export type EquipmentResponse = {
   manufacturer?: string | null;
   year?: number | null;
   has_photo: boolean;
+  expiring_count: number;
   created_at: string;
 };
 
