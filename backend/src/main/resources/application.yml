@@ -6,6 +6,7 @@ spring:
   jackson:
     property-naming-strategy: SNAKE_CASE
     default-property-inclusion: non_null
+    time-zone: Asia/Seoul
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/skep_db}
     username: ${DB_USER:skep_user}

@@ -59,7 +59,7 @@ export default function UserDetailPanel({ user, onClose, onChange }: Props) {
                 onClick={() => setPendingAction('enable')}
                 className="btn-primary"
               >
-                승인 (활성화)
+                활성화
               </button>
             )}
             {user.enabled && !isSelf && (
@@ -94,7 +94,7 @@ export default function UserDetailPanel({ user, onClose, onChange }: Props) {
           />
           <Row label="회사 ID" value={user.company_id ?? '—'} />
           <Row label="회사 관리자" value={user.is_company_admin ? '예' : '아니오'} />
-          <Row label="가입일" value={new Date(user.created_at).toLocaleString()} />
+          <Row label="가입일" value={new Date(user.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} />
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
@@ -104,9 +104,9 @@ export default function UserDetailPanel({ user, onClose, onChange }: Props) {
 
       <ConfirmDialog
         open={pendingAction === 'enable'}
-        title="사용자 승인"
-        message={`${user.name} (${user.email}) 계정을 활성화합니다.\n승인 후 로그인이 가능해집니다.`}
-        confirmLabel="승인"
+        title="사용자 활성화"
+        message={`${user.name} (${user.email}) 계정을 활성화합니다.\n활성화 후 로그인이 가능해집니다.`}
+        confirmLabel="활성화"
         variant="primary"
         busy={busy}
         onConfirm={() => execute('enable')}

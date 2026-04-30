@@ -6,6 +6,8 @@ services:
       POSTGRES_DB: ${DB_NAME:-skep_db}
       POSTGRES_USER: ${DB_USER:-skep_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-skep_pass}
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
     volumes:
       - skep_v2_pg:/var/lib/postgresql/data
     ports:
@@ -20,6 +22,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: skep-v2-redis
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "${REDIS_PORT:-6380}:6379"
     healthcheck:
@@ -35,6 +39,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: 8080
+      TZ: Asia/Seoul
       DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-skep_db}
       DB_USER: ${DB_USER:-skep_user}
       DB_PASSWORD: ${DB_PASSWORD:-skep_pass}
@@ -61,6 +66,8 @@ services:
   frontend:
     build: ./frontend
     container_name: skep-v2-frontend
+    environment:
+      TZ: Asia/Seoul
     depends_on:
       - backend
     ports:
