@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { type DocumentResponse, type OwnerType } from '../../types/document';
 import DocumentUploadForm from './DocumentUploadForm';
 import DocumentCard from './DocumentCard';
+import DocumentRenewDialog from './DocumentRenewDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { tokenStorage } from '../../lib/tokenStorage';
 
@@ -21,6 +22,7 @@ export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) 
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<DocumentResponse | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [renewing, setRenewing] = useState<DocumentResponse | null>(null);
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
@@ -140,6 +142,7 @@ export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) 
               onOpen={() => openFile(d)}
               onDelete={() => setPendingDelete(d)}
               onToggleVerify={() => setVerified(d, !d.verified)}
+              onRenew={() => setRenewing(d)}
             />
           ))}
         </div>
@@ -155,6 +158,20 @@ export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) 
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
       />
+
+      {renewing && (
+        <DocumentRenewDialog
+          open
+          ownerType={renewing.owner_type}
+          ownerId={renewing.owner_id}
+          documentTypeId={renewing.document_type_id}
+          documentTypeName={renewing.document_type_name}
+          oldDocumentId={renewing.id}
+          hasExpiry={renewing.document_type_has_expiry}
+          onClose={() => setRenewing(null)}
+          onDone={() => { setRenewing(null); void load(); }}
+        />
+      )}
     </div>
   );
 }

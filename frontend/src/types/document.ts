@@ -14,6 +14,7 @@ export type DocumentResponse = {
   id: number;
   document_type_id: number;
   document_type_name: string;
+  document_type_has_expiry: boolean;
   owner_type: OwnerType;
   owner_id: number;
   file_name: string;

@@ -45,11 +45,13 @@ public class DocumentService {
         ensureCanAccess(actor, ownerSupplierId);
 
         List<Document> docs = docRepo.findByOwnerTypeAndOwnerIdOrderByIdDesc(ownerType, ownerId);
-        Map<Long, String> typeNames = new HashMap<>();
+        Map<Long, DocumentType> typeCache = new HashMap<>();
         return docs.stream().map(d -> {
-            String name = typeNames.computeIfAbsent(d.getDocumentTypeId(),
-                    id -> typeRepo.findById(id).map(DocumentType::getName).orElse("(삭제됨)"));
-            return DocumentResponse.from(d, name);
+            DocumentType type = typeCache.computeIfAbsent(d.getDocumentTypeId(),
+                    id -> typeRepo.findById(id).orElse(null));
+            String name = type != null ? type.getName() : "(삭제됨)";
+            boolean hasExpiry = type != null && type.isHasExpiry();
+            return DocumentResponse.from(d, name, hasExpiry);
         }).toList();
     }
 
@@ -81,7 +83,7 @@ public class DocumentService {
                 .uploadedBy(actor.id())
                 .build();
         docRepo.save(doc);
-        return DocumentResponse.from(doc, type.getName());
+        return DocumentResponse.from(doc, type.getName(), type.isHasExpiry());
     }
 
     @Transactional(readOnly = true)
@@ -104,7 +106,7 @@ public class DocumentService {
         ensureCanModify(actor, supplierId);
         d.updateExpiry(expiryDate);
         DocumentType type = typeRepo.findById(d.getDocumentTypeId()).orElseThrow();
-        return DocumentResponse.from(d, type.getName());
+        return DocumentResponse.from(d, type.getName(), type.isHasExpiry());
     }
 
     public DocumentResponse setVerified(Long id, boolean verified, AuthenticatedUser actor) {
@@ -115,7 +117,7 @@ public class DocumentService {
                 ApiException.notFound("DOCUMENT_NOT_FOUND", "document " + id + " not found"));
         if (verified) d.markVerified(); else d.unmarkVerified();
         DocumentType type = typeRepo.findById(d.getDocumentTypeId()).orElseThrow();
-        return DocumentResponse.from(d, type.getName());
+        return DocumentResponse.from(d, type.getName(), type.isHasExpiry());
     }
 
     public void delete(Long id, AuthenticatedUser actor) {

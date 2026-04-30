@@ -9,9 +9,10 @@ type Props = {
   onOpen: () => void;
   onDelete: () => void;
   onToggleVerify: () => void;
+  onRenew: () => void;
 };
 
-export default function DocumentCard({ doc, canEdit, isAdmin, onOpen, onDelete, onToggleVerify }: Props) {
+export default function DocumentCard({ doc, canEdit, isAdmin, onOpen, onDelete, onToggleVerify, onRenew }: Props) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -95,7 +96,16 @@ export default function DocumentCard({ doc, canEdit, isAdmin, onOpen, onDelete, 
                 ⋮
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-full mt-1 z-10 min-w-[110px] bg-white rounded-lg shadow-md border border-slate-200 py-1">
+                <div className="absolute right-0 top-full mt-1 z-10 min-w-[120px] bg-white rounded-lg shadow-md border border-slate-200 py-1">
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => { setMenuOpen(false); onRenew(); }}
+                      className="block w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50"
+                    >
+                      재업로드
+                    </button>
+                  )}
                   {isAdmin && (
                     <button
                       type="button"
