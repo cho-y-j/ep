@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import SidePanel from '../../components/SidePanel';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EquipmentFields, { type EquipmentFieldValues } from './EquipmentFields';
+import DocumentSection from '../document/DocumentSection';
 import { api } from '../../lib/api';
 import { EQUIPMENT_CATEGORY_LABEL, type EquipmentResponse } from '../../types/equipment';
 import type { CompanyResponse } from '../../types/auth';
@@ -129,6 +130,10 @@ export default function EquipmentDetailPanel({ equipment, supplier, onClose, onC
             <Row label="공급사" value={supplier ? `${supplier.name} (${supplier.business_number})` : equipment.supplier_id} />
             <Row label="등록일" value={new Date(equipment.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} />
             {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+
+            <div className="pt-4 border-t border-slate-200">
+              <DocumentSection ownerType="EQUIPMENT" ownerId={equipment.id} canEdit={canEdit} />
+            </div>
           </dl>
         )}
       </SidePanel>
