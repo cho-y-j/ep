@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import { api } from '../lib/api';
 import { COMPANY_TYPE_LABEL, type CompanyResponse, type CompanyType } from '../types/auth';
 import CompanyDetailPanel from '../components/CompanyDetailPanel';
+import AppHeader from '../components/AppHeader';
 
 const TYPES: CompanyType[] = ['BP', 'EQUIPMENT', 'MANPOWER'];
 
@@ -58,6 +59,7 @@ export default function AdminCompaniesPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
+      <AppHeader />
       <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">회사 관리</h1>

@@ -1,36 +1,15 @@
 import { useAuth } from '../contexts/AuthContext';
-import { COMPANY_TYPE_LABEL, ROLE_LABEL } from '../types/auth';
+import { COMPANY_TYPE_LABEL } from '../types/auth';
 import { Link } from 'react-router-dom';
+import AppHeader from '../components/AppHeader';
 
 export default function HomePage() {
-  const { user, company, logout } = useAuth();
+  const { user, company } = useAuth();
   if (!user) return null;
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold">SKEP v2</h1>
-          <div className="flex items-center gap-4 text-sm">
-            <span className="text-slate-500">
-              {user.name} ({ROLE_LABEL[user.role]})
-            </span>
-            {user.role === 'ADMIN' && (
-              <>
-                <Link to="/admin/users" className="text-brand-600 hover:underline">
-                  사용자 관리
-                </Link>
-                <Link to="/admin/companies" className="text-brand-600 hover:underline">
-                  회사 관리
-                </Link>
-              </>
-            )}
-            <button onClick={() => logout()} className="text-slate-600 hover:text-slate-900">
-              로그아웃
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-50">
+      <AppHeader />
 
       <section className="max-w-5xl mx-auto px-6 py-10 space-y-6">
         <div className="card">
@@ -63,7 +42,7 @@ export default function HomePage() {
         )}
 
         {user.role === 'ADMIN' && (
-          <div className="card border-slate-200">
+          <div className="card">
             <h3 className="text-base font-bold mb-2">관리자 메뉴</h3>
             <div className="flex flex-wrap gap-2 mt-3">
               <Link to="/admin/users" className="btn-primary">사용자 관리</Link>
@@ -72,6 +51,6 @@ export default function HomePage() {
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }

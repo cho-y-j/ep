@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { ROLE_LABEL, type CompanyResponse, type UserResponse } from '../types/auth';
 import UserDetailPanel from '../components/UserDetailPanel';
+import AppHeader from '../components/AppHeader';
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserResponse[]>([]);
@@ -40,6 +41,7 @@ export default function AdminUsersPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
+      <AppHeader />
       <div className="max-w-5xl mx-auto px-6 py-8">
         <h1 className="text-2xl font-bold mb-6">사용자 관리</h1>
 
