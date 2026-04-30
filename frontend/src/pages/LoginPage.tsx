@@ -5,6 +5,17 @@ import { AxiosError } from 'axios';
 
 type Location = { from?: string };
 
+const TEST_ACCOUNTS = [
+  { label: 'ADMIN 로그인', email: 'admin@skep.local', password: 'change-me-now', color: 'bg-slate-900 hover:bg-slate-800' },
+  { label: 'BP 로그인', email: 'bp1@example.com', password: 'testpass123', color: 'bg-brand-600 hover:bg-brand-700' },
+];
+
+function isLocalEnv(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,12 +27,11 @@ export default function LoginPage() {
   const location = useLocation();
   const from = (location.state as Location | null)?.from ?? '/';
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function doLogin(loginEmail: string, loginPassword: string) {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(loginEmail, loginPassword);
       navigate(from, { replace: true });
     } catch (err) {
       if (err instanceof AxiosError) {
@@ -37,6 +47,11 @@ export default function LoginPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    void doLogin(email, password);
   }
 
   return (
@@ -85,6 +100,25 @@ export default function LoginPage() {
             회원가입
           </Link>
         </p>
+
+        {isLocalEnv() && (
+          <div className="pt-4 border-t border-dashed border-slate-300">
+            <p className="text-xs text-slate-400 mb-2">테스트 빠른 로그인 (개발 환경 전용)</p>
+            <div className="grid grid-cols-2 gap-2">
+              {TEST_ACCOUNTS.map((acc) => (
+                <button
+                  key={acc.email}
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => doLogin(acc.email, acc.password)}
+                  className={`py-2 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 ${acc.color}`}
+                >
+                  {acc.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </form>
     </main>
   );

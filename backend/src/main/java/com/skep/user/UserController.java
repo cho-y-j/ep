@@ -1,6 +1,8 @@
 package com.skep.user;
 
 import com.skep.auth.dto.UserResponse;
+import com.skep.security.AuthenticatedUser;
+import com.skep.security.CurrentUser;
 import com.skep.user.dto.CreateUserRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -37,7 +39,7 @@ public class UserController {
     }
 
     @PatchMapping("/{id}/disable")
-    public UserResponse disable(@PathVariable Long id) {
-        return UserResponse.from(service.disable(id));
+    public UserResponse disable(@PathVariable Long id, @CurrentUser AuthenticatedUser actor) {
+        return UserResponse.from(service.disable(id, actor.id()));
     }
 }

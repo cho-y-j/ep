@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { ROLE_LABEL, type UserResponse } from '../types/auth';
+import UserDetailPanel from '../components/UserDetailPanel';
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<UserResponse | null>(null);
 
   async function load() {
     setLoading(true);
@@ -21,15 +22,9 @@ export default function AdminUsersPage() {
     load();
   }, []);
 
-  async function toggle(u: UserResponse) {
-    setBusyId(u.id);
-    try {
-      const path = u.enabled ? `/api/users/${u.id}/disable` : `/api/users/${u.id}/enable`;
-      await api.patch(path);
-      await load();
-    } finally {
-      setBusyId(null);
-    }
+  function handleChange(updated: UserResponse) {
+    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    setSelected(updated);
   }
 
   return (
@@ -48,12 +43,15 @@ export default function AdminUsersPage() {
                   <th className="px-4 py-3 font-medium">이름</th>
                   <th className="px-4 py-3 font-medium">역할</th>
                   <th className="px-4 py-3 font-medium">상태</th>
-                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {users.map((u) => (
-                  <tr key={u.id}>
+                  <tr
+                    key={u.id}
+                    onClick={() => setSelected(u)}
+                    className="cursor-pointer hover:bg-slate-50"
+                  >
                     <td className="px-4 py-3">{u.email}</td>
                     <td className="px-4 py-3">{u.name}</td>
                     <td className="px-4 py-3 text-slate-600">{ROLE_LABEL[u.role]}</td>
@@ -68,22 +66,11 @@ export default function AdminUsersPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      {u.role !== 'ADMIN' && (
-                        <button
-                          onClick={() => toggle(u)}
-                          disabled={busyId === u.id}
-                          className="text-brand-600 hover:underline text-sm disabled:opacity-50"
-                        >
-                          {u.enabled ? '비활성화' : '승인'}
-                        </button>
-                      )}
-                    </td>
                   </tr>
                 ))}
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
                       사용자 없음
                     </td>
                   </tr>
@@ -93,6 +80,12 @@ export default function AdminUsersPage() {
           </div>
         )}
       </div>
+
+      <UserDetailPanel
+        user={selected}
+        onClose={() => setSelected(null)}
+        onChange={handleChange}
+      />
     </main>
   );
 }

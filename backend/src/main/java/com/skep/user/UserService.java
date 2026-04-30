@@ -1,6 +1,7 @@
 package com.skep.user;
 
 import com.skep.common.ApiException;
+import com.skep.security.RefreshTokenRepository;
 import com.skep.user.dto.CreateUserRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -13,10 +14,12 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository users;
+    private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder encoder;
 
-    public UserService(UserRepository users, PasswordEncoder encoder) {
+    public UserService(UserRepository users, RefreshTokenRepository refreshTokens, PasswordEncoder encoder) {
         this.users = users;
+        this.refreshTokens = refreshTokens;
         this.encoder = encoder;
     }
 
@@ -54,9 +57,21 @@ public class UserService {
         return u;
     }
 
-    public User disable(Long id) {
+    public User disable(Long id, Long actorId) {
         User u = get(id);
+        if (u.getId().equals(actorId)) {
+            throw ApiException.badRequest("CANNOT_DISABLE_SELF", "본인 계정은 비활성화할 수 없습니다");
+        }
+        if (u.getRole() == Role.ADMIN) {
+            long activeAdmins = users.findAll().stream()
+                    .filter(other -> other.getRole() == Role.ADMIN && other.isEnabled() && !other.getId().equals(u.getId()))
+                    .count();
+            if (activeAdmins == 0) {
+                throw ApiException.badRequest("LAST_ADMIN", "마지막 활성 관리자는 비활성화할 수 없습니다");
+            }
+        }
         u.disable();
+        refreshTokens.revokeAllByUserId(u.getId());
         return u;
     }
 }
