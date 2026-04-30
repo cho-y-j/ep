@@ -191,28 +191,39 @@ export default function EquipmentDetailPage() {
               )}
             </div>
           ) : (
-            <>
-              <div className="mb-4">
-                <h3 className="text-2xl font-bold">
-                  {equipment.vehicle_no || equipment.model || EQUIPMENT_CATEGORY_LABEL[equipment.category]}
-                </h3>
-                <div className="mt-1">
-                  <span className="inline-flex px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium">
-                    {EQUIPMENT_CATEGORY_LABEL[equipment.category]}
-                  </span>
-                </div>
+            <div className="flex flex-col md:flex-row gap-6">
+              <div className="shrink-0 w-[140px] aspect-square rounded-lg bg-slate-100 flex items-center justify-center">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" className="text-slate-400">
+                  <rect x="2" y="10" width="20" height="8" rx="1.5" />
+                  <circle cx="7" cy="19" r="2" />
+                  <circle cx="17" cy="19" r="2" />
+                  <path d="M5 10V6h6l3 4" />
+                </svg>
               </div>
 
-              <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-sm">
-                <Field label="차량번호" value={equipment.vehicle_no ?? '—'} />
-                <Field label="제조사" value={equipment.manufacturer ?? '—'} />
-                <Field label="모델" value={equipment.model ?? '—'} />
-                <Field label="제조년도" value={equipment.year ?? '—'} />
-                <Field label="공급사" value={supplier?.name ?? `id=${equipment.supplier_id}`} />
-                {supplier && <Field label="사업자번호" value={supplier.business_number} />}
-                <Field label="등록일" value={new Date(equipment.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} />
-              </dl>
-            </>
+              <div className="flex-1 min-w-0">
+                <div className="mb-4">
+                  <h3 className="text-2xl font-bold">
+                    {equipment.vehicle_no || equipment.model || EQUIPMENT_CATEGORY_LABEL[equipment.category]}
+                  </h3>
+                  <div className="mt-1">
+                    <span className="inline-flex px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium">
+                      {EQUIPMENT_CATEGORY_LABEL[equipment.category]}
+                    </span>
+                  </div>
+                </div>
+
+                <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+                  <Field label="차량번호" value={equipment.vehicle_no ?? '—'} />
+                  <Field label="제조사" value={equipment.manufacturer ?? '—'} />
+                  <Field label="모델" value={equipment.model ?? '—'} />
+                  <Field label="제조년도" value={equipment.year ?? '—'} />
+                  <Field label="공급사" value={supplier?.name ?? `id=${equipment.supplier_id}`} />
+                  {supplier && <Field label="사업자번호" value={supplier.business_number} />}
+                  <Field label="등록일" value={new Date(equipment.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} />
+                </dl>
+              </div>
+            </div>
           )}
         </section>
 

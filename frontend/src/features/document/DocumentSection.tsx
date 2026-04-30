@@ -130,7 +130,7 @@ export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) 
       ) : docs.length === 0 ? (
         <p className="text-xs text-slate-400">등록된 서류가 없습니다</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
           {docs.map((d) => (
             <DocumentCard
               key={d.id}

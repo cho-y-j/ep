@@ -56,16 +56,16 @@ export default function DocumentCard({ doc, canEdit, isAdmin, onOpen, onDelete, 
         {isImage && thumbUrl ? (
           <img src={thumbUrl} alt={doc.file_name} className="w-full h-full object-cover" />
         ) : isPdf ? (
-          <div className="text-slate-400 flex flex-col items-center gap-1 text-xs">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <div className="text-slate-400 flex flex-col items-center gap-1 text-[10px]">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
             <span>PDF</span>
           </div>
         ) : (
-          <div className="text-slate-400 flex flex-col items-center gap-1 text-xs">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <div className="text-slate-400 flex flex-col items-center gap-1 text-[10px]">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
@@ -74,12 +74,12 @@ export default function DocumentCard({ doc, canEdit, isAdmin, onOpen, onDelete, 
         )}
       </button>
 
-      <div className="p-3 flex-1 flex flex-col">
+      <div className="p-2 flex-1 flex flex-col">
         <div className="flex items-start justify-between gap-2">
           <button
             type="button"
             onClick={onOpen}
-            className="text-sm font-medium text-slate-900 hover:text-brand-700 truncate text-left"
+            className="text-xs font-medium text-slate-900 hover:text-brand-700 truncate text-left"
             title={doc.file_name}
           >
             {doc.document_type_name}
