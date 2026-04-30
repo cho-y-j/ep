@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import { daysUntilExpiry, formatFileSize, type DocumentResponse, type OwnerType } from '../../types/document';
+import { type DocumentResponse, type OwnerType } from '../../types/document';
 import DocumentUploadForm from './DocumentUploadForm';
+import DocumentCard from './DocumentCard';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { tokenStorage } from '../../lib/tokenStorage';
 
@@ -129,9 +130,9 @@ export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) 
       ) : docs.length === 0 ? (
         <p className="text-xs text-slate-400">등록된 서류가 없습니다</p>
       ) : (
-        <ul className="space-y-1.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {docs.map((d) => (
-            <DocumentRow
+            <DocumentCard
               key={d.id}
               doc={d}
               canEdit={canEdit}
@@ -141,7 +142,7 @@ export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) 
               onToggleVerify={() => setVerified(d, !d.verified)}
             />
           ))}
-        </ul>
+        </div>
       )}
 
       <ConfirmDialog
@@ -158,66 +159,3 @@ export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) 
   );
 }
 
-function DocumentRow({ doc, canEdit, isAdmin, onOpen, onDelete, onToggleVerify }: {
-  doc: DocumentResponse;
-  canEdit: boolean;
-  isAdmin: boolean;
-  onOpen: () => void;
-  onDelete: () => void;
-  onToggleVerify: () => void;
-}) {
-  const days = daysUntilExpiry(doc.expiry_date);
-  const expired = days != null && days < 0;
-  const soon = days != null && days >= 0 && days <= 30;
-
-  return (
-    <li className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={onOpen}
-            className="text-sm font-medium text-brand-600 hover:underline truncate"
-            title={doc.file_name}
-          >
-            {doc.document_type_name}
-          </button>
-          {doc.verified && (
-            <span className="inline-flex px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-xs">검증완료</span>
-          )}
-          {expired && (
-            <span className="inline-flex px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-xs">만료됨</span>
-          )}
-          {soon && !expired && (
-            <span className="inline-flex px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">{days}일 남음</span>
-          )}
-        </div>
-        <div className="text-xs text-slate-500 truncate">
-          {doc.file_name} · {formatFileSize(doc.file_size)}
-          {doc.expiry_date && ` · 만료 ${doc.expiry_date}`}
-        </div>
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={onToggleVerify}
-            className="text-xs text-slate-500 hover:text-slate-900 px-2 py-1"
-            title={doc.verified ? '검증 취소' : '검증 표시'}
-          >
-            {doc.verified ? '검증취소' : '검증'}
-          </button>
-        )}
-        {canEdit && (
-          <button
-            type="button"
-            onClick={onDelete}
-            className="text-xs text-red-600 hover:text-red-700 px-2 py-1"
-          >
-            삭제
-          </button>
-        )}
-      </div>
-    </li>
-  );
-}
