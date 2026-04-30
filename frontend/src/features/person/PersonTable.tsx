@@ -7,14 +7,34 @@ type Props = {
   companiesById: Map<number, CompanyResponse>;
   showSupplierColumn: boolean;
   onRowClick: (p: PersonResponse) => void;
+  selectedIds?: Set<number>;
+  onToggleSelect?: (id: number) => void;
+  onToggleSelectAll?: () => void;
+  allSelected?: boolean;
 };
 
-export default function PersonTable({ persons, companiesById, showSupplierColumn, onRowClick }: Props) {
+export default function PersonTable({
+  persons, companiesById, showSupplierColumn, onRowClick,
+  selectedIds, onToggleSelect, onToggleSelectAll, allSelected,
+}: Props) {
+  const selectable = !!onToggleSelect;
+  const colCount = (selectable ? 1 : 0) + 4 + (showSupplierColumn ? 1 : 0);
+
   return (
     <div className="card overflow-hidden p-0">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 border-b border-slate-200">
           <tr className="text-left text-slate-500">
+            {selectable && (
+              <th className="px-4 py-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={allSelected ?? false}
+                  onChange={onToggleSelectAll}
+                  className="rounded border-slate-300"
+                />
+              </th>
+            )}
             <th className="px-4 py-3 font-medium">이름</th>
             <th className="px-4 py-3 font-medium">생년월일</th>
             <th className="px-4 py-3 font-medium">휴대폰</th>
@@ -25,8 +45,23 @@ export default function PersonTable({ persons, companiesById, showSupplierColumn
         <tbody className="divide-y divide-slate-100">
           {persons.map((p) => {
             const supplier = companiesById.get(p.supplier_id);
+            const checked = selectedIds?.has(p.id) ?? false;
             return (
-              <tr key={p.id} onClick={() => onRowClick(p)} className="cursor-pointer hover:bg-slate-50">
+              <tr
+                key={p.id}
+                onClick={() => onRowClick(p)}
+                className="cursor-pointer hover:bg-slate-50"
+              >
+                {selectable && (
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => onToggleSelect?.(p.id)}
+                      className="rounded border-slate-300"
+                    />
+                  </td>
+                )}
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <Avatar
@@ -57,7 +92,7 @@ export default function PersonTable({ persons, companiesById, showSupplierColumn
           })}
           {persons.length === 0 && (
             <tr>
-              <td colSpan={showSupplierColumn ? 5 : 4} className="px-4 py-8 text-center text-slate-400">
+              <td colSpan={colCount} className="px-4 py-8 text-center text-slate-400">
                 인원 없음
               </td>
             </tr>

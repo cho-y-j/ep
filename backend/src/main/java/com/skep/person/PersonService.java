@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
 import java.util.Set;
 
 @Service
@@ -32,19 +31,16 @@ public class PersonService {
     }
 
     @Transactional(readOnly = true)
-    public List<Person> list(AuthenticatedUser actor, Long supplierIdParam, PersonRole role) {
+    public org.springframework.data.domain.Page<Person> search(
+            AuthenticatedUser actor,
+            Long supplierIdParam,
+            PersonRole role,
+            String q,
+            org.springframework.data.domain.Pageable pageable
+    ) {
         Long supplierId = resolveListSupplier(actor, supplierIdParam);
-
-        if (supplierId != null && role != null) {
-            return repo.findBySupplierIdAndRole(supplierId, role);
-        }
-        if (supplierId != null) {
-            return repo.findBySupplierIdOrderByIdDesc(supplierId);
-        }
-        if (role != null) {
-            return repo.findByRole(role);
-        }
-        return repo.findAllByOrderByIdDesc();
+        String searchTerm = (q == null || q.isBlank()) ? "" : q.trim();
+        return repo.search(supplierId, role, searchTerm, pageable);
     }
 
     @Transactional(readOnly = true)

@@ -1,5 +1,7 @@
 package com.skep.person;
 
+import com.skep.common.ApiException;
+import com.skep.common.PageResponse;
 import com.skep.person.dto.CreatePersonRequest;
 import com.skep.person.dto.PersonResponse;
 import com.skep.person.dto.UpdatePersonRequest;
@@ -7,6 +9,8 @@ import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -27,12 +31,18 @@ public class PersonController {
     }
 
     @GetMapping
-    public List<PersonResponse> list(
+    public PageResponse<PersonResponse> list(
             @CurrentUser AuthenticatedUser actor,
             @RequestParam(required = false) Long supplierId,
-            @RequestParam(required = false) PersonRole role
+            @RequestParam(required = false) PersonRole role,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
-        return service.list(actor, supplierId, role).stream().map(PersonResponse::from).toList();
+        if (size < 1 || size > 100) size = 20;
+        if (page < 0) page = 0;
+        var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
+        return PageResponse.of(service.search(actor, supplierId, role, q, pageable), PersonResponse::from);
     }
 
     @GetMapping("/{id}")
@@ -56,6 +66,19 @@ public class PersonController {
         service.delete(id, actor);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/bulk-delete")
+    public ResponseEntity<Void> bulkDelete(@RequestBody BulkIdsRequest req, @CurrentUser AuthenticatedUser actor) {
+        if (req == null || req.ids() == null || req.ids().isEmpty()) {
+            throw ApiException.badRequest("EMPTY_IDS", "ids 가 비어있습니다");
+        }
+        for (Long id : req.ids()) {
+            service.delete(id, actor);
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    public record BulkIdsRequest(List<Long> ids) {}
 
     @PostMapping(value = "/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public PersonResponse uploadPhoto(
