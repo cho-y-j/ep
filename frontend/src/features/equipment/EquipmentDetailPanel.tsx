@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { AxiosError } from 'axios';
 import SidePanel from '../../components/SidePanel';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -47,9 +47,8 @@ export default function EquipmentDetailPanel({ equipment, supplier, onClose, onC
     setEditing(true);
   }
 
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    if (!equipment || !values) return;
+  async function save() {
+    if (!equipment) return;
     setBusy(true);
     setError(null);
     try {
@@ -101,7 +100,7 @@ export default function EquipmentDetailPanel({ equipment, supplier, onClose, onC
           editing ? (
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setEditing(false)} className="px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-100">취소</button>
-              <button type="submit" form="equipment-edit-form" disabled={busy} className="btn-primary disabled:opacity-50">
+              <button type="button" onClick={save} disabled={busy} className="btn-primary disabled:opacity-50">
                 {busy ? '저장 중...' : '저장'}
               </button>
             </div>
@@ -116,10 +115,10 @@ export default function EquipmentDetailPanel({ equipment, supplier, onClose, onC
         }
       >
         {editing ? (
-          <form id="equipment-edit-form" onSubmit={save} className="space-y-4">
+          <div className="space-y-4">
             <EquipmentFields values={values} onChange={setValues} required />
             {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
-          </form>
+          </div>
         ) : (
           <dl className="space-y-4 text-sm">
             <Row label="장비 종류" value={EQUIPMENT_CATEGORY_LABEL[equipment.category]} />

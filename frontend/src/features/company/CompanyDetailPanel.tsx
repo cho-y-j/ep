@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { AxiosError } from 'axios';
 import SidePanel from '../../components/SidePanel';
 import { api } from '../../lib/api';
@@ -27,8 +27,7 @@ export default function CompanyDetailPanel({ company, onClose, onChange }: Props
     setEditing(true);
   }
 
-  async function save(e: FormEvent) {
-    e.preventDefault();
+  async function save() {
     if (!company) return;
     setBusy(true);
     setError(null);
@@ -58,7 +57,7 @@ export default function CompanyDetailPanel({ company, onClose, onChange }: Props
             <button type="button" onClick={() => setEditing(false)} className="px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-100">
               취소
             </button>
-            <button type="submit" form="company-edit-form" disabled={busy} className="btn-primary disabled:opacity-50">
+            <button type="button" onClick={save} disabled={busy} className="btn-primary disabled:opacity-50">
               {busy ? '저장 중...' : '저장'}
             </button>
           </div>
@@ -70,7 +69,7 @@ export default function CompanyDetailPanel({ company, onClose, onChange }: Props
       }
     >
       {editing ? (
-        <form id="company-edit-form" onSubmit={save} className="space-y-4">
+        <div className="space-y-4">
           <label className="block">
             <span className="text-sm font-medium text-slate-700">회사명</span>
             <input
@@ -84,7 +83,7 @@ export default function CompanyDetailPanel({ company, onClose, onChange }: Props
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
           )}
-        </form>
+        </div>
       ) : (
         <dl className="space-y-4 text-sm">
           <Row label="회사명" value={company.name} />
