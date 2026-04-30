@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../features/auth/AuthContext';
 import type { ReactNode } from 'react';
 import type { Role } from '../types/auth';
 

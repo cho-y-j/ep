@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../features/auth/AuthContext';
 import { ROLE_LABEL } from '../types/auth';
 
 export default function AppHeader() {
@@ -24,6 +24,13 @@ export default function AppHeader() {
           {(user.role === 'ADMIN' || user.role === 'EQUIPMENT_SUPPLIER') && (
             <NavLink to="/equipment" className={navLinkClass}>
               장비 관리
+            </NavLink>
+          )}
+          {(user.role === 'ADMIN' || user.role === 'EQUIPMENT_SUPPLIER' || user.role === 'MANPOWER_SUPPLIER') && (
+            <NavLink to="/persons" className={navLinkClass}>
+              {user.role === 'EQUIPMENT_SUPPLIER' ? '조종원 관리'
+                : user.role === 'MANPOWER_SUPPLIER' ? '작업자 관리'
+                : '인원 관리'}
             </NavLink>
           )}
           {user.role === 'ADMIN' && (

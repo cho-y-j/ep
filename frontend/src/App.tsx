@@ -1,13 +1,14 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
-import PendingApprovalPage from './pages/PendingApprovalPage';
-import HomePage from './pages/HomePage';
-import AdminUsersPage from './pages/AdminUsersPage';
-import AdminCompaniesPage from './pages/AdminCompaniesPage';
-import EquipmentPage from './pages/EquipmentPage';
+import LoginPage from './features/auth/LoginPage';
+import SignupPage from './features/auth/SignupPage';
+import PendingApprovalPage from './features/auth/PendingApprovalPage';
+import HomePage from './features/home/HomePage';
+import AdminUsersPage from './features/user/AdminUsersPage';
+import AdminCompaniesPage from './features/company/AdminCompaniesPage';
+import EquipmentPage from './features/equipment/EquipmentPage';
+import PersonPage from './features/person/PersonPage';
 import ProtectedRoute from './components/ProtectedRoute';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider } from './features/auth/AuthContext';
 
 export default function App() {
   return (
@@ -45,6 +46,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <EquipmentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/persons"
+          element={
+            <ProtectedRoute>
+              <PersonPage />
             </ProtectedRoute>
           }
         />

@@ -1,6 +1,6 @@
 # SKEP v2 API 명세서
 
-> 마지막 갱신: 2026-04-30 (Phase B 완료 시점)
+> 마지막 갱신: 2026-04-30 (Phase D-1 완료 시점)
 > Base URL: `http://localhost:8081` (로컬), `/api` prefix 공통
 > 관련 문서: [ERD](./ERD.md)
 
@@ -347,6 +347,202 @@
 
 ---
 
+## Persons — `/api/persons`
+
+장비/인력 공급사가 자기 회사의 인원(작업자)을 관리. ADMIN은 모든 회사 가능.
+
+### `GET /api/persons?supplier_id=&role=`
+**파라미터** (둘 다 선택)
+- `supplier_id` (long): 특정 공급사 필터. 공급사 본인은 무시되고 본인 회사만 반환
+- `role` (enum): 역할 필터
+
+**응답**: `PersonResponse[]` (id 내림차순)
+
+### `GET /api/persons/{id}`
+**응답**: `PersonResponse`
+**에러**: `PERSON_NOT_FOUND` 404, `FORBIDDEN_OTHER_COMPANY` 403
+
+### `POST /api/persons`
+**Request**
+```json
+{
+  "supplier_id": 3,
+  "name": "김신호",
+  "birth": "1985-03-15",
+  "phone": "010-1234-5678",
+  "roles": ["SIGNALER", "FIRE_WATCH"]
+}
+```
+
+| 필드 | 필수 | 비고 |
+|---|---|---|
+| supplier_id | △ | ADMIN: 필수 / SUPPLIER: 무시 (본인 회사 강제) |
+| name | ✓ | 100자 |
+| birth | | YYYY-MM-DD |
+| phone | | 32자 |
+| roles | ✓ | 배열, 1개 이상. supplier 회사 type에 맞아야 함 |
+
+**응답 201**: `PersonResponse`
+
+**에러**
+| code | status | 조건 |
+|---|---|---|
+| `SUPPLIER_REQUIRED` | 400 | ADMIN인데 supplier_id 누락 |
+| `SUPPLIER_NOT_FOUND` | 400 | 존재하지 않는 supplier_id |
+| `SUPPLIER_NOT_ALLOWED` | 400 | BP사는 인원 등록 불가 |
+| `ROLE_COMPANY_TYPE_MISMATCH` | 400 | 역할이 supplier type에 안 맞음 (예: MANPOWER에 OPERATOR) |
+| `ROLES_REQUIRED` | 400 | roles 비어있음 |
+| `FORBIDDEN_OTHER_COMPANY` | 403 | SUPPLIER가 다른 회사 supplier_id |
+| `ROLE_NOT_ALLOWED` | 403 | BP/WORKER 등 |
+
+### `PATCH /api/persons/{id}`
+**Request** (모든 필드 선택)
+```json
+{ "name": "...", "birth": "...", "phone": "...", "roles": ["SIGNALER"] }
+```
+roles 변경 시 supplier type 검증 재수행.
+**응답**: `PersonResponse`
+
+### `DELETE /api/persons/{id}`
+**응답 204**
+
+### PersonResponse 스키마
+```jsonc
+{
+  "id": 1,
+  "supplier_id": 3,
+  "name": "김신호",
+  "birth": "1985-03-15",            // null 허용
+  "phone": "010-1234-5678",          // null 허용
+  "roles": ["SIGNALER", "FIRE_WATCH"],
+  "created_at": "2026-04-30T15:11:58.145482"
+}
+```
+
+### PersonRole enum + 허용 supplier type
+| 코드 | 라벨 | 허용 supplier type |
+|---|---|---|
+| `OPERATOR` | 조종원 | EQUIPMENT |
+| `WORK_DIRECTOR` | 작업지휘자 | MANPOWER |
+| `GUIDE` | 유도원 | MANPOWER |
+| `FIRE_WATCH` | 화기감시자 | MANPOWER |
+| `SIGNALER` | 신호수 | MANPOWER |
+| `INSPECTOR` | 점검원 | MANPOWER (잠정) |
+| `SITE_MANAGER` | 소장 | MANPOWER (잠정) |
+
+---
+
+## DocumentTypes — `/api/document-types`
+
+서류 종류 마스터. ADMIN이 추가/비활성 가능. 시드된 12종 (PERSON 6 + EQUIPMENT 6).
+
+### `GET /api/document-types?appliesTo=PERSON`
+**파라미터** (선택): `appliesTo=PERSON|EQUIPMENT` — 미지정 시 전체
+
+**응답 200**: `DocumentTypeResponse[]` (active만, sortOrder 오름차순)
+
+### `POST /api/document-types` `[ADMIN]`
+**Request**
+```json
+{
+  "name": "추가서류",
+  "appliesTo": "PERSON",
+  "hasExpiry": true,
+  "requiresVerification": false,
+  "sortOrder": 60
+}
+```
+
+### `PATCH /api/document-types/{id}/active?active=true|false` `[ADMIN]`
+활성/비활성 토글. 시드된 type도 비활성 가능.
+
+### DocumentTypeResponse 스키마
+```jsonc
+{
+  "id": 1,
+  "name": "운전면허증",
+  "applies_to": "PERSON",
+  "has_expiry": true,
+  "requires_verification": true,
+  "sort_order": 10,
+  "active": true
+}
+```
+
+---
+
+## Documents — `/api/documents`
+
+장비/인원의 첨부 서류. 파일 + 메타데이터. 권한은 owner(equipment/person) 권한을 그대로 상속.
+
+### `GET /api/documents?ownerType=&ownerId=`
+**파라미터** (둘 다 필수)
+- `ownerType`: `PERSON` | `EQUIPMENT`
+- `ownerId`: long
+
+**응답**: `DocumentResponse[]`
+
+### `POST /api/documents` (multipart/form-data)
+**Query 파라미터**
+- `ownerType`: `PERSON` | `EQUIPMENT`
+- `ownerId`: long
+- `documentTypeId`: long
+- `expiryDate` (선택): YYYY-MM-DD. type.has_expiry=true면 필수
+
+**Form 필드**
+- `file`: 업로드 파일 (max 20MB)
+
+**응답 201**: `DocumentResponse`
+
+**에러**
+| code | status | 조건 |
+|---|---|---|
+| `EMPTY_FILE` | 400 | 파일 비어있음 |
+| `DOCUMENT_TYPE_NOT_FOUND` | 400 | documentTypeId 없음 |
+| `DOCUMENT_TYPE_OWNER_MISMATCH` | 400 | type.appliesTo와 ownerType 불일치 |
+| `EXPIRY_REQUIRED` | 400 | type.has_expiry=true인데 expiryDate 누락 |
+| `EQUIPMENT_NOT_FOUND` / `PERSON_NOT_FOUND` | 404 | owner 없음 |
+| `FORBIDDEN_OTHER_COMPANY` | 403 | 다른 회사 owner |
+| `FORBIDDEN` | 403 | 수정 권한 없음 |
+
+### `GET /api/documents/{id}/file`
+실제 파일 다운로드. `Content-Disposition: inline; filename*=UTF-8''<filename>` 헤더로 브라우저가 inline 표시 또는 다운로드. 권한은 owner 조회 권한과 동일.
+
+**응답 200**: 파일 바이너리
+
+### `PATCH /api/documents/{id}/expiry?expiryDate=2026-12-31`
+만료일 갱신 (재업로드 없이 메타만 수정).
+
+### `PATCH /api/documents/{id}/verified?verified=true|false` `[ADMIN]`
+검증 표시 토글.
+
+### `DELETE /api/documents/{id}`
+DB row 삭제 + 파일 삭제.
+
+### DocumentResponse 스키마
+```jsonc
+{
+  "id": 1,
+  "document_type_id": 7,
+  "document_type_name": "자동차등록증",
+  "owner_type": "EQUIPMENT",
+  "owner_id": 2,
+  "file_name": "license.pdf",
+  "file_size": 12345,
+  "content_type": "application/pdf",
+  "expiry_date": "2026-12-31",       // null 허용 (해당 type에 만료 없음)
+  "verified": false,
+  "created_at": "2026-04-30T15:41:49.504"
+}
+```
+
+### Storage 동작
+- 지금: `LocalDiskStorage` (`/app/uploads/{yyyy}/{mm}/{uuid}.bin`)
+- Docker volume: `skep_v2_uploads` 마운트
+- 나중에 S3로 갈아끼울 때: `FileStorage` 인터페이스 다른 구현체로 교체. DB의 `file_key`만 다른 형식이 되고 코드 다른 부분은 무관.
+
+---
+
 ## Health
 
 ### `GET /api/health` (공개)
@@ -404,8 +600,10 @@
 | Phase | 추가 엔드포인트 | 상태 |
 |---|---|---|
 | **B. Equipment** | `/api/equipment` CRUD | ✓ |
-| **C. Person** | `/api/persons` CRUD (역할 다중) | |
-| **D. Document** | `/api/documents/upload` (multipart), `/api/document-types`, `/api/documents/{id}/file` | |
+| **C. Person** | `/api/persons` CRUD (역할 다중) | ✓ |
+| **D-1. Document 기본** | `/api/documents` (multipart 업로드) + `/api/document-types` | ✓ |
+| **D-2. Expiry 추적** | `/api/documents/expiring` (만료 임박 대시보드) | |
+| **D-3. Verification flow** | ADMIN 검증 워크플로 (지금은 단순 toggle만) | |
 | **E. Wizard** | (UI만, 백엔드 추가 없음 — D의 API 활용) | |
 | **F. OCR** | `/api/documents/{id}/ocr` (verify-api 호출 wrapper) | |
 
@@ -415,3 +613,5 @@
 
 - 2026-04-30: 초안 작성. Auth + Users + Companies + Health 정리. Phase A 완료 기준.
 - 2026-04-30: Phase B — Equipment CRUD 추가. JWT에 `company_id` claim 포함하여 권한 자동 매핑.
+- 2026-04-30: Phase C — Person CRUD 추가. 다중 role + supplier type 매핑 검증.
+- 2026-04-30: Phase D-1 — Document/DocumentType API 추가. multipart 업로드, polymorphic owner, LocalDiskStorage.

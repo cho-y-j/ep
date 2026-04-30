@@ -1,17 +1,22 @@
 # SKEP v2 ERD
 
-> 마지막 갱신: 2026-04-30 (Phase B 완료)
+> 마지막 갱신: 2026-04-30 (Phase D-1 완료)
 > 다이어그램은 Mermaid (GitHub에서 자동 렌더). 마이그레이션 SQL: `backend/src/main/resources/db/migration/`
 
 ---
 
-## 현재 스키마 (Phase B까지)
+## 현재 스키마 (Phase D-1까지)
 
 ```mermaid
 erDiagram
     users ||--o{ refresh_tokens : "has"
     companies ||--o{ users : "employs"
     companies ||--o{ equipment : "owns (type=EQUIPMENT)"
+    companies ||--o{ persons : "employs (type=EQUIPMENT|MANPOWER)"
+    persons ||--o{ person_roles : "has"
+    document_types ||--o{ documents : "classifies"
+    persons ||..o{ documents : "owner_type=PERSON"
+    equipment ||..o{ documents : "owner_type=EQUIPMENT"
 
     companies {
         bigint id PK
@@ -56,7 +61,63 @@ erDiagram
         timestamp created_at
         timestamp updated_at
     }
+
+    persons {
+        bigint id PK
+        bigint supplier_id FK "companies.id, type=EQUIPMENT or MANPOWER"
+        varchar(100) name
+        date birth "nullable"
+        varchar(32) phone "nullable"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    person_roles {
+        bigint person_id PK,FK
+        varchar(32) role PK "OPERATOR | WORK_DIRECTOR | GUIDE | FIRE_WATCH | SIGNALER | INSPECTOR | SITE_MANAGER"
+    }
+
+    document_types {
+        bigint id PK
+        varchar(100) name "예: 운전면허증/자동차등록증"
+        varchar(16) applies_to "PERSON | EQUIPMENT"
+        boolean has_expiry "true면 업로드 시 만료일 필수"
+        boolean requires_verification "ADMIN 검증 표시 필요 여부"
+        int sort_order
+        boolean active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    documents {
+        bigint id PK
+        bigint document_type_id FK
+        varchar(16) owner_type "PERSON | EQUIPMENT — polymorphic"
+        bigint owner_id "persons.id or equipment.id"
+        varchar(255) file_key "Storage key (예: 2026/04/uuid.bin)"
+        varchar(255) file_name "원본 파일명"
+        bigint file_size
+        varchar(100) content_type
+        date expiry_date "nullable"
+        boolean verified "ADMIN 검증 표시"
+        bigint uploaded_by FK "users.id, nullable"
+        timestamp created_at
+        timestamp updated_at
+    }
 ```
+
+### Role / CompanyType 매핑 (Person)
+| PersonRole | 라벨 | 허용 supplier type |
+|---|---|---|
+| `OPERATOR` | 조종원 | EQUIPMENT |
+| `WORK_DIRECTOR` | 작업지휘자 | MANPOWER |
+| `GUIDE` | 유도원 | MANPOWER |
+| `FIRE_WATCH` | 화기감시자 | MANPOWER |
+| `SIGNALER` | 신호수 | MANPOWER |
+| `INSPECTOR` | 점검원 | MANPOWER (잠정) |
+| `SITE_MANAGER` | 소장 | MANPOWER (잠정) |
+
+> 한 인원이 여러 role 가능 (다대다). EQUIPMENT 공급사는 OPERATOR만, MANPOWER 공급사는 그 외 6개. BP사는 인원 등록 불가.
 
 ### 관계
 - `companies (1) ─── (0..N) users` — 한 회사에 여러 직원. ADMIN/WORKER는 company_id NULL 허용.
@@ -74,6 +135,8 @@ erDiagram
 | V1 | `V1__init_users.sql` | users + refresh_tokens |
 | V2 | `V2__add_companies.sql` | companies + users.company_id FK |
 | V3 | `V3__add_equipment.sql` | equipment + supplier_id FK to companies |
+| V4 | `V4__add_persons.sql` | persons + person_roles (다대다) |
+| V5 | `V5__add_documents.sql` | document_types(시드 12종) + documents (polymorphic owner) |
 
 ---
 
@@ -161,3 +224,5 @@ erDiagram
 
 - 2026-04-30: 초안 작성. Phase A 스키마 (users, refresh_tokens, companies). Phase B+ 설계 윤곽.
 - 2026-04-30: Phase B — equipment 테이블 추가.
+- 2026-04-30: Phase C — persons + person_roles 테이블 추가, role-supplier type 매핑.
+- 2026-04-30: Phase D-1 — document_types(seed 12종) + documents (polymorphic PERSON/EQUIPMENT). 파일은 LocalDiskStorage(/app/uploads, docker volume).

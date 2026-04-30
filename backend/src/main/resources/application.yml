@@ -25,6 +25,11 @@ spring:
     enabled: true
     baseline-on-migrate: true
     validate-on-migrate: false
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: ${MAX_UPLOAD_SIZE:20MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:20MB}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -40,6 +45,9 @@ management:
       show-details: never
 
 skep:
+  storage:
+    local:
+      root: ${STORAGE_ROOT:/app/uploads}
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-in-prod-must-be-at-least-32-bytes-long}
     access-token-ttl-minutes: ${JWT_ACCESS_TTL:60}
