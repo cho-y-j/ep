@@ -41,14 +41,14 @@ export type TokenResponse = {
 
 export const ROLE_LABEL: Record<Role, string> = {
   ADMIN: '시스템 관리자',
-  BP: '발주사',
+  BP: 'BP사',
   EQUIPMENT_SUPPLIER: '장비공급사',
   MANPOWER_SUPPLIER: '인력공급사',
   WORKER: '작업자',
 };
 
 export const COMPANY_TYPE_LABEL: Record<CompanyType, string> = {
-  BP: '발주사',
+  BP: 'BP사',
   EQUIPMENT: '장비공급사',
   MANPOWER: '인력공급사',
 };

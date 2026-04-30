@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../lib/api';
 import { COMPANY_TYPE_LABEL, type CompanyResponse, type CompanyType } from '../types/auth';
+import { formatBusinessNumber } from '../lib/format';
 import CompanyDetailPanel from '../components/CompanyDetailPanel';
 import AppHeader from '../components/AppHeader';
 
@@ -78,7 +79,15 @@ export default function AdminCompaniesPage() {
               </label>
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">사업자번호</span>
-                <input value={createForm.businessNumber} onChange={(e) => setCreateForm((f) => ({ ...f, businessNumber: e.target.value }))} required placeholder="123-45-67890" className="input mt-1" />
+                <input
+                  value={createForm.businessNumber}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, businessNumber: formatBusinessNumber(e.target.value) }))}
+                  required
+                  placeholder="123-45-67890"
+                  inputMode="numeric"
+                  maxLength={12}
+                  className="input mt-1"
+                />
               </label>
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">유형</span>

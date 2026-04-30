@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ROLE_LABEL, SIGNUP_ROLES, roleRequiresCompany, type Role } from '../types/auth';
+import { formatBusinessNumber, formatPhone } from '../lib/format';
 import { AxiosError } from 'axios';
 
 export default function SignupPage() {
@@ -95,7 +96,7 @@ export default function SignupPage() {
           <input
             type="tel"
             value={form.phone}
-            onChange={(e) => update('phone', e.target.value)}
+            onChange={(e) => update('phone', formatPhone(e.target.value))}
             placeholder="010-1234-5678"
             className="input"
           />
@@ -133,9 +134,11 @@ export default function SignupPage() {
               <input
                 type="text"
                 value={form.businessNumber}
-                onChange={(e) => update('businessNumber', e.target.value)}
+                onChange={(e) => update('businessNumber', formatBusinessNumber(e.target.value))}
                 required={needsCompany}
                 placeholder="123-45-67890"
+                inputMode="numeric"
+                maxLength={12}
                 className="input"
               />
             </Field>
