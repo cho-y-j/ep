@@ -48,6 +48,7 @@ services:
       SKEP_BOOTSTRAP_ADMIN_EMAIL: ${SKEP_BOOTSTRAP_ADMIN_EMAIL:-admin@skep.local}
       SKEP_BOOTSTRAP_ADMIN_PASSWORD: ${SKEP_BOOTSTRAP_ADMIN_PASSWORD:-change-me-now}
       SKEP_BOOTSTRAP_ADMIN_NAME: ${SKEP_BOOTSTRAP_ADMIN_NAME:-System Admin}
+      SKEP_BOOTSTRAP_TEST_USERS_ENABLED: ${SKEP_BOOTSTRAP_TEST_USERS_ENABLED:-true}
     depends_on:
       postgres:
         condition: service_healthy

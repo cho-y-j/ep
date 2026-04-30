@@ -6,8 +6,10 @@ import { AxiosError } from 'axios';
 type Location = { from?: string };
 
 const TEST_ACCOUNTS = [
-  { label: 'ADMIN 로그인', email: 'admin@skep.local', password: 'change-me-now', color: 'bg-slate-900 hover:bg-slate-800' },
-  { label: 'BP 로그인', email: 'bp1@example.com', password: 'testpass123', color: 'bg-brand-600 hover:bg-brand-700' },
+  { label: 'ADMIN', email: 'admin@skep.local', password: 'change-me-now', color: 'bg-slate-900 hover:bg-slate-800' },
+  { label: 'BP', email: 'bp1@example.com', password: 'testpass123', color: 'bg-brand-600 hover:bg-brand-700' },
+  { label: '장비공급사', email: 'equipment1@example.com', password: 'testpass123', color: 'bg-emerald-600 hover:bg-emerald-700' },
+  { label: '인력공급사', email: 'manpower1@example.com', password: 'testpass123', color: 'bg-amber-600 hover:bg-amber-700' },
 ];
 
 function isLocalEnv(): boolean {
