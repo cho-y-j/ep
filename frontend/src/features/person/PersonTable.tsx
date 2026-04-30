@@ -1,5 +1,6 @@
 import { PERSON_ROLE_LABEL, type PersonResponse } from '../../types/person';
 import type { CompanyResponse } from '../../types/auth';
+import Avatar from '../../components/Avatar';
 
 type Props = {
   persons: PersonResponse[];
@@ -26,7 +27,17 @@ export default function PersonTable({ persons, companiesById, showSupplierColumn
             const supplier = companiesById.get(p.supplier_id);
             return (
               <tr key={p.id} onClick={() => onRowClick(p)} className="cursor-pointer hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium">{p.name}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar
+                      fetchUrl={p.has_photo ? `/api/persons/${p.id}/photo` : undefined}
+                      fallbackText={p.name}
+                      alt={p.name}
+                      size={36}
+                    />
+                    <span className="font-medium">{p.name}</span>
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-slate-600">{p.birth ?? <span className="text-slate-400">—</span>}</td>
                 <td className="px-4 py-3 text-slate-600">{p.phone ?? <span className="text-slate-400">—</span>}</td>
                 <td className="px-4 py-3">
