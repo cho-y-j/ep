@@ -7,6 +7,7 @@ import PersonRoleFilter from './PersonRoleFilter';
 import PersonCreateForm from './PersonCreateForm';
 import PersonDetailPanel from './PersonDetailPanel';
 import type { PersonResponse, PersonRole } from '../../types/person';
+import { rolesAllowedFor } from '../../types/person';
 import type { CompanyResponse, CompanyType } from '../../types/auth';
 
 export default function PersonPage() {
@@ -35,6 +36,18 @@ export default function PersonPage() {
   const selfSupplierType: CompanyType | undefined = !isAdmin && company
     ? company.type
     : undefined;
+
+  // 역할별 페이지 제목/필터 옵션
+  const pageTitle = (() => {
+    if (isAdmin) return '인원 관리';
+    if (selfSupplierType === 'EQUIPMENT') return '조종원 관리';
+    if (selfSupplierType === 'MANPOWER') return '작업자 관리';
+    return '인원 관리';
+  })();
+
+  const filterRoles: PersonRole[] = isAdmin
+    ? (['OPERATOR', 'WORK_DIRECTOR', 'GUIDE', 'FIRE_WATCH', 'SIGNALER', 'INSPECTOR', 'SITE_MANAGER'])
+    : (selfSupplierType ? rolesAllowedFor(selfSupplierType) : []);
 
   async function load() {
     setLoading(true);
@@ -84,7 +97,7 @@ export default function PersonPage() {
       <AppHeader />
       <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">인원 관리</h1>
+          <h1 className="text-2xl font-bold">{pageTitle}</h1>
           {canEdit && !creating && (
             <button onClick={() => setCreating(true)} className="btn-primary">
               인원 등록
@@ -102,9 +115,11 @@ export default function PersonPage() {
           />
         )}
 
-        <div className="mb-4">
-          <PersonRoleFilter value={filterRole} onChange={setFilterRole} />
-        </div>
+        {filterRoles.length > 1 && (
+          <div className="mb-4">
+            <PersonRoleFilter value={filterRole} onChange={setFilterRole} options={filterRoles} />
+          </div>
+        )}
 
         {loading ? (
           <p className="text-slate-400">불러오는 중...</p>

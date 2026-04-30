@@ -3,9 +3,11 @@ import { ALL_PERSON_ROLES, PERSON_ROLE_LABEL, type PersonRole } from '../../type
 type Props = {
   value: PersonRole | '';
   onChange: (value: PersonRole | '') => void;
+  options?: PersonRole[];
 };
 
-export default function PersonRoleFilter({ value, onChange }: Props) {
+export default function PersonRoleFilter({ value, onChange, options }: Props) {
+  const roles = options ?? ALL_PERSON_ROLES;
   return (
     <div className="flex items-center gap-2">
       <span className="text-sm text-slate-500">역할</span>
@@ -15,7 +17,7 @@ export default function PersonRoleFilter({ value, onChange }: Props) {
         className="input bg-white max-w-xs"
       >
         <option value="">전체</option>
-        {ALL_PERSON_ROLES.map((r) => (
+        {roles.map((r) => (
           <option key={r} value={r}>{PERSON_ROLE_LABEL[r]}</option>
         ))}
       </select>
