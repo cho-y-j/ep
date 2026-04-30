@@ -11,6 +11,7 @@ export type DashboardCounts = {
 
 export type ExpiringDocumentItem = {
   id: number;
+  document_type_id: number;
   document_type_name: string;
   owner_type: OwnerType;
   owner_id: number;

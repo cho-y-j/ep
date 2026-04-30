@@ -100,6 +100,7 @@ public class DashboardService {
             long daysLeft = ChronoUnit.DAYS.between(today, d.getExpiryDate());
             return new ExpiringDocumentItem(
                     d.getId(),
+                    d.getDocumentTypeId(),
                     typeName,
                     d.getOwnerType(),
                     d.getOwnerId(),

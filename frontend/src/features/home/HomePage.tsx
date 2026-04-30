@@ -1,28 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { COMPANY_TYPE_LABEL } from '../../types/auth';
-import type { DashboardSummary } from '../../types/dashboard';
+import type { DashboardSummary, ExpiringDocumentItem } from '../../types/dashboard';
 import AppHeader from '../../components/AppHeader';
+import DocumentRenewDialog from '../document/DocumentRenewDialog';
 
 export default function HomePage() {
   const { user, company } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [renewing, setRenewing] = useState<ExpiringDocumentItem | null>(null);
 
-  useEffect(() => {
-    api.get<DashboardSummary>('/api/dashboard/summary')
-      .then((res) => setSummary(res.data))
-      .catch(() => setSummary(null))
-      .finally(() => setLoading(false));
+  const loadSummary = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get<DashboardSummary>('/api/dashboard/summary');
+      setSummary(res.data);
+    } catch {
+      setSummary(null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { void loadSummary(); }, [loadSummary]);
 
   if (!user) return null;
 
   const isAdmin = user.role === 'ADMIN';
   const isSupplier = user.role === 'EQUIPMENT_SUPPLIER' || user.role === 'MANPOWER_SUPPLIER';
   const counts = summary?.counts ?? {};
+  const canRenew = isAdmin || isSupplier;
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -98,6 +108,15 @@ export default function HomePage() {
                       <span className={`shrink-0 inline-flex px-2 py-0.5 rounded text-xs font-medium ${tone}`}>
                         {overdue ? `${-d.days_left}일 지남` : `${d.days_left}일 남음`}
                       </span>
+                      {canRenew && (
+                        <button
+                          type="button"
+                          onClick={() => setRenewing(d)}
+                          className="shrink-0 text-xs px-2 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700"
+                        >
+                          재업로드
+                        </button>
+                      )}
                     </li>
                   );
                 })}
@@ -140,6 +159,20 @@ export default function HomePage() {
           </section>
         )}
       </div>
+
+      {renewing && (
+        <DocumentRenewDialog
+          open
+          ownerType={renewing.owner_type}
+          ownerId={renewing.owner_id}
+          documentTypeId={renewing.document_type_id}
+          documentTypeName={renewing.document_type_name}
+          oldDocumentId={renewing.id}
+          hasExpiry
+          onClose={() => setRenewing(null)}
+          onDone={() => { setRenewing(null); void loadSummary(); }}
+        />
+      )}
     </main>
   );
 }

@@ -6,6 +6,7 @@ import java.time.LocalDate;
 
 public record ExpiringDocumentItem(
         Long id,
+        Long documentTypeId,
         String documentTypeName,
         OwnerType ownerType,
         Long ownerId,
