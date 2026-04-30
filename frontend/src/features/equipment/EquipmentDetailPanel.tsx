@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { AxiosError } from 'axios';
 import SidePanel from '../../components/SidePanel';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -16,33 +16,35 @@ type Props = {
   canEdit: boolean;
 };
 
+function toFieldValues(e: EquipmentResponse): EquipmentFieldValues {
+  return {
+    supplierId: e.supplier_id,
+    vehicleNo: e.vehicle_no ?? '',
+    category: e.category,
+    model: e.model ?? '',
+    manufacturer: e.manufacturer ?? '',
+    year: e.year != null ? String(e.year) : '',
+  };
+}
+
 export default function EquipmentDetailPanel({ equipment, supplier, onClose, onChange, onDelete, canEdit }: Props) {
   const [editing, setEditing] = useState(false);
-  const [values, setValues] = useState<EquipmentFieldValues | null>(null);
+  const [values, setValues] = useState<EquipmentFieldValues>(() =>
+    equipment ? toFieldValues(equipment) : toFieldValues({ id: 0, supplier_id: 0, category: 'EXCAVATOR', created_at: '' } as EquipmentResponse)
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useEffect(() => {
-    if (!equipment) {
-      setEditing(false);
-      setValues(null);
-      return;
-    }
-    setValues({
-      supplierId: equipment.supplier_id,
-      vehicleNo: equipment.vehicle_no ?? '',
-      category: equipment.category,
-      model: equipment.model ?? '',
-      manufacturer: equipment.manufacturer ?? '',
-      year: equipment.year != null ? String(equipment.year) : '',
-    });
-    setEditing(false);
-    setError(null);
-  }, [equipment]);
-
-  if (!equipment || !values) {
+  if (!equipment) {
     return <SidePanel open={false} onClose={onClose} title="">{null}</SidePanel>;
+  }
+
+  function startEdit() {
+    if (!equipment) return;
+    setValues(toFieldValues(equipment));
+    setError(null);
+    setEditing(true);
   }
 
   async function save(e: FormEvent) {
@@ -108,7 +110,7 @@ export default function EquipmentDetailPanel({ equipment, supplier, onClose, onC
               <button type="button" onClick={() => setConfirmDelete(true)} className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700">
                 삭제
               </button>
-              <button type="button" onClick={() => setEditing(true)} className="btn-primary">수정</button>
+              <button type="button" onClick={startEdit} className="btn-primary">수정</button>
             </div>
           ) : null
         }

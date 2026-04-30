@@ -60,6 +60,7 @@ export default function AdminCompaniesPage() {
       </div>
 
       <CompanyDetailPanel
+        key={selected?.id ?? 'closed'}
         company={selected}
         onClose={() => setSelected(null)}
         onChange={handleChange}

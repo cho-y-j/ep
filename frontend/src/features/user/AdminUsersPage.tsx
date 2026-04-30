@@ -54,6 +54,7 @@ export default function AdminUsersPage() {
       </div>
 
       <UserDetailPanel
+        key={selected?.id ?? 'closed'}
         user={selected}
         company={selected?.company_id ? companiesById.get(selected.company_id) ?? null : null}
         onClose={() => setSelected(null)}

@@ -108,6 +108,7 @@ export default function EquipmentPage() {
       </div>
 
       <EquipmentDetailPanel
+        key={selected?.id ?? 'closed'}
         equipment={selected}
         supplier={selected ? companiesById.get(selected.supplier_id) ?? null : null}
         onClose={() => setSelected(null)}
