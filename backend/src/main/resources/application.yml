@@ -6,6 +6,24 @@ spring:
   jackson:
     property-naming-strategy: SNAKE_CASE
     default-property-inclusion: non_null
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/skep_db}
+    username: ${DB_USER:skep_user}
+    password: ${DB_PASSWORD:skep_pass}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: Asia/Seoul
+    open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    validate-on-migrate: false
 
 server:
   port: ${SERVER_PORT:8080}
@@ -19,3 +37,17 @@ management:
   endpoint:
     health:
       show-details: never
+
+skep:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-secret-change-in-prod-must-be-at-least-32-bytes-long}
+    access-token-ttl-minutes: ${JWT_ACCESS_TTL:60}
+    refresh-token-ttl-days: ${JWT_REFRESH_TTL:14}
+    issuer: skep
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  bootstrap:
+    admin:
+      email: ${SKEP_BOOTSTRAP_ADMIN_EMAIL:admin@skep.local}
+      password: ${SKEP_BOOTSTRAP_ADMIN_PASSWORD:change-me-now}
+      name: ${SKEP_BOOTSTRAP_ADMIN_NAME:System Admin}

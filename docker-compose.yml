@@ -35,6 +35,14 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: 8080
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-skep_db}
+      DB_USER: ${DB_USER:-skep_user}
+      DB_PASSWORD: ${DB_PASSWORD:-skep_pass}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-in-prod-must-be-at-least-32-bytes-long}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8082,http://localhost:5173}
+      SKEP_BOOTSTRAP_ADMIN_EMAIL: ${SKEP_BOOTSTRAP_ADMIN_EMAIL:-admin@skep.local}
+      SKEP_BOOTSTRAP_ADMIN_PASSWORD: ${SKEP_BOOTSTRAP_ADMIN_PASSWORD:-change-me-now}
+      SKEP_BOOTSTRAP_ADMIN_NAME: ${SKEP_BOOTSTRAP_ADMIN_NAME:-System Admin}
     depends_on:
       postgres:
         condition: service_healthy

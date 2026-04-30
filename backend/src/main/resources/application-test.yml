@@ -1,3 +1,30 @@
 spring:
   main:
     banner-mode: off
+  datasource:
+    url: jdbc:h2:mem:skep_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+
+skep:
+  jwt:
+    secret: test-secret-key-at-least-32-bytes-of-entropy-for-hs256-signing
+    access-token-ttl-minutes: 60
+    refresh-token-ttl-days: 14
+    issuer: skep-test
+  cors:
+    allowed-origins: http://localhost:5173
+  bootstrap:
+    admin:
+      email: admin@skep.local
+      password: test-admin-pass
+      name: Test Admin
