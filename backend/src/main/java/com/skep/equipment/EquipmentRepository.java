@@ -7,6 +7,7 @@ import java.util.List;
 public interface EquipmentRepository extends JpaRepository<Equipment, Long> {
     List<Equipment> findBySupplierIdOrderByIdDesc(Long supplierId);
     List<Equipment> findAllByOrderByIdDesc();
+    long countBySupplierId(Long supplierId);
     List<Equipment> findByCategoryOrderByIdDesc(EquipmentCategory category);
     List<Equipment> findBySupplierIdAndCategoryOrderByIdDesc(Long supplierId, EquipmentCategory category);
 }

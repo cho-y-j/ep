@@ -8,6 +8,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface PersonRepository extends JpaRepository<Person, Long> {
 
+    long countBySupplierId(Long supplierId);
+
     /**
      * 통합 검색/필터/페이지네이션 쿼리.
      * - q: name 또는 phone 부분 일치 (대소문자 무시). 빈 문자열이면 무시.
