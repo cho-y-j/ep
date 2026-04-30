@@ -11,6 +11,8 @@ public record SignupRequest(
         @NotBlank @Size(min = 8, max = 72) String password,
         @NotBlank @Size(max = 100) String name,
         @Size(max = 32) String phone,
-        @NotNull Role role
+        @NotNull Role role,
+        @Size(max = 255) String companyName,
+        @Size(max = 32) String businessNumber
 ) {
 }

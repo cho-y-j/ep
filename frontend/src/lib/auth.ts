@@ -1,14 +1,13 @@
 import { api } from './api';
 import { tokenStorage } from './tokenStorage';
-import type { TokenResponse, UserResponse, Role } from '../types/auth';
+import type { TokenResponse, MeResponse, Role } from '../types/auth';
 
-export async function login(email: string, password: string): Promise<UserResponse> {
+export async function login(email: string, password: string): Promise<MeResponse> {
   const tokens = await api
     .post<TokenResponse>('/api/auth/login', { email, password })
     .then((r) => r.data);
   tokenStorage.set(tokens.access_token, tokens.refresh_token);
-  const me = await fetchMe();
-  return me;
+  return await fetchMe();
 }
 
 export async function signup(payload: {
@@ -17,8 +16,18 @@ export async function signup(payload: {
   name: string;
   phone?: string;
   role: Role;
+  companyName?: string;
+  businessNumber?: string;
 }): Promise<void> {
-  await api.post('/api/auth/signup', payload);
+  await api.post('/api/auth/signup', {
+    email: payload.email,
+    password: payload.password,
+    name: payload.name,
+    phone: payload.phone,
+    role: payload.role,
+    company_name: payload.companyName,
+    business_number: payload.businessNumber,
+  });
 }
 
 export async function logout(): Promise<void> {
@@ -32,7 +41,7 @@ export async function logout(): Promise<void> {
   }
 }
 
-export async function fetchMe(): Promise<UserResponse> {
-  const res = await api.get<UserResponse>('/api/auth/me');
+export async function fetchMe(): Promise<MeResponse> {
+  const res = await api.get<MeResponse>('/api/auth/me');
   return res.data;
 }

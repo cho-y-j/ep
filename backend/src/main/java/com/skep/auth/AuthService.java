@@ -4,6 +4,9 @@ import com.skep.auth.dto.LoginRequest;
 import com.skep.auth.dto.SignupRequest;
 import com.skep.auth.dto.TokenResponse;
 import com.skep.common.ApiException;
+import com.skep.company.Company;
+import com.skep.company.CompanyService;
+import com.skep.company.CompanyType;
 import com.skep.config.JwtProperties;
 import com.skep.security.JwtService;
 import com.skep.security.RefreshToken;
@@ -26,6 +29,7 @@ public class AuthService {
     private final UserRepository users;
     private final RefreshTokenRepository refreshTokens;
     private final RefreshTokenSecurityService refreshSecurity;
+    private final CompanyService companies;
     private final PasswordEncoder encoder;
     private final JwtService jwt;
     private final JwtProperties jwtProps;
@@ -33,12 +37,14 @@ public class AuthService {
     public AuthService(UserRepository users,
                        RefreshTokenRepository refreshTokens,
                        RefreshTokenSecurityService refreshSecurity,
+                       CompanyService companies,
                        PasswordEncoder encoder,
                        JwtService jwt,
                        JwtProperties jwtProps) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.refreshSecurity = refreshSecurity;
+        this.companies = companies;
         this.encoder = encoder;
         this.jwt = jwt;
         this.jwtProps = jwtProps;
@@ -51,13 +57,28 @@ public class AuthService {
         if (users.existsByEmail(req.email())) {
             throw ApiException.conflict("EMAIL_EXISTS", "email already in use");
         }
+
+        Long companyId = null;
+        boolean isCompanyAdmin = false;
+        if (req.role().requiresCompany()) {
+            if (isBlank(req.companyName()) || isBlank(req.businessNumber())) {
+                throw ApiException.badRequest("COMPANY_INFO_REQUIRED", "회사명과 사업자번호가 필요합니다");
+            }
+            CompanyType type = CompanyType.fromRole(req.role());
+            CompanyService.CompanyResolution resolution = companies.resolveOrCreate(
+                    req.companyName(), req.businessNumber(), type);
+            companyId = resolution.company().getId();
+            isCompanyAdmin = resolution.isNew();
+        }
+
         User user = User.builder()
                 .email(req.email())
                 .password(encoder.encode(req.password()))
                 .name(req.name())
                 .phone(req.phone())
                 .role(req.role())
-                .isCompanyAdmin(false)
+                .companyId(companyId)
+                .isCompanyAdmin(isCompanyAdmin)
                 .enabled(false)
                 .build();
         return users.save(user);
@@ -81,7 +102,6 @@ public class AuthService {
                 .orElseThrow(() -> ApiException.unauthorized("INVALID_REFRESH_TOKEN", "refresh token not found"));
 
         if (!stored.isUsable()) {
-            // suspected reuse — revoke all tokens for this user (separate tx so it persists past the throw)
             refreshSecurity.revokeAllForUser(stored.getUserId());
             throw ApiException.unauthorized("REFRESH_TOKEN_REUSED", "refresh token already used or expired");
         }
@@ -92,7 +112,6 @@ public class AuthService {
             throw ApiException.forbidden("ACCOUNT_DISABLED", "account is disabled");
         }
 
-        // rotation: revoke old, issue new
         stored.revoke();
         return issueTokens(user);
     }
@@ -115,5 +134,9 @@ public class AuthService {
         refreshTokens.save(token);
 
         return TokenResponse.of(access, refresh, jwtProps.accessTokenTtlMinutes() * 60L);
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 }

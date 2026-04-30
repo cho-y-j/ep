@@ -5,5 +5,9 @@ public enum Role {
     BP,
     EQUIPMENT_SUPPLIER,
     MANPOWER_SUPPLIER,
-    WORKER
+    WORKER;
+
+    public boolean requiresCompany() {
+        return this == BP || this == EQUIPMENT_SUPPLIER || this == MANPOWER_SUPPLIER;
+    }
 }

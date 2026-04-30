@@ -1,11 +1,14 @@
 package com.skep.auth;
 
 import com.skep.auth.dto.LoginRequest;
+import com.skep.auth.dto.MeResponse;
 import com.skep.auth.dto.RefreshRequest;
 import com.skep.auth.dto.SignupRequest;
 import com.skep.auth.dto.TokenResponse;
 import com.skep.auth.dto.UserResponse;
 import com.skep.common.ApiException;
+import com.skep.company.CompanyRepository;
+import com.skep.company.dto.CompanyResponse;
 import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
 import com.skep.user.User;
@@ -23,10 +26,12 @@ public class AuthController {
 
     private final AuthService auth;
     private final UserRepository users;
+    private final CompanyRepository companies;
 
-    public AuthController(AuthService auth, UserRepository users) {
+    public AuthController(AuthService auth, UserRepository users, CompanyRepository companies) {
         this.auth = auth;
         this.users = users;
+        this.companies = companies;
     }
 
     @PostMapping("/signup")
@@ -56,12 +61,14 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public UserResponse me(@CurrentUser AuthenticatedUser principal) {
+    public MeResponse me(@CurrentUser AuthenticatedUser principal) {
         if (principal == null) {
             throw ApiException.unauthorized("NOT_AUTHENTICATED", "no auth principal");
         }
         User u = users.findById(principal.id())
                 .orElseThrow(() -> ApiException.unauthorized("USER_NOT_FOUND", "user not found"));
-        return UserResponse.from(u);
+        CompanyResponse company = u.getCompanyId() == null ? null
+                : companies.findById(u.getCompanyId()).map(CompanyResponse::from).orElse(null);
+        return new MeResponse(UserResponse.from(u), company);
     }
 }

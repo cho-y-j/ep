@@ -5,6 +5,16 @@ export type Role =
   | 'MANPOWER_SUPPLIER'
   | 'WORKER';
 
+export type CompanyType = 'BP' | 'EQUIPMENT' | 'MANPOWER';
+
+export type CompanyResponse = {
+  id: number;
+  name: string;
+  business_number: string;
+  type: CompanyType;
+  created_at: string;
+};
+
 export type UserResponse = {
   id: number;
   email: string;
@@ -15,6 +25,11 @@ export type UserResponse = {
   is_company_admin: boolean;
   enabled: boolean;
   created_at: string;
+};
+
+export type MeResponse = {
+  user: UserResponse;
+  company?: CompanyResponse | null;
 };
 
 export type TokenResponse = {
@@ -32,4 +47,14 @@ export const ROLE_LABEL: Record<Role, string> = {
   WORKER: '작업자',
 };
 
-export const SIGNUP_ROLES: Role[] = ['BP', 'EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'WORKER'];
+export const COMPANY_TYPE_LABEL: Record<CompanyType, string> = {
+  BP: '발주사',
+  EQUIPMENT: '장비공급사',
+  MANPOWER: '인력공급사',
+};
+
+export const SIGNUP_ROLES: Role[] = ['BP', 'EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER'];
+
+export function roleRequiresCompany(role: Role): boolean {
+  return role === 'BP' || role === 'EQUIPMENT_SUPPLIER' || role === 'MANPOWER_SUPPLIER';
+}

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { ROLE_LABEL, SIGNUP_ROLES, type Role } from '../types/auth';
+import { ROLE_LABEL, SIGNUP_ROLES, roleRequiresCompany, type Role } from '../types/auth';
 import { AxiosError } from 'axios';
 
 export default function SignupPage() {
@@ -11,12 +11,16 @@ export default function SignupPage() {
     name: '',
     phone: '',
     role: 'BP' as Role,
+    companyName: '',
+    businessNumber: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { signup } = useAuth();
   const navigate = useNavigate();
+
+  const needsCompany = roleRequiresCompany(form.role);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -29,6 +33,8 @@ export default function SignupPage() {
         name: form.name,
         phone: form.phone || undefined,
         role: form.role,
+        companyName: needsCompany ? form.companyName : undefined,
+        businessNumber: needsCompany ? form.businessNumber : undefined,
       });
       navigate('/pending-approval', { replace: true });
     } catch (err) {
@@ -54,57 +60,52 @@ export default function SignupPage() {
           <p className="text-sm text-slate-500 mt-1">가입 후 관리자 승인이 필요합니다.</p>
         </div>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">이메일</span>
+        <Field label="이메일">
           <input
             type="email"
             value={form.email}
             onChange={(e) => update('email', e.target.value)}
             required
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="input"
           />
-        </label>
+        </Field>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">비밀번호 (8자 이상)</span>
+        <Field label="비밀번호 (8자 이상)">
           <input
             type="password"
             value={form.password}
             onChange={(e) => update('password', e.target.value)}
             required
             minLength={8}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="input"
           />
-        </label>
+        </Field>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">이름</span>
+        <Field label="이름">
           <input
             type="text"
             value={form.name}
             onChange={(e) => update('name', e.target.value)}
             required
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="input"
           />
-        </label>
+        </Field>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">휴대폰 (선택)</span>
+        <Field label="휴대폰 (선택)">
           <input
             type="tel"
             value={form.phone}
             onChange={(e) => update('phone', e.target.value)}
             placeholder="010-1234-5678"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="input"
           />
-        </label>
+        </Field>
 
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">역할</span>
+        <Field label="역할">
           <select
             value={form.role}
             onChange={(e) => update('role', e.target.value as Role)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="input bg-white"
           >
             {SIGNUP_ROLES.map((r) => (
               <option key={r} value={r}>
@@ -112,7 +113,34 @@ export default function SignupPage() {
               </option>
             ))}
           </select>
-        </label>
+        </Field>
+
+        {needsCompany && (
+          <div className="border-t border-dashed border-slate-300 pt-4 space-y-4">
+            <p className="text-xs text-slate-500">
+              회사 정보 — 같은 사업자번호로 다른 사람이 이미 가입했다면 그 회사에 합류합니다.
+            </p>
+            <Field label="회사명">
+              <input
+                type="text"
+                value={form.companyName}
+                onChange={(e) => update('companyName', e.target.value)}
+                required={needsCompany}
+                className="input"
+              />
+            </Field>
+            <Field label="사업자번호">
+              <input
+                type="text"
+                value={form.businessNumber}
+                onChange={(e) => update('businessNumber', e.target.value)}
+                required={needsCompany}
+                placeholder="123-45-67890"
+                className="input"
+              />
+            </Field>
+          </div>
+        )}
 
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
@@ -130,5 +158,14 @@ export default function SignupPage() {
         </p>
       </form>
     </main>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <div className="mt-1">{children}</div>
+    </label>
   );
 }

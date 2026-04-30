@@ -4,6 +4,7 @@ import SignupPage from './pages/SignupPage';
 import PendingApprovalPage from './pages/PendingApprovalPage';
 import HomePage from './pages/HomePage';
 import AdminUsersPage from './pages/AdminUsersPage';
+import AdminCompaniesPage from './pages/AdminCompaniesPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 
@@ -27,6 +28,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['ADMIN']}>
               <AdminUsersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/companies"
+          element={
+            <ProtectedRoute roles={['ADMIN']}>
+              <AdminCompaniesPage />
             </ProtectedRoute>
           }
         />

@@ -3,18 +3,19 @@ import { AxiosError } from 'axios';
 import SidePanel from './SidePanel';
 import ConfirmDialog from './ConfirmDialog';
 import { api } from '../lib/api';
-import { ROLE_LABEL, type UserResponse } from '../types/auth';
+import { COMPANY_TYPE_LABEL, ROLE_LABEL, type CompanyResponse, type UserResponse } from '../types/auth';
 import { useAuth } from '../contexts/AuthContext';
 
 type Props = {
   user: UserResponse | null;
+  company?: CompanyResponse | null;
   onClose: () => void;
   onChange: (updated: UserResponse) => void;
 };
 
 type ActionKind = 'enable' | 'disable' | null;
 
-export default function UserDetailPanel({ user, onClose, onChange }: Props) {
+export default function UserDetailPanel({ user, company, onClose, onChange }: Props) {
   const [pendingAction, setPendingAction] = useState<ActionKind>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +93,21 @@ export default function UserDetailPanel({ user, onClose, onChange }: Props) {
               )
             }
           />
-          <Row label="회사 ID" value={user.company_id ?? '—'} />
+          <Row
+            label="소속 회사"
+            value={
+              company ? (
+                <>
+                  <div>{company.name}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {company.business_number} · {COMPANY_TYPE_LABEL[company.type]}
+                  </div>
+                </>
+              ) : (
+                <span className="text-slate-400">없음</span>
+              )
+            }
+          />
           <Row label="회사 관리자" value={user.is_company_admin ? '예' : '아니오'} />
           <Row label="가입일" value={new Date(user.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} />
 
