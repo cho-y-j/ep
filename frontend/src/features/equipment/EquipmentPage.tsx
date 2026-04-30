@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppHeader from '../../components/AppHeader';
-import EquipmentDetailPanel from './EquipmentDetailPanel';
 import EquipmentTable from './EquipmentTable';
 import EquipmentCategoryFilter from './EquipmentCategoryFilter';
 import EquipmentCreateForm from './EquipmentCreateForm';
@@ -11,11 +11,11 @@ import type { CompanyResponse } from '../../types/auth';
 
 export default function EquipmentPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [equipment, setEquipment] = useState<EquipmentResponse[]>([]);
   const [companies, setCompanies] = useState<CompanyResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterCategory, setFilterCategory] = useState<EquipmentCategory | ''>('');
-  const [selected, setSelected] = useState<EquipmentResponse | null>(null);
   const [creating, setCreating] = useState(false);
 
   const isAdmin = user?.role === 'ADMIN';
@@ -54,19 +54,9 @@ export default function EquipmentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterCategory]);
 
-  function handleCreated() {
+  function handleCreated(e: EquipmentResponse) {
     setCreating(false);
-    void load();
-  }
-
-  function handleChange(updated: EquipmentResponse) {
-    setEquipment((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
-    setSelected(updated);
-  }
-
-  function handleDelete(id: number) {
-    setEquipment((prev) => prev.filter((e) => e.id !== id));
-    setSelected(null);
+    navigate(`/equipment/${e.id}`);
   }
 
   return (
@@ -102,20 +92,10 @@ export default function EquipmentPage() {
             equipment={equipment}
             companiesById={companiesById}
             showSupplierColumn={isAdmin}
-            onRowClick={setSelected}
+            onRowClick={(e) => navigate(`/equipment/${e.id}`)}
           />
         )}
       </div>
-
-      <EquipmentDetailPanel
-        key={selected?.id ?? 'closed'}
-        equipment={selected}
-        supplier={selected ? companiesById.get(selected.supplier_id) ?? null : null}
-        onClose={() => setSelected(null)}
-        onChange={handleChange}
-        onDelete={handleDelete}
-        canEdit={Boolean(canEdit && (isAdmin || selected?.supplier_id === user?.company_id))}
-      />
     </main>
   );
 }

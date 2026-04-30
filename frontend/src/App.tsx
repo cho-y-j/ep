@@ -6,6 +6,7 @@ import HomePage from './features/home/HomePage';
 import AdminUsersPage from './features/user/AdminUsersPage';
 import AdminCompaniesPage from './features/company/AdminCompaniesPage';
 import EquipmentPage from './features/equipment/EquipmentPage';
+import EquipmentDetailPage from './features/equipment/EquipmentDetailPage';
 import PersonPage from './features/person/PersonPage';
 import PersonDetailPage from './features/person/PersonDetailPage';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -47,6 +48,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <EquipmentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/equipment/:id"
+          element={
+            <ProtectedRoute>
+              <EquipmentDetailPage />
             </ProtectedRoute>
           }
         />
