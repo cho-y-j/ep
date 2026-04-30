@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { AxiosError } from 'axios';
-import SidePanel from './SidePanel';
-import { api } from '../lib/api';
-import { COMPANY_TYPE_LABEL, type CompanyResponse } from '../types/auth';
+import SidePanel from '../../components/SidePanel';
+import { api } from '../../lib/api';
+import { COMPANY_TYPE_LABEL, type CompanyResponse } from '../../types/auth';
 
 type Props = {
   company: CompanyResponse | null;

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { AxiosError } from 'axios';
-import SidePanel from './SidePanel';
-import ConfirmDialog from './ConfirmDialog';
-import { api } from '../lib/api';
-import { COMPANY_TYPE_LABEL, ROLE_LABEL, type CompanyResponse, type UserResponse } from '../types/auth';
-import { useAuth } from '../contexts/AuthContext';
+import SidePanel from '../../components/SidePanel';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import { api } from '../../lib/api';
+import { COMPANY_TYPE_LABEL, ROLE_LABEL, type CompanyResponse, type UserResponse } from '../../types/auth';
+import { useAuth } from '../auth/AuthContext';
 
 type Props = {
   user: UserResponse | null;

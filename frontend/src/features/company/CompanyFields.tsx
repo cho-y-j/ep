@@ -1,5 +1,5 @@
 import { COMPANY_TYPE_LABEL, type CompanyType } from '../../types/auth';
-import BusinessNumberInput from './BusinessNumberInput';
+import BusinessNumberInput from '../../components/forms/BusinessNumberInput';
 
 type Props = {
   values: {

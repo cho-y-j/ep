@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { fetchMe, login as apiLogin, logout as apiLogout, signup as apiSignup } from '../lib/auth';
-import { setAuthExpiredHandler } from '../lib/api';
-import { tokenStorage } from '../lib/tokenStorage';
-import type { CompanyResponse, MeResponse, Role, UserResponse } from '../types/auth';
+import { fetchMe, login as apiLogin, logout as apiLogout, signup as apiSignup } from '../../lib/auth';
+import { setAuthExpiredHandler } from '../../lib/api';
+import { tokenStorage } from '../../lib/tokenStorage';
+import type { CompanyResponse, MeResponse, Role, UserResponse } from '../../types/auth';
 
 type SignupPayload = {
   email: string;

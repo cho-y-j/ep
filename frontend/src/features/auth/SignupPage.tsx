@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { ROLE_LABEL, SIGNUP_ROLES, roleRequiresCompany, type Role } from '../types/auth';
-import CompanyFields from '../components/forms/CompanyFields';
-import PhoneInput from '../components/forms/PhoneInput';
+import { useAuth } from './AuthContext';
+import { ROLE_LABEL, SIGNUP_ROLES, roleRequiresCompany, type Role } from '../../types/auth';
+import CompanyFields from '../company/CompanyFields';
+import PhoneInput from '../../components/forms/PhoneInput';
 import { AxiosError } from 'axios';
 
 export default function SignupPage() {

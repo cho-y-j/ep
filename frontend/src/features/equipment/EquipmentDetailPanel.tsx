@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { AxiosError } from 'axios';
-import SidePanel from './SidePanel';
-import ConfirmDialog from './ConfirmDialog';
-import EquipmentFields, { type EquipmentFieldValues } from './forms/EquipmentFields';
-import { api } from '../lib/api';
-import { EQUIPMENT_CATEGORY_LABEL, type EquipmentResponse } from '../types/equipment';
-import type { CompanyResponse } from '../types/auth';
+import SidePanel from '../../components/SidePanel';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import EquipmentFields, { type EquipmentFieldValues } from './EquipmentFields';
+import { api } from '../../lib/api';
+import { EQUIPMENT_CATEGORY_LABEL, type EquipmentResponse } from '../../types/equipment';
+import type { CompanyResponse } from '../../types/auth';
 
 type Props = {
   equipment: EquipmentResponse | null;

@@ -1,7 +1,7 @@
-import { useAuth } from '../contexts/AuthContext';
-import { COMPANY_TYPE_LABEL } from '../types/auth';
+import { useAuth } from '../auth/AuthContext';
+import { COMPANY_TYPE_LABEL } from '../../types/auth';
 import { Link } from 'react-router-dom';
-import AppHeader from '../components/AppHeader';
+import AppHeader from '../../components/AppHeader';
 
 export default function HomePage() {
   const { user, company } = useAuth();
