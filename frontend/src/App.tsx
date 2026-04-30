@@ -7,6 +7,7 @@ import AdminUsersPage from './features/user/AdminUsersPage';
 import AdminCompaniesPage from './features/company/AdminCompaniesPage';
 import EquipmentPage from './features/equipment/EquipmentPage';
 import PersonPage from './features/person/PersonPage';
+import PersonDetailPage from './features/person/PersonDetailPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './features/auth/AuthContext';
 
@@ -54,6 +55,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <PersonPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/persons/:id"
+          element={
+            <ProtectedRoute>
+              <PersonDetailPage />
             </ProtectedRoute>
           }
         />

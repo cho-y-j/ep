@@ -1,22 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppHeader from '../../components/AppHeader';
 import PersonTable from './PersonTable';
 import PersonRoleFilter from './PersonRoleFilter';
 import PersonCreateForm from './PersonCreateForm';
-import PersonDetailPanel from './PersonDetailPanel';
 import type { PersonResponse, PersonRole } from '../../types/person';
 import { rolesAllowedFor } from '../../types/person';
 import type { CompanyResponse, CompanyType } from '../../types/auth';
 
 export default function PersonPage() {
   const { user, company } = useAuth();
+  const navigate = useNavigate();
   const [persons, setPersons] = useState<PersonResponse[]>([]);
   const [companies, setCompanies] = useState<CompanyResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterRole, setFilterRole] = useState<PersonRole | ''>('');
-  const [selected, setSelected] = useState<PersonResponse | null>(null);
   const [creating, setCreating] = useState(false);
 
   const isAdmin = user?.role === 'ADMIN';
@@ -32,12 +32,10 @@ export default function PersonPage() {
     return map;
   }, [companies]);
 
-  // 셀프 등록 시 본인 회사 type
   const selfSupplierType: CompanyType | undefined = !isAdmin && company
     ? company.type
     : undefined;
 
-  // 역할별 페이지 제목/필터 옵션
   const pageTitle = (() => {
     if (isAdmin) return '인원 관리';
     if (selfSupplierType === 'EQUIPMENT') return '조종원 관리';
@@ -72,25 +70,10 @@ export default function PersonPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterRole]);
 
-  function handleCreated() {
+  function handleCreated(p: PersonResponse) {
     setCreating(false);
-    void load();
+    navigate(`/persons/${p.id}`);
   }
-
-  function handleChange(updated: PersonResponse) {
-    setPersons((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    setSelected(updated);
-  }
-
-  function handleDelete(id: number) {
-    setPersons((prev) => prev.filter((p) => p.id !== id));
-    setSelected(null);
-  }
-
-  // 셀렉트한 인원의 supplier type (수정 시 역할 필터링)
-  const selectedSupplierType: CompanyType | undefined = selected
-    ? (companiesById.get(selected.supplier_id)?.type ?? selfSupplierType)
-    : undefined;
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -128,21 +111,10 @@ export default function PersonPage() {
             persons={persons}
             companiesById={companiesById}
             showSupplierColumn={isAdmin}
-            onRowClick={setSelected}
+            onRowClick={(p) => navigate(`/persons/${p.id}`)}
           />
         )}
       </div>
-
-      <PersonDetailPanel
-        key={selected?.id ?? 'closed'}
-        person={selected}
-        supplier={selected ? companiesById.get(selected.supplier_id) ?? null : null}
-        supplierType={selectedSupplierType}
-        onClose={() => setSelected(null)}
-        onChange={handleChange}
-        onDelete={handleDelete}
-        canEdit={Boolean(canEdit && (isAdmin || selected?.supplier_id === user?.company_id))}
-      />
     </main>
   );
 }
