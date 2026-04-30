@@ -13,6 +13,7 @@ public record EquipmentResponse(
         String model,
         String manufacturer,
         Integer year,
+        boolean hasPhoto,
         LocalDateTime createdAt
 ) {
     public static EquipmentResponse from(Equipment e) {
@@ -24,6 +25,7 @@ public record EquipmentResponse(
                 e.getModel(),
                 e.getManufacturer(),
                 e.getYear(),
+                e.getPhotoKey() != null,
                 e.getCreatedAt()
         );
     }

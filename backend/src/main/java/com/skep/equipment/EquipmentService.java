@@ -7,9 +7,12 @@ import com.skep.company.CompanyType;
 import com.skep.equipment.dto.CreateEquipmentRequest;
 import com.skep.equipment.dto.UpdateEquipmentRequest;
 import com.skep.security.AuthenticatedUser;
+import com.skep.storage.FileStorage;
 import com.skep.user.Role;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -19,10 +22,12 @@ public class EquipmentService {
 
     private final EquipmentRepository repo;
     private final CompanyRepository companies;
+    private final FileStorage storage;
 
-    public EquipmentService(EquipmentRepository repo, CompanyRepository companies) {
+    public EquipmentService(EquipmentRepository repo, CompanyRepository companies, FileStorage storage) {
         this.repo = repo;
         this.companies = companies;
+        this.storage = storage;
     }
 
     @Transactional(readOnly = true)
@@ -79,8 +84,51 @@ public class EquipmentService {
         Equipment e = repo.findById(id)
                 .orElseThrow(() -> ApiException.notFound("EQUIPMENT_NOT_FOUND", "equipment " + id + " not found"));
         ensureCanModify(actor, e.getSupplierId());
+        String photoKey = e.getPhotoKey();
         repo.delete(e);
+        if (photoKey != null) storage.delete(photoKey);
     }
+
+    public Equipment uploadPhoto(Long id, MultipartFile file, AuthenticatedUser actor) {
+        Equipment e = repo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("EQUIPMENT_NOT_FOUND", "equipment " + id + " not found"));
+        ensureCanModify(actor, e.getSupplierId());
+
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw ApiException.badRequest("INVALID_IMAGE", "이미지 파일만 업로드할 수 있습니다");
+        }
+
+        String oldKey = e.getPhotoKey();
+        String newKey = storage.store(file);
+        e.setPhoto(newKey, contentType);
+        if (oldKey != null) storage.delete(oldKey);
+        return e;
+    }
+
+    public Equipment deletePhoto(Long id, AuthenticatedUser actor) {
+        Equipment e = repo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("EQUIPMENT_NOT_FOUND", "equipment " + id + " not found"));
+        ensureCanModify(actor, e.getSupplierId());
+
+        String oldKey = e.getPhotoKey();
+        e.clearPhoto();
+        if (oldKey != null) storage.delete(oldKey);
+        return e;
+    }
+
+    @Transactional(readOnly = true)
+    public PhotoData loadPhoto(Long id, AuthenticatedUser actor) {
+        Equipment e = repo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("EQUIPMENT_NOT_FOUND", "equipment " + id + " not found"));
+        ensureCanAccess(actor, e.getSupplierId());
+        if (e.getPhotoKey() == null) {
+            throw ApiException.notFound("PHOTO_NOT_FOUND", "사진이 등록되지 않았습니다");
+        }
+        return new PhotoData(storage.load(e.getPhotoKey()), e.getPhotoContentType());
+    }
+
+    public record PhotoData(Resource resource, String contentType) {}
 
     /** ADMIN: 어떤 supplier도 OK. EQUIPMENT_SUPPLIER: 본인 회사 강제. 그 외: 본인 회사 read-only 가정. */
     private Long resolveListSupplier(AuthenticatedUser actor, Long supplierIdParam) {

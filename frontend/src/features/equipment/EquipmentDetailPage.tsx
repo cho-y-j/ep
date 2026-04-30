@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppHeader from '../../components/AppHeader';
+import Avatar from '../../components/Avatar';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EquipmentFields, { type EquipmentFieldValues } from './EquipmentFields';
 import DocumentSection from '../document/DocumentSection';
@@ -37,6 +38,9 @@ export default function EquipmentDetailPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoNonce, setPhotoNonce] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = user?.role === 'ADMIN';
   const canEdit = useMemo(() => {
@@ -123,6 +127,40 @@ export default function EquipmentDetailPage() {
     }
   }
 
+  async function handlePhotoFile(file: File) {
+    if (!equipment) return;
+    setPhotoBusy(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post<EquipmentResponse>(`/api/equipment/${equipment.id}/photo`, formData);
+      setEquipment(res.data);
+      setPhotoNonce((n) => n + 1);
+    } catch (err) {
+      if (err instanceof AxiosError) {
+        alert(err.response?.data?.message ?? '사진 업로드 실패');
+      }
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function deletePhoto() {
+    if (!equipment) return;
+    setPhotoBusy(true);
+    try {
+      const res = await api.delete<EquipmentResponse>(`/api/equipment/${equipment.id}/photo`);
+      setEquipment(res.data);
+      setPhotoNonce((n) => n + 1);
+    } catch (err) {
+      if (err instanceof AxiosError) {
+        alert(err.response?.data?.message ?? '사진 삭제 실패');
+      }
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50">
@@ -192,13 +230,48 @@ export default function EquipmentDetailPage() {
             </div>
           ) : (
             <div className="flex flex-col md:flex-row gap-6">
-              <div className="shrink-0 w-[140px] aspect-square rounded-lg bg-slate-100 flex items-center justify-center">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" className="text-slate-400">
-                  <rect x="2" y="10" width="20" height="8" rx="1.5" />
-                  <circle cx="7" cy="19" r="2" />
-                  <circle cx="17" cy="19" r="2" />
-                  <path d="M5 10V6h6l3 4" />
-                </svg>
+              <div className="flex flex-col items-center gap-2 shrink-0">
+                <Avatar
+                  key={photoNonce}
+                  fetchUrl={equipment.has_photo ? `/api/equipment/${equipment.id}/photo` : undefined}
+                  fallbackText={equipment.vehicle_no || EQUIPMENT_CATEGORY_LABEL[equipment.category]}
+                  alt={equipment.vehicle_no ?? EQUIPMENT_CATEGORY_LABEL[equipment.category]}
+                  size={140}
+                  rounded="lg"
+                />
+                {canEdit && (
+                  <div className="flex flex-col gap-1 w-full">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void handlePhotoFile(f);
+                        e.target.value = '';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={photoBusy}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+                    >
+                      {photoBusy ? '업로드 중...' : equipment.has_photo ? '사진 변경' : '사진 추가'}
+                    </button>
+                    {equipment.has_photo && (
+                      <button
+                        type="button"
+                        onClick={() => void deletePhoto()}
+                        disabled={photoBusy}
+                        className="text-xs px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        사진 삭제
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 min-w-0">

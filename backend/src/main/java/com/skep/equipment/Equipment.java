@@ -36,6 +36,12 @@ public class Equipment {
 
     private Integer year;
 
+    @Column(name = "photo_key", length = 255)
+    private String photoKey;
+
+    @Column(name = "photo_content_type", length = 100)
+    private String photoContentType;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -70,5 +76,15 @@ public class Equipment {
         if (model != null) this.model = model;
         if (manufacturer != null) this.manufacturer = manufacturer;
         if (year != null) this.year = year;
+    }
+
+    public void setPhoto(String key, String contentType) {
+        this.photoKey = key;
+        this.photoContentType = contentType;
+    }
+
+    public void clearPhoto() {
+        this.photoKey = null;
+        this.photoContentType = null;
     }
 }

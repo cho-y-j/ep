@@ -17,6 +17,7 @@ export type EquipmentResponse = {
   model?: string | null;
   manufacturer?: string | null;
   year?: number | null;
+  has_photo: boolean;
   created_at: string;
 };
 
