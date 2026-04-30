@@ -2,18 +2,20 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../lib/api';
 import { COMPANY_TYPE_LABEL, type CompanyResponse, type CompanyType } from '../types/auth';
-import { formatBusinessNumber } from '../lib/format';
 import CompanyDetailPanel from '../components/CompanyDetailPanel';
 import AppHeader from '../components/AppHeader';
-
-const TYPES: CompanyType[] = ['BP', 'EQUIPMENT', 'MANPOWER'];
+import CompanyFields from '../components/forms/CompanyFields';
 
 export default function AdminCompaniesPage() {
   const [companies, setCompanies] = useState<CompanyResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<CompanyResponse | null>(null);
   const [creating, setCreating] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', businessNumber: '', type: 'BP' as CompanyType });
+  const [createForm, setCreateForm] = useState<{ name: string; businessNumber: string; type: CompanyType }>({
+    name: '',
+    businessNumber: '',
+    type: 'BP',
+  });
   const [creatingBusy, setCreatingBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -72,30 +74,20 @@ export default function AdminCompaniesPage() {
         {creating && (
           <form onSubmit={onCreate} className="card mb-6 space-y-4">
             <h2 className="text-base font-bold">새 회사 등록</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">회사명</span>
-                <input value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} required className="input mt-1" />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">사업자번호</span>
-                <input
-                  value={createForm.businessNumber}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, businessNumber: formatBusinessNumber(e.target.value) }))}
-                  required
-                  placeholder="123-45-67890"
-                  inputMode="numeric"
-                  maxLength={12}
-                  className="input mt-1"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">유형</span>
-                <select value={createForm.type} onChange={(e) => setCreateForm((f) => ({ ...f, type: e.target.value as CompanyType }))} className="input mt-1 bg-white">
-                  {TYPES.map((t) => <option key={t} value={t}>{COMPANY_TYPE_LABEL[t]}</option>)}
-                </select>
-              </label>
-            </div>
+            <CompanyFields
+              values={{
+                name: createForm.name,
+                businessNumber: createForm.businessNumber,
+                type: createForm.type,
+              }}
+              onChange={(next) => setCreateForm({
+                name: next.name,
+                businessNumber: next.businessNumber,
+                type: next.type ?? 'BP',
+              })}
+              showType
+              required
+            />
             {createError && (
               <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{createError}</p>
             )}

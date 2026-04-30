@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ROLE_LABEL, SIGNUP_ROLES, roleRequiresCompany, type Role } from '../types/auth';
-import { formatBusinessNumber, formatPhone } from '../lib/format';
+import CompanyFields from '../components/forms/CompanyFields';
+import PhoneInput from '../components/forms/PhoneInput';
 import { AxiosError } from 'axios';
 
 export default function SignupPage() {
@@ -61,52 +62,53 @@ export default function SignupPage() {
           <p className="text-sm text-slate-500 mt-1">가입 후 관리자 승인이 필요합니다.</p>
         </div>
 
-        <Field label="이메일">
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">이메일</span>
           <input
             type="email"
             value={form.email}
             onChange={(e) => update('email', e.target.value)}
             required
-            className="input"
+            className="input mt-1"
           />
-        </Field>
+        </label>
 
-        <Field label="비밀번호 (8자 이상)">
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">비밀번호 (8자 이상)</span>
           <input
             type="password"
             value={form.password}
             onChange={(e) => update('password', e.target.value)}
             required
             minLength={8}
-            className="input"
+            className="input mt-1"
           />
-        </Field>
+        </label>
 
-        <Field label="이름">
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">이름</span>
           <input
             type="text"
             value={form.name}
             onChange={(e) => update('name', e.target.value)}
             required
-            className="input"
+            className="input mt-1"
           />
-        </Field>
+        </label>
 
-        <Field label="휴대폰 (선택)">
-          <input
-            type="tel"
-            value={form.phone}
-            onChange={(e) => update('phone', formatPhone(e.target.value))}
-            placeholder="010-1234-5678"
-            className="input"
-          />
-        </Field>
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">휴대폰 (선택)</span>
+          <div className="mt-1">
+            <PhoneInput value={form.phone} onChange={(v) => update('phone', v)} />
+          </div>
+        </label>
 
-        <Field label="역할">
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">역할</span>
           <select
             value={form.role}
             onChange={(e) => update('role', e.target.value as Role)}
-            className="input bg-white"
+            className="input mt-1 bg-white"
           >
             {SIGNUP_ROLES.map((r) => (
               <option key={r} value={r}>
@@ -114,34 +116,18 @@ export default function SignupPage() {
               </option>
             ))}
           </select>
-        </Field>
+        </label>
 
         {needsCompany && (
           <div className="border-t border-dashed border-slate-300 pt-4 space-y-4">
             <p className="text-xs text-slate-500">
               회사 정보 — 같은 사업자번호로 다른 사람이 이미 가입했다면 그 회사에 합류합니다.
             </p>
-            <Field label="회사명">
-              <input
-                type="text"
-                value={form.companyName}
-                onChange={(e) => update('companyName', e.target.value)}
-                required={needsCompany}
-                className="input"
-              />
-            </Field>
-            <Field label="사업자번호">
-              <input
-                type="text"
-                value={form.businessNumber}
-                onChange={(e) => update('businessNumber', formatBusinessNumber(e.target.value))}
-                required={needsCompany}
-                placeholder="123-45-67890"
-                inputMode="numeric"
-                maxLength={12}
-                className="input"
-              />
-            </Field>
+            <CompanyFields
+              values={{ name: form.companyName, businessNumber: form.businessNumber }}
+              onChange={(next) => setForm((prev) => ({ ...prev, companyName: next.name, businessNumber: next.businessNumber }))}
+              required
+            />
           </div>
         )}
 
@@ -161,14 +147,5 @@ export default function SignupPage() {
         </p>
       </form>
     </main>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
-      <div className="mt-1">{children}</div>
-    </label>
   );
 }
