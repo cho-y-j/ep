@@ -1,6 +1,6 @@
 # SKEP v2 API 명세서
 
-> 마지막 갱신: 2026-04-30 (Phase A 완료 시점)
+> 마지막 갱신: 2026-04-30 (Phase B 완료 시점)
 > Base URL: `http://localhost:8081` (로컬), `/api` prefix 공통
 > 관련 문서: [ERD](./ERD.md)
 
@@ -253,6 +253,100 @@
 
 ---
 
+## Equipment — `/api/equipment`
+
+장비공급사가 자기 회사의 장비를 관리. ADMIN은 모든 회사 가능. JWT의 `company_id` claim으로 권한 자동 매핑.
+
+### `GET /api/equipment?supplier_id=&category=`
+**파라미터** (둘 다 선택)
+- `supplier_id` (long): 특정 공급사 필터. `EQUIPMENT_SUPPLIER`는 무시되고 본인 회사만 반환
+- `category` (enum): 분류 필터
+
+**응답**: `EquipmentResponse[]` (id 내림차순)
+
+**역할별 동작**
+| Role | 동작 |
+|---|---|
+| ADMIN | supplier_id 지정 시 그 회사만, 미지정 시 전체 |
+| EQUIPMENT_SUPPLIER | 본인 회사 강제, supplier_id 파라미터 무시 |
+| BP / 그 외 | supplier_id 지정 시 그 회사 (장비 검색 용도, 추후 좁힐 수 있음) |
+
+### `GET /api/equipment/{id}`
+**응답**: `EquipmentResponse`
+**에러**: `EQUIPMENT_NOT_FOUND` 404, `FORBIDDEN_OTHER_COMPANY` 403 (다른 회사 장비를 EQUIPMENT_SUPPLIER가 조회)
+
+### `POST /api/equipment`
+**Request**
+```json
+{
+  "supplier_id": 2,
+  "vehicle_no": "경기99사1234",
+  "category": "EXCAVATOR",
+  "model": "DX300LCA",
+  "manufacturer": "두산인프라코어",
+  "year": 2022
+}
+```
+
+| 필드 | 필수 | 비고 |
+|---|---|---|
+| supplier_id | △ | ADMIN: 필수 / EQUIPMENT_SUPPLIER: 무시 (본인 회사 강제) |
+| vehicle_no | | 어태치먼트 등은 비울 수 있음 |
+| category | ✓ | enum |
+| model, manufacturer, year | | 모두 선택 |
+
+**응답 201**: `EquipmentResponse`
+
+**에러**
+| code | status | 조건 |
+|---|---|---|
+| `SUPPLIER_REQUIRED` | 400 | ADMIN인데 supplier_id 누락 |
+| `SUPPLIER_NOT_FOUND` | 400 | 존재하지 않는 supplier_id |
+| `SUPPLIER_NOT_EQUIPMENT` | 400 | supplier_id가 type=EQUIPMENT가 아님 |
+| `FORBIDDEN_OTHER_COMPANY` | 403 | EQUIPMENT_SUPPLIER가 다른 회사 supplier_id 보냄 |
+| `ROLE_NOT_ALLOWED` | 403 | BP/MANPOWER_SUPPLIER/WORKER 등 |
+
+### `PATCH /api/equipment/{id}`
+**Request** (모든 필드 선택)
+```json
+{ "vehicle_no": "...", "category": "...", "model": "...", "manufacturer": "...", "year": 2023 }
+```
+**응답**: `EquipmentResponse`
+**에러**: `FORBIDDEN` (다른 회사 장비)
+
+### `DELETE /api/equipment/{id}`
+**응답 204**
+**에러**: `FORBIDDEN`
+
+### EquipmentResponse 스키마
+```jsonc
+{
+  "id": 1,
+  "supplier_id": 2,
+  "vehicle_no": "경기99사1234",      // null 허용
+  "category": "EXCAVATOR",
+  "model": "DX300LCA",                // null 허용
+  "manufacturer": "두산인프라코어",   // null 허용
+  "year": 2022,                        // null 허용
+  "created_at": "2026-04-30T13:24:17.888"
+}
+```
+
+### EquipmentCategory enum
+| 코드 | 라벨 |
+|---|---|
+| `EXCAVATOR` | 굴삭기 |
+| `WHEEL_LOADER` | 휠로더 |
+| `CRANE` | 크레인 |
+| `FORKLIFT` | 지게차 |
+| `DOZER` | 도저 |
+| `GRADER` | 그레이더 |
+| `AERIAL_LIFT` | 고소작업차 |
+| `PUMP_TRUCK` | 펌프카 |
+| `ATTACHMENT` | 어태치먼트 |
+
+---
+
 ## Health
 
 ### `GET /api/health` (공개)
@@ -307,16 +401,17 @@
 
 ## Phase별 추가 예정
 
-| Phase | 추가 엔드포인트 |
-|---|---|
-| **B. Equipment** | `/api/equipment` CRUD |
-| **C. Person** | `/api/persons` CRUD (역할 다중) |
-| **D. Document** | `/api/documents/upload` (multipart), `/api/document-types`, `/api/documents/{id}/file` |
-| **E. Wizard** | (UI만, 백엔드 추가 없음 — D의 API 활용) |
-| **F. OCR** | `/api/documents/{id}/ocr` (verify-api 호출 wrapper) |
+| Phase | 추가 엔드포인트 | 상태 |
+|---|---|---|
+| **B. Equipment** | `/api/equipment` CRUD | ✓ |
+| **C. Person** | `/api/persons` CRUD (역할 다중) | |
+| **D. Document** | `/api/documents/upload` (multipart), `/api/document-types`, `/api/documents/{id}/file` | |
+| **E. Wizard** | (UI만, 백엔드 추가 없음 — D의 API 활용) | |
+| **F. OCR** | `/api/documents/{id}/ocr` (verify-api 호출 wrapper) | |
 
 ---
 
 ## 변경 이력
 
 - 2026-04-30: 초안 작성. Auth + Users + Companies + Health 정리. Phase A 완료 기준.
+- 2026-04-30: Phase B — Equipment CRUD 추가. JWT에 `company_id` claim 포함하여 권한 자동 매핑.

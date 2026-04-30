@@ -32,16 +32,18 @@ public class JwtService {
     public String issueAccessToken(User user) {
         Instant now = Instant.now();
         Instant exp = now.plus(Duration.ofMinutes(props.accessTokenTtlMinutes()));
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .issuer(props.issuer())
                 .subject(String.valueOf(user.getId()))
                 .claim("email", user.getEmail())
                 .claim("role", user.getRole().name())
                 .claim("name", user.getName())
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(exp))
-                .signWith(signingKey)
-                .compact();
+                .expiration(Date.from(exp));
+        if (user.getCompanyId() != null) {
+            builder.claim("company_id", user.getCompanyId());
+        }
+        return builder.signWith(signingKey).compact();
     }
 
     public Claims parse(String token) {

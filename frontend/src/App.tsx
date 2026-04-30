@@ -5,6 +5,7 @@ import PendingApprovalPage from './pages/PendingApprovalPage';
 import HomePage from './pages/HomePage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import AdminCompaniesPage from './pages/AdminCompaniesPage';
+import EquipmentPage from './pages/EquipmentPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 
@@ -36,6 +37,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['ADMIN']}>
               <AdminCompaniesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/equipment"
+          element={
+            <ProtectedRoute>
+              <EquipmentPage />
             </ProtectedRoute>
           }
         />

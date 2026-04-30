@@ -1,16 +1,17 @@
 # SKEP v2 ERD
 
-> 마지막 갱신: 2026-04-30 (Phase A 완료)
+> 마지막 갱신: 2026-04-30 (Phase B 완료)
 > 다이어그램은 Mermaid (GitHub에서 자동 렌더). 마이그레이션 SQL: `backend/src/main/resources/db/migration/`
 
 ---
 
-## 현재 스키마 (Phase A까지)
+## 현재 스키마 (Phase B까지)
 
 ```mermaid
 erDiagram
     users ||--o{ refresh_tokens : "has"
     companies ||--o{ users : "employs"
+    companies ||--o{ equipment : "owns (type=EQUIPMENT)"
 
     companies {
         bigint id PK
@@ -43,11 +44,24 @@ erDiagram
         boolean revoked
         timestamp created_at
     }
+
+    equipment {
+        bigint id PK
+        bigint supplier_id FK "companies.id, type=EQUIPMENT 강제"
+        varchar(32) vehicle_no "nullable (어태치먼트 등)"
+        varchar(32) category "EXCAVATOR | WHEEL_LOADER | CRANE | FORKLIFT | DOZER | GRADER | AERIAL_LIFT | PUMP_TRUCK | ATTACHMENT"
+        varchar(100) model
+        varchar(100) manufacturer
+        int year
+        timestamp created_at
+        timestamp updated_at
+    }
 ```
 
 ### 관계
 - `companies (1) ─── (0..N) users` — 한 회사에 여러 직원. ADMIN/WORKER는 company_id NULL 허용.
 - `users (1) ─── (0..N) refresh_tokens` — 토큰 rotation 이력 + 활성 토큰. ON DELETE CASCADE.
+- `companies (1) ─── (0..N) equipment` — type=EQUIPMENT 회사만 장비 보유 (서비스 레이어 검증). ON DELETE RESTRICT (장비 있는 회사 못 지움).
 
 ### Enum 값
 - **Role**: `ADMIN`, `BP`, `EQUIPMENT_SUPPLIER`, `MANPOWER_SUPPLIER`, `WORKER`
@@ -59,6 +73,7 @@ erDiagram
 |---|---|---|
 | V1 | `V1__init_users.sql` | users + refresh_tokens |
 | V2 | `V2__add_companies.sql` | companies + users.company_id FK |
+| V3 | `V3__add_equipment.sql` | equipment + supplier_id FK to companies |
 
 ---
 
@@ -145,3 +160,4 @@ erDiagram
 ## 변경 이력
 
 - 2026-04-30: 초안 작성. Phase A 스키마 (users, refresh_tokens, companies). Phase B+ 설계 윤곽.
+- 2026-04-30: Phase B — equipment 테이블 추가.

@@ -21,6 +21,11 @@ export default function AppHeader() {
           <NavLink to="/" end className={navLinkClass}>
             홈
           </NavLink>
+          {(user.role === 'ADMIN' || user.role === 'EQUIPMENT_SUPPLIER') && (
+            <NavLink to="/equipment" className={navLinkClass}>
+              장비 관리
+            </NavLink>
+          )}
           {user.role === 'ADMIN' && (
             <>
               <NavLink to="/admin/users" className={navLinkClass}>
