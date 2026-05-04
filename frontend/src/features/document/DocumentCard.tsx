@@ -85,12 +85,12 @@ export default function DocumentCard({ doc, canEdit, isAdmin, onOpen, onDelete, 
       </button>
 
       <div className="flex min-w-0 flex-1 flex-col p-4 pl-1">
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-2 min-w-0">
           <button
             type="button"
             onClick={onOpen}
-            className="truncate text-left text-sm font-bold text-slate-900 hover:text-brand-700"
-            title={doc.file_name}
+            className="block min-w-0 flex-1 truncate text-left text-sm font-bold text-slate-900 hover:text-brand-700"
+            title={`${doc.document_type_name} — ${doc.file_name}`}
           >
             {doc.document_type_name}
           </button>

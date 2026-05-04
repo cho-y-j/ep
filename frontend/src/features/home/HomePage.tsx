@@ -97,11 +97,12 @@ export default function HomePage() {
                       <div className="flex-1 min-w-0">
                         <Link
                           to={`/${d.owner_type === 'EQUIPMENT' ? 'equipment' : 'persons'}/${d.owner_id}`}
-                          className="text-sm font-medium hover:text-brand-700"
+                          className="block truncate text-sm font-medium hover:text-brand-700"
+                          title={d.document_type_name}
                         >
                           {d.document_type_name}
                         </Link>
-                        <div className="text-xs text-slate-500 mt-0.5">
+                        <div className="truncate text-xs text-slate-500 mt-0.5" title={d.owner_name}>
                           {d.owner_type === 'EQUIPMENT' ? '장비' : '인원'} · {d.owner_name} · 만료 {d.expiry_date}
                         </div>
                       </div>

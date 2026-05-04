@@ -286,7 +286,7 @@ export default function PersonDetailPage() {
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <h2 className="text-3xl font-bold text-slate-950">{person.name}</h2>
+                      <h2 className="text-3xl font-bold text-slate-950 break-keep">{person.name}</h2>
                       <StatusBadge status={status} />
                     </div>
                     <div className="flex flex-wrap gap-2">
