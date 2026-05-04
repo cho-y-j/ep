@@ -46,12 +46,21 @@ export default function DocumentCard({ doc, canEdit, isAdmin, onOpen, onDelete, 
   const expired = days != null && days < 0;
   const soon = days != null && days >= 0 && days <= 30;
 
+  const statusLabel = expired ? '만료됨' : soon ? '만료임박' : doc.verified ? '검증완료' : '확인대기';
+  const statusClass = expired
+    ? 'bg-rose-50 text-rose-700 ring-rose-200'
+    : soon
+      ? 'bg-amber-50 text-amber-700 ring-amber-200'
+      : doc.verified
+        ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+        : 'bg-slate-100 text-slate-600 ring-slate-200';
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden flex flex-col">
+    <div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
       <button
         type="button"
         onClick={onOpen}
-        className="aspect-[4/3] bg-slate-100 flex items-center justify-center overflow-hidden hover:bg-slate-200 transition-colors"
+        className="m-3 flex h-28 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 transition-colors hover:bg-slate-200"
         title="클릭하여 열기"
       >
         {isImage && thumbUrl ? (
@@ -75,12 +84,12 @@ export default function DocumentCard({ doc, canEdit, isAdmin, onOpen, onDelete, 
         )}
       </button>
 
-      <div className="p-2 flex-1 flex flex-col">
+      <div className="flex min-w-0 flex-1 flex-col p-4 pl-1">
         <div className="flex items-start justify-between gap-2">
           <button
             type="button"
             onClick={onOpen}
-            className="text-xs font-medium text-slate-900 hover:text-brand-700 truncate text-left"
+            className="truncate text-left text-sm font-bold text-slate-900 hover:text-brand-700"
             title={doc.file_name}
           >
             {doc.document_type_name}
@@ -130,20 +139,15 @@ export default function DocumentCard({ doc, canEdit, isAdmin, onOpen, onDelete, 
           )}
         </div>
 
-        {doc.expiry_date && (
-          <div className="mt-1 text-xs text-slate-500">만료 {doc.expiry_date}</div>
-        )}
+        <div className="mt-3 space-y-1 text-xs text-slate-500">
+          <p>만료일</p>
+          <p className="text-sm font-semibold text-slate-900">{doc.expiry_date ?? '-'}</p>
+        </div>
 
-        <div className="mt-auto pt-2 flex flex-wrap gap-1">
-          {doc.verified && (
-            <span className="inline-flex px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-xs">검증완료</span>
-          )}
-          {expired && (
-            <span className="inline-flex px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-xs">만료됨</span>
-          )}
-          {soon && !expired && (
-            <span className="inline-flex px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">{days}일 남음</span>
-          )}
+        <div className="mt-auto pt-3">
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass}`}>
+            {soon && !expired && days != null ? `${statusLabel} D-${days}` : statusLabel}
+          </span>
         </div>
       </div>
     </div>

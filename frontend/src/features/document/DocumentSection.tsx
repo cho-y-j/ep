@@ -13,9 +13,10 @@ type Props = {
   ownerType: OwnerType;
   ownerId: number;
   canEdit: boolean;
+  title?: string;
 };
 
-export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) {
+export default function DocumentSection({ ownerType, ownerId, canEdit, title = '서류' }: Props) {
   const [docs, setDocs] = useState<DocumentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -101,15 +102,22 @@ export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) 
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-bold text-slate-700">서류</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+          {title}
+          {!loading && (
+            <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-100">
+              {docs.length}
+            </span>
+          )}
+        </h3>
         {canEdit && !uploading && (
           <button
             type="button"
             onClick={() => setUploading(true)}
-            className="text-xs text-brand-600 hover:text-brand-700 font-medium"
+            className="rounded-lg border border-brand-100 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm hover:bg-brand-50"
           >
-            + 추가
+            + 서류 추가
           </button>
         )}
       </div>
@@ -132,7 +140,7 @@ export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) 
       ) : docs.length === 0 ? (
         <p className="text-xs text-slate-400">등록된 서류가 없습니다</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {docs.map((d) => (
             <DocumentCard
               key={d.id}
@@ -175,4 +183,3 @@ export default function DocumentSection({ ownerType, ownerId, canEdit }: Props) 
     </div>
   );
 }
-

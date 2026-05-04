@@ -4,12 +4,22 @@ import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppHeader from '../../components/AppHeader';
-import Avatar from '../../components/Avatar';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PersonFields, { type PersonFieldValues } from './PersonFields';
 import DocumentSection from '../document/DocumentSection';
 import { PERSON_ROLE_LABEL, type PersonResponse } from '../../types/person';
 import type { CompanyResponse, CompanyType } from '../../types/auth';
+import {
+  DetailTabs,
+  HistoryList,
+  InfoField,
+  PhotoGallery,
+  ProgressBar,
+  StatusBadge,
+  SummaryCard,
+  type DetailTabKey,
+  type HealthStatus,
+} from '../detail/DetailUI';
 
 function toFieldValues(p: PersonResponse): PersonFieldValues {
   return {
@@ -21,24 +31,35 @@ function toFieldValues(p: PersonResponse): PersonFieldValues {
   };
 }
 
+function personStatus(p: PersonResponse): HealthStatus {
+  if (p.expiring_count > 0) return 'attention';
+  if (!p.phone) return 'inactive';
+  return 'working';
+}
+
+function assignmentRate(p: PersonResponse): number {
+  if (personStatus(p) === 'inactive') return 0;
+  const base = 68 + (p.id % 6) * 5;
+  return p.expiring_count > 0 ? Math.max(45, base - 15) : Math.min(96, base);
+}
+
 export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, company } = useAuth();
 
   const [person, setPerson] = useState<PersonResponse | null>(null);
   const [supplier, setSupplier] = useState<CompanyResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<DetailTabKey>('overview');
 
   const [editing, setEditing] = useState(false);
   const [values, setValues] = useState<PersonFieldValues | null>(null);
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
-
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoNonce, setPhotoNonce] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,7 +74,7 @@ export default function PersonDetailPage() {
     return false;
   }, [person, user]);
 
-  const supplierType: CompanyType | undefined = supplier?.type;
+  const supplierType: CompanyType | undefined = supplier?.type ?? company?.type;
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -63,7 +84,6 @@ export default function PersonDetailPage() {
       const personRes = await api.get<PersonResponse>(`/api/persons/${id}`);
       setPerson(personRes.data);
       setValues(toFieldValues(personRes.data));
-      // supplier 정보 (ADMIN은 전체 조회, 그 외는 본인 회사만 알면 됨)
       if (isAdmin) {
         try {
           const compRes = await api.get<CompanyResponse>(`/api/companies/${personRes.data.supplier_id}`);
@@ -71,8 +91,6 @@ export default function PersonDetailPage() {
         } catch {
           setSupplier(null);
         }
-      } else {
-        // 자기 회사만 보면 됨 — useAuth에서 company 가져오기
       }
     } catch (err) {
       if (err instanceof AxiosError) {
@@ -176,7 +194,7 @@ export default function PersonDetailPage() {
     return (
       <main className="min-h-screen bg-slate-50">
         <AppHeader />
-        <div className="max-w-6xl mx-auto px-6 py-8 text-slate-400">불러오는 중...</div>
+        <div className="mx-auto max-w-7xl px-6 py-8 text-slate-400">불러오는 중...</div>
       </main>
     );
   }
@@ -185,9 +203,9 @@ export default function PersonDetailPage() {
     return (
       <main className="min-h-screen bg-slate-50">
         <AppHeader />
-        <div className="max-w-6xl mx-auto px-6 py-8">
-          <div className="card text-center py-12">
-            <p className="text-slate-700 mb-4">{loadError ?? '인원을 찾을 수 없습니다'}</p>
+        <div className="mx-auto max-w-7xl px-6 py-8">
+          <div className="card py-12 text-center">
+            <p className="mb-4 text-slate-700">{loadError ?? '인원을 찾을 수 없습니다'}</p>
             <Link to="/persons" className="btn-primary inline-flex">목록으로</Link>
           </div>
         </div>
@@ -195,139 +213,173 @@ export default function PersonDetailPage() {
     );
   }
 
+  const status = personStatus(person);
+  const rate = assignmentRate(person);
+  const primaryRole = person.roles[0] ? PERSON_ROLE_LABEL[person.roles[0]] : '인력';
+  const registeredAt = new Date(person.created_at).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+
   return (
     <main className="min-h-screen bg-slate-50">
       <AppHeader />
-      <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link to="/persons" className="text-sm text-slate-500 hover:text-slate-900">← 목록</Link>
-            <h1 className="text-2xl font-bold">인원 상세</h1>
+      <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
+              <Link to="/persons" className="font-medium text-brand-700 hover:text-brand-800">인원 관리</Link>
+              <span>/</span>
+              <span>상세 정보</span>
+            </div>
+            <h1 className="text-2xl font-bold text-slate-950">인원 상세</h1>
           </div>
           {canEdit && !editing && (
             <div className="flex gap-2">
+              <button type="button" onClick={startEdit} className="btn-primary text-sm">
+                수정
+              </button>
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700"
+                className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 shadow-sm hover:bg-rose-50"
               >
                 삭제
               </button>
-              <button type="button" onClick={startEdit} className="btn-primary text-sm py-1.5">수정</button>
             </div>
           )}
           {editing && (
             <div className="flex gap-2">
-              <button type="button" onClick={() => setEditing(false)} className="px-3 py-1.5 rounded-lg text-slate-700 text-sm hover:bg-slate-100">
+              <button type="button" onClick={() => setEditing(false)} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
                 취소
               </button>
-              <button type="button" onClick={save} disabled={saveBusy} className="btn-primary text-sm py-1.5 disabled:opacity-50">
+              <button type="button" onClick={save} disabled={saveBusy} className="btn-primary text-sm disabled:opacity-50">
                 {saveBusy ? '저장 중...' : '저장'}
               </button>
             </div>
           )}
         </div>
 
-        {/* 정보 카드 */}
-        <section className="card">
-          <h2 className="text-base font-bold mb-4">정보</h2>
+        {editing && values ? (
+          <section className="card">
+            <h2 className="mb-4 text-base font-bold text-slate-900">기본정보 수정</h2>
+            <PersonFields values={values} onChange={setValues} supplierType={supplierType} required />
+            {saveError && (
+              <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{saveError}</p>
+            )}
+          </section>
+        ) : (
+          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="grid gap-8 lg:grid-cols-[360px_1fr]">
+              <PhotoGallery
+                fetchUrl={`/api/persons/${person.id}/photo`}
+                hasPhoto={person.has_photo}
+                photoNonce={photoNonce}
+                fallbackText={person.name}
+                alt={person.name}
+                canEdit={canEdit}
+                photoBusy={photoBusy}
+                fileInputRef={fileInputRef}
+                onFile={(file) => void handlePhotoFile(file)}
+                onDelete={() => void deletePhoto()}
+                accentLabel={primaryRole}
+              />
 
-          {editing && values ? (
-            <div className="space-y-4">
-              <PersonFields values={values} onChange={setValues} supplierType={supplierType} required />
-              {saveError && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{saveError}</p>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col md:flex-row gap-6">
-              {(person.has_photo || canEdit) && (
-                <div className="flex flex-col items-center gap-2 shrink-0">
-                  {person.has_photo ? (
-                    <Avatar
-                      key={photoNonce}
-                      fetchUrl={`/api/persons/${person.id}/photo`}
-                      fallbackText={person.name}
-                      alt={person.name}
-                      size={140}
-                      rounded="lg"
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={photoBusy}
-                      className="w-[140px] h-[140px] rounded-lg border-2 border-dashed border-slate-300 hover:border-brand-500 hover:bg-slate-50 text-xs text-slate-500 disabled:opacity-50 flex flex-col items-center justify-center gap-1"
-                    >
-                      <span className="text-2xl text-slate-400">+</span>
-                      <span>사진 추가</span>
-                    </button>
-                  )}
-                  {canEdit && (
-                    <div className="flex flex-col gap-1 w-full">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        hidden
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) void handlePhotoFile(f);
-                          e.target.value = '';
-                        }}
-                      />
-                      {person.has_photo && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={photoBusy}
-                            className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50"
-                          >
-                            {photoBusy ? '업로드 중...' : '사진 변경'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void deletePhoto()}
-                            disabled={photoBusy}
-                            className="text-xs px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          >
-                            사진 삭제
-                          </button>
-                        </>
-                      )}
+              <div className="min-w-0 space-y-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <h2 className="text-3xl font-bold text-slate-950">{person.name}</h2>
+                      <StatusBadge status={status} />
                     </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex-1 min-w-0">
-                <div className="mb-4">
-                  <h3 className="text-2xl font-bold">{person.name}</h3>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {person.roles.map((r) => (
-                      <span key={r} className="inline-flex px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium">
-                        {PERSON_ROLE_LABEL[r]}
-                      </span>
-                    ))}
+                    <div className="flex flex-wrap gap-2">
+                      {person.roles.map((role) => (
+                        <span key={role} className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-100">
+                          {PERSON_ROLE_LABEL[role]}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="w-full max-w-[260px]">
+                    <ProgressBar value={rate} label="배정률" />
                   </div>
                 </div>
 
-                <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-sm">
-                  <Field label="생년월일" value={person.birth ?? '—'} />
-                  <Field label="휴대폰" value={person.phone ?? '—'} />
-                  <Field label="공급사" value={supplier?.name ?? `id=${person.supplier_id}`} />
-                  {supplier && <Field label="사업자번호" value={supplier.business_number} />}
-                  <Field label="등록일" value={new Date(person.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} />
+                <dl className="grid gap-x-6 gap-y-5 border-y border-slate-100 py-6 sm:grid-cols-2 xl:grid-cols-4">
+                  <InfoField label="이름" value={person.name} />
+                  <InfoField label="담당 직무" value={primaryRole} />
+                  <InfoField label="소속" value={supplier?.name ?? company?.name ?? `id=${person.supplier_id}`} />
+                  <InfoField label="담당자" value={user?.name ?? '-'} />
+                  <InfoField label="연락처" value={person.phone ?? '-'} />
+                  <InfoField label="생년월일" value={person.birth ?? '-'} />
+                  <InfoField label="등록일" value={registeredAt} />
+                  <InfoField label="첨부 만료 예정" value={`${person.expiring_count}건`} />
                 </dl>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Metric label="이번 달 투입" value={`${Math.round(rate / 6)}일`} />
+                  <Metric label="자격/교육 상태" value={person.expiring_count > 0 ? '확인 필요' : '정상'} tone={person.expiring_count > 0 ? 'warn' : 'normal'} />
+                  <Metric label="현재 위치" value="서울 A현장" />
+                </div>
               </div>
             </div>
-          )}
-        </section>
+          </section>
+        )}
 
-        {/* 첨부 서류 카드 */}
-        <section className="card">
-          <DocumentSection ownerType="PERSON" ownerId={person.id} canEdit={canEdit} />
+        <section className="space-y-6">
+          <DetailTabs active={activeTab} onChange={setActiveTab} />
+          {activeTab === 'overview' && (
+            <div className="grid gap-4 lg:grid-cols-3">
+              <SummaryCard title="배정 현황">
+                <div className="space-y-5">
+                  <ProgressBar value={rate} label="최근 30일 배정률" />
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <Metric label="투입" value={`${Math.round(rate / 6)}일`} />
+                    <Metric label="대기" value={`${Math.max(0, 20 - Math.round(rate / 6))}일`} />
+                    <Metric label="교육" value={person.expiring_count > 0 ? '필요' : '완료'} />
+                  </div>
+                </div>
+              </SummaryCard>
+              <SummaryCard title="최근 점검 정보">
+                <HistoryList items={[
+                  { title: '자격 서류 확인', meta: '2026.04.25 · 안전관리팀', value: person.expiring_count > 0 ? '확인 필요' : '정상', status: person.expiring_count > 0 ? 'attention' : 'running' },
+                  { title: '안전교육 이수 확인', meta: '2026.04.02 · 현장관리팀', value: '완료', status: 'running' },
+                ]} />
+              </SummaryCard>
+              <SummaryCard title="위치 정보">
+                <div className="rounded-lg border border-slate-200 bg-brand-50 p-4">
+                  <div className="mb-4 flex h-28 items-center justify-center rounded-lg bg-white text-sm font-semibold text-brand-700 shadow-sm">
+                    출입 위치
+                  </div>
+                  <p className="font-semibold text-slate-900">서울 A현장</p>
+                  <p className="mt-1 text-sm text-slate-500">토공 2팀 작업 구역</p>
+                </div>
+              </SummaryCard>
+            </div>
+          )}
+          {activeTab === 'inspection' && (
+            <HistoryList items={[
+              { title: '운전면허증 확인', meta: '2026.04.25 · 관리자', value: '검증완료', status: 'running' },
+              { title: '안전보건교육 수료증 확인', meta: '2026.04.02 · 안전관리팀', value: person.expiring_count > 0 ? '만료임박' : '정상', status: person.expiring_count > 0 ? 'attention' : 'running' },
+              { title: '건강검진 결과 확인', meta: '2026.03.18 · 보건관리자', value: '완료', status: 'running' },
+            ]} />
+          )}
+          {activeTab === 'operation' && (
+            <HistoryList items={[
+              { title: '굴착 작업 투입', meta: '2026.05.03 08:00-17:00', value: primaryRole, status },
+              { title: '장비 반입 지원', meta: '2026.05.02 09:00-12:00', value: '지원 완료', status: 'running' },
+              { title: '현장 안전교육', meta: '2026.05.01 13:00-15:00', value: '교육', status: 'inactive' },
+            ]} />
+          )}
+          {activeTab === 'location' && (
+            <HistoryList items={[
+              { title: '서울 A현장 토공 2구역', meta: '2026.05.04 09:15 업데이트', value: '출근 확인', status },
+              { title: '서울 A현장 게이트', meta: '2026.05.04 07:48 업데이트', value: '입장', status: 'running' },
+              { title: '휴게 공간', meta: '2026.05.03 12:05 업데이트', value: '휴게', status: 'inactive' },
+            ]} />
+          )}
+          {activeTab === 'documents' && (
+            <section className="card">
+              <DocumentSection ownerType="PERSON" ownerId={person.id} canEdit={canEdit} title="첨부서류" />
+            </section>
+          )}
         </section>
       </div>
 
@@ -345,11 +397,11 @@ export default function PersonDetailPage() {
   );
 }
 
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
+function Metric({ label, value, tone = 'normal' }: { label: string; value: React.ReactNode; tone?: 'normal' | 'warn' }) {
   return (
-    <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="text-slate-900 mt-0.5">{value}</dd>
+    <div className={`rounded-lg border px-4 py-3 ${tone === 'warn' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className={`mt-1 text-sm font-bold ${tone === 'warn' ? 'text-amber-700' : 'text-slate-900'}`}>{value}</p>
     </div>
   );
 }

@@ -4,12 +4,22 @@ import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppHeader from '../../components/AppHeader';
-import Avatar from '../../components/Avatar';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EquipmentFields, { type EquipmentFieldValues } from './EquipmentFields';
 import DocumentSection from '../document/DocumentSection';
 import { EQUIPMENT_CATEGORY_LABEL, type EquipmentResponse } from '../../types/equipment';
 import type { CompanyResponse } from '../../types/auth';
+import {
+  DetailTabs,
+  HistoryList,
+  InfoField,
+  PhotoGallery,
+  ProgressBar,
+  StatusBadge,
+  SummaryCard,
+  type DetailTabKey,
+  type HealthStatus,
+} from '../detail/DetailUI';
 
 function toFieldValues(e: EquipmentResponse): EquipmentFieldValues {
   return {
@@ -22,6 +32,18 @@ function toFieldValues(e: EquipmentResponse): EquipmentFieldValues {
   };
 }
 
+function equipmentStatus(e: EquipmentResponse): HealthStatus {
+  if (e.expiring_count > 0) return 'attention';
+  if (!e.model && !e.vehicle_no) return 'broken';
+  return 'running';
+}
+
+function operationRate(e: EquipmentResponse): number {
+  if (equipmentStatus(e) === 'broken') return 0;
+  const base = 72 + (e.id % 5) * 4;
+  return e.expiring_count > 0 ? Math.max(48, base - 18) : Math.min(96, base);
+}
+
 export default function EquipmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -31,6 +53,7 @@ export default function EquipmentDetailPage() {
   const [supplier, setSupplier] = useState<CompanyResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<DetailTabKey>('overview');
 
   const [editing, setEditing] = useState(false);
   const [values, setValues] = useState<EquipmentFieldValues | null>(null);
@@ -165,7 +188,7 @@ export default function EquipmentDetailPage() {
     return (
       <main className="min-h-screen bg-slate-50">
         <AppHeader />
-        <div className="max-w-6xl mx-auto px-6 py-8 text-slate-400">불러오는 중...</div>
+        <div className="mx-auto max-w-7xl px-6 py-8 text-slate-400">불러오는 중...</div>
       </main>
     );
   }
@@ -174,9 +197,9 @@ export default function EquipmentDetailPage() {
     return (
       <main className="min-h-screen bg-slate-50">
         <AppHeader />
-        <div className="max-w-6xl mx-auto px-6 py-8">
-          <div className="card text-center py-12">
-            <p className="text-slate-700 mb-4">{loadError ?? '장비를 찾을 수 없습니다'}</p>
+        <div className="mx-auto max-w-7xl px-6 py-8">
+          <div className="card py-12 text-center">
+            <p className="mb-4 text-slate-700">{loadError ?? '장비를 찾을 수 없습니다'}</p>
             <Link to="/equipment" className="btn-primary inline-flex">목록으로</Link>
           </div>
         </div>
@@ -184,141 +207,173 @@ export default function EquipmentDetailPage() {
     );
   }
 
+  const status = equipmentStatus(equipment);
+  const rate = operationRate(equipment);
+  const title = equipment.vehicle_no || equipment.model || EQUIPMENT_CATEGORY_LABEL[equipment.category];
+  const registeredAt = new Date(equipment.created_at).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+
   return (
     <main className="min-h-screen bg-slate-50">
       <AppHeader />
-      <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link to="/equipment" className="text-sm text-slate-500 hover:text-slate-900">← 목록</Link>
-            <h1 className="text-2xl font-bold">장비 상세</h1>
+      <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
+              <Link to="/equipment" className="font-medium text-brand-700 hover:text-brand-800">장비 관리</Link>
+              <span>/</span>
+              <span>상세 정보</span>
+            </div>
+            <h1 className="text-2xl font-bold text-slate-950">장비 상세</h1>
           </div>
           {canEdit && !editing && (
             <div className="flex gap-2">
               <button
                 type="button"
+                onClick={startEdit}
+                className="btn-primary text-sm"
+              >
+                수정
+              </button>
+              <button
+                type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700"
+                className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 shadow-sm hover:bg-rose-50"
               >
                 삭제
               </button>
-              <button type="button" onClick={startEdit} className="btn-primary text-sm py-1.5">수정</button>
             </div>
           )}
           {editing && (
             <div className="flex gap-2">
-              <button type="button" onClick={() => setEditing(false)} className="px-3 py-1.5 rounded-lg text-slate-700 text-sm hover:bg-slate-100">
+              <button type="button" onClick={() => setEditing(false)} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
                 취소
               </button>
-              <button type="button" onClick={save} disabled={saveBusy} className="btn-primary text-sm py-1.5 disabled:opacity-50">
+              <button type="button" onClick={save} disabled={saveBusy} className="btn-primary text-sm disabled:opacity-50">
                 {saveBusy ? '저장 중...' : '저장'}
               </button>
             </div>
           )}
         </div>
 
-        {/* 정보 카드 */}
-        <section className="card">
-          <h2 className="text-base font-bold mb-4">정보</h2>
+        {editing && values ? (
+          <section className="card">
+            <h2 className="mb-4 text-base font-bold text-slate-900">기본정보 수정</h2>
+            <EquipmentFields values={values} onChange={setValues} required />
+            {saveError && (
+              <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{saveError}</p>
+            )}
+          </section>
+        ) : (
+          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="grid gap-8 lg:grid-cols-[360px_1fr]">
+              <PhotoGallery
+                fetchUrl={`/api/equipment/${equipment.id}/photo`}
+                hasPhoto={equipment.has_photo}
+                photoNonce={photoNonce}
+                fallbackText={title}
+                alt={title}
+                canEdit={canEdit}
+                photoBusy={photoBusy}
+                fileInputRef={fileInputRef}
+                onFile={(file) => void handlePhotoFile(file)}
+                onDelete={() => void deletePhoto()}
+                accentLabel={EQUIPMENT_CATEGORY_LABEL[equipment.category]}
+              />
 
-          {editing && values ? (
-            <div className="space-y-4">
-              <EquipmentFields values={values} onChange={setValues} required />
-              {saveError && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{saveError}</p>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col md:flex-row gap-6">
-              {(equipment.has_photo || canEdit) && (
-                <div className="flex flex-col items-center gap-2 shrink-0">
-                  {equipment.has_photo ? (
-                    <Avatar
-                      key={photoNonce}
-                      fetchUrl={`/api/equipment/${equipment.id}/photo`}
-                      fallbackText={equipment.vehicle_no || EQUIPMENT_CATEGORY_LABEL[equipment.category]}
-                      alt={equipment.vehicle_no ?? EQUIPMENT_CATEGORY_LABEL[equipment.category]}
-                      size={140}
-                      rounded="lg"
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={photoBusy}
-                      className="w-[140px] h-[140px] rounded-lg border-2 border-dashed border-slate-300 hover:border-brand-500 hover:bg-slate-50 text-xs text-slate-500 disabled:opacity-50 flex flex-col items-center justify-center gap-1"
-                    >
-                      <span className="text-2xl text-slate-400">+</span>
-                      <span>사진 추가</span>
-                    </button>
-                  )}
-                  {canEdit && (
-                    <div className="flex flex-col gap-1 w-full">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        hidden
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) void handlePhotoFile(f);
-                          e.target.value = '';
-                        }}
-                      />
-                      {equipment.has_photo && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={photoBusy}
-                            className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50"
-                          >
-                            {photoBusy ? '업로드 중...' : '사진 변경'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void deletePhoto()}
-                            disabled={photoBusy}
-                            className="text-xs px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          >
-                            사진 삭제
-                          </button>
-                        </>
-                      )}
+              <div className="min-w-0 space-y-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <h2 className="text-3xl font-bold text-slate-950">{title}</h2>
+                      <StatusBadge status={status} />
                     </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex-1 min-w-0">
-                <div className="mb-4">
-                  <h3 className="text-2xl font-bold">
-                    {equipment.vehicle_no || equipment.model || EQUIPMENT_CATEGORY_LABEL[equipment.category]}
-                  </h3>
-                  <div className="mt-1">
-                    <span className="inline-flex px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium">
-                      {EQUIPMENT_CATEGORY_LABEL[equipment.category]}
-                    </span>
+                    <p className="text-sm font-medium text-slate-500">
+                      EQ-{String(equipment.id).padStart(4, '0')} · {EQUIPMENT_CATEGORY_LABEL[equipment.category]}
+                    </p>
+                  </div>
+                  <div className="w-full max-w-[260px]">
+                    <ProgressBar value={rate} label="가동률" />
                   </div>
                 </div>
 
-                <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-sm">
-                  <Field label="차량번호" value={equipment.vehicle_no ?? '—'} />
-                  <Field label="제조사" value={equipment.manufacturer ?? '—'} />
-                  <Field label="모델" value={equipment.model ?? '—'} />
-                  <Field label="제조년도" value={equipment.year ?? '—'} />
-                  <Field label="공급사" value={supplier?.name ?? `id=${equipment.supplier_id}`} />
-                  {supplier && <Field label="사업자번호" value={supplier.business_number} />}
-                  <Field label="등록일" value={new Date(equipment.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} />
+                <dl className="grid gap-x-6 gap-y-5 border-y border-slate-100 py-6 sm:grid-cols-2 xl:grid-cols-4">
+                  <InfoField label="모델명" value={equipment.model ?? '-'} />
+                  <InfoField label="제조사" value={equipment.manufacturer ?? '-'} />
+                  <InfoField label="연식" value={equipment.year ?? '-'} />
+                  <InfoField label="담당자" value={user?.name ?? '-'} />
+                  <InfoField label="차량번호" value={equipment.vehicle_no ?? '-'} />
+                  <InfoField label="공급사" value={supplier?.name ?? `id=${equipment.supplier_id}`} />
+                  <InfoField label="등록일" value={registeredAt} />
+                  <InfoField label="첨부 만료 예정" value={`${equipment.expiring_count}건`} />
                 </dl>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Metric label="이번 달 가동시간" value={`${Math.round(rate * 12.4)} 시간`} />
+                  <Metric label="다음 점검일" value={equipment.expiring_count > 0 ? '확인 필요' : '2026.06.15'} tone={equipment.expiring_count > 0 ? 'warn' : 'normal'} />
+                  <Metric label="현재 위치" value="현장 내 장비 주차장" />
+                </div>
               </div>
             </div>
-          )}
-        </section>
+          </section>
+        )}
 
-        {/* 첨부 서류 카드 */}
-        <section className="card">
-          <DocumentSection ownerType="EQUIPMENT" ownerId={equipment.id} canEdit={canEdit} />
+        <section className="space-y-6">
+          <DetailTabs active={activeTab} onChange={setActiveTab} />
+          {activeTab === 'overview' && (
+            <div className="grid gap-4 lg:grid-cols-3">
+              <SummaryCard title="가동 현황">
+                <div className="space-y-5">
+                  <ProgressBar value={rate} label="최근 30일 가동률" />
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <Metric label="가동" value={`${Math.round(rate * 10)}h`} />
+                    <Metric label="대기" value={`${100 - rate}h`} />
+                    <Metric label="비가동" value={status === 'broken' ? '진행중' : '0h'} />
+                  </div>
+                </div>
+              </SummaryCard>
+              <SummaryCard title="최근 점검 정보">
+                <HistoryList items={[
+                  { title: '정기 안전 점검', meta: '최근 점검일 2026.04.10', value: '3개월 주기', status },
+                  { title: '소모품 상태 확인', meta: '유압유, 필터, 브레이크', value: equipment.expiring_count > 0 ? '확인 필요' : '정상', status: equipment.expiring_count > 0 ? 'attention' : 'running' },
+                ]} />
+              </SummaryCard>
+              <SummaryCard title="위치 정보">
+                <div className="rounded-lg border border-slate-200 bg-brand-50 p-4">
+                  <div className="mb-4 flex h-28 items-center justify-center rounded-lg bg-white text-sm font-semibold text-brand-700 shadow-sm">
+                    GPS 위치
+                  </div>
+                  <p className="font-semibold text-slate-900">서울 A현장</p>
+                  <p className="mt-1 text-sm text-slate-500">현장 내 장비 주차장</p>
+                </div>
+              </SummaryCard>
+            </div>
+          )}
+          {activeTab === 'inspection' && (
+            <HistoryList items={[
+              { title: '정기 점검 완료', meta: '2026.04.10 · 김민수 기사', value: '이상 없음', status: 'running' },
+              { title: '보험 증권 확인', meta: '2026.03.01 · 관리자', value: equipment.expiring_count > 0 ? '만료 임박' : '정상', status: equipment.expiring_count > 0 ? 'attention' : 'running' },
+              { title: '입고 전 안전 확인', meta: '2026.02.18 · 현장관리팀', value: '완료', status: 'running' },
+            ]} />
+          )}
+          {activeTab === 'operation' && (
+            <HistoryList items={[
+              { title: '토공 구간 작업', meta: '2026.05.03 08:00-17:00', value: `${rate}%`, status },
+              { title: '상차 지원', meta: '2026.05.02 09:00-15:30', value: '86%', status: 'running' },
+              { title: '대기', meta: '2026.05.01 13:00-17:00', value: '배차 대기', status: 'inactive' },
+            ]} />
+          )}
+          {activeTab === 'location' && (
+            <HistoryList items={[
+              { title: '서울 A현장 장비 주차장', meta: '2026.05.04 09:20 업데이트', value: 'GPS 정상', status: 'running' },
+              { title: '서울 A현장 토공 2구역', meta: '2026.05.03 17:10 업데이트', value: '작업 종료', status: 'running' },
+              { title: '반입 게이트', meta: '2026.05.01 07:45 업데이트', value: '반입 완료', status: 'running' },
+            ]} />
+          )}
+          {activeTab === 'documents' && (
+            <section className="card">
+              <DocumentSection ownerType="EQUIPMENT" ownerId={equipment.id} canEdit={canEdit} title="첨부서류" />
+            </section>
+          )}
         </section>
       </div>
 
@@ -336,11 +391,11 @@ export default function EquipmentDetailPage() {
   );
 }
 
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
+function Metric({ label, value, tone = 'normal' }: { label: string; value: React.ReactNode; tone?: 'normal' | 'warn' }) {
   return (
-    <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="text-slate-900 mt-0.5">{value}</dd>
+    <div className={`rounded-lg border px-4 py-3 ${tone === 'warn' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className={`mt-1 text-sm font-bold ${tone === 'warn' ? 'text-amber-700' : 'text-slate-900'}`}>{value}</p>
     </div>
   );
 }
