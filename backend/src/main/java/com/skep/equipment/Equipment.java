@@ -42,6 +42,33 @@ public class Equipment {
     @Column(name = "photo_content_type", length = 100)
     private String photoContentType;
 
+    @Column(length = 64)
+    private String code;
+
+    @Column(name = "serial_number", length = 128)
+    private String serialNumber;
+
+    @Column(name = "usage_hours")
+    private Integer usageHours;
+
+    @Column(name = "weight_kg")
+    private Integer weightKg;
+
+    @Column(name = "bucket_capacity", precision = 8, scale = 2)
+    private java.math.BigDecimal bucketCapacity;
+
+    @Column(name = "insurance_expiry")
+    private java.time.LocalDate insuranceExpiry;
+
+    @Column(name = "operating_hours", nullable = false)
+    private int operatingHours;
+
+    @Column(name = "idle_hours", nullable = false)
+    private int idleHours;
+
+    @Column(name = "downtime_hours", nullable = false)
+    private int downtimeHours;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
