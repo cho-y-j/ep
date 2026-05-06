@@ -43,7 +43,7 @@ export default function AppHeader() {
               </NavLink>
             </>
           )}
-          <span className="text-sm text-slate-400">
+          <span className="text-sm text-slate-400 truncate max-w-[180px]" title={`${user.name} · ${ROLE_LABEL[user.role]}`}>
             {user.name} · {ROLE_LABEL[user.role]}
           </span>
           <button
