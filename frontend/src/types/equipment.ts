@@ -19,7 +19,20 @@ export type EquipmentResponse = {
   year?: number | null;
   has_photo: boolean;
   expiring_count: number;
+  // 신규 (V8)
+  code?: string | null;
+  serial_number?: string | null;
+  usage_hours?: number | null;
+  weight_kg?: number | null;
+  bucket_capacity?: number | string | null;
+  insurance_expiry?: string | null;
+  operating_hours: number;
+  idle_hours: number;
+  downtime_hours: number;
+  utilization_pct?: number | null;
+  // ---
   created_at: string;
+  updated_at?: string | null;
 };
 
 export const EQUIPMENT_CATEGORY_LABEL: Record<EquipmentCategory, string> = {
