@@ -251,16 +251,22 @@ export function HistoryList({
       {items.map((item, index) => (
         <div
           key={`${item.title}-${item.meta}`}
-          className={`grid grid-cols-1 gap-3 px-5 py-4 text-sm md:grid-cols-[1fr_180px_120px] ${
+          className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 text-sm ${
             index > 0 ? 'border-t border-slate-100' : ''
           }`}
         >
-          <div>
-            <p className="font-semibold text-slate-900">{item.title}</p>
-            <p className="mt-1 text-xs text-slate-500">{item.meta}</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold text-slate-900" title={item.title}>{item.title}</p>
+            <p className="mt-1 truncate text-xs text-slate-500" title={item.meta}>{item.meta}</p>
           </div>
-          <div className="text-slate-600">{item.value ?? '-'}</div>
-          <div>{item.status && <StatusBadge status={item.status} />}</div>
+          {item.value && (
+            <span className="shrink-0 text-slate-600">{item.value}</span>
+          )}
+          {item.status && (
+            <span className="shrink-0">
+              <StatusBadge status={item.status} />
+            </span>
+          )}
         </div>
       ))}
     </div>
