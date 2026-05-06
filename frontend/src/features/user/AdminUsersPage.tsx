@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import type { CompanyResponse, UserResponse } from '../../types/auth';
-import AppHeader from '../../components/AppHeader';
+import AppShell from '../../components/layout/AppShell';
 import UserDetailPanel from './UserDetailPanel';
 import UserTable from './UserTable';
 
@@ -41,8 +41,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <AppHeader />
+    <AppShell>
       <div className="max-w-5xl mx-auto px-6 py-8">
         <h1 className="text-2xl font-bold mb-6">사용자 관리</h1>
 
@@ -60,6 +59,6 @@ export default function AdminUsersPage() {
         onClose={() => setSelected(null)}
         onChange={handleChange}
       />
-    </main>
+    </AppShell>
   );
 }

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import AppHeader from '../../components/AppHeader';
+import AppShell from '../../components/layout/AppShell';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EquipmentFields, { type EquipmentFieldValues } from './EquipmentFields';
 import DocumentSection from '../document/DocumentSection';
@@ -186,24 +186,22 @@ export default function EquipmentDetailPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-slate-50">
-        <AppHeader />
+      <AppShell>
         <div className="mx-auto max-w-7xl px-6 py-8 text-slate-400">불러오는 중...</div>
-      </main>
+      </AppShell>
     );
   }
 
   if (loadError || !equipment) {
     return (
-      <main className="min-h-screen bg-slate-50">
-        <AppHeader />
+      <AppShell>
         <div className="mx-auto max-w-7xl px-6 py-8">
           <div className="card py-12 text-center">
             <p className="mb-4 text-slate-700">{loadError ?? '장비를 찾을 수 없습니다'}</p>
             <Link to="/equipment" className="btn-primary inline-flex">목록으로</Link>
           </div>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
@@ -213,8 +211,7 @@ export default function EquipmentDetailPage() {
   const registeredAt = new Date(equipment.created_at).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <AppHeader />
+    <AppShell>
       <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -387,7 +384,7 @@ export default function EquipmentDetailPage() {
         onConfirm={doDelete}
         onCancel={() => setConfirmDelete(false)}
       />
-    </main>
+    </AppShell>
   );
 }
 

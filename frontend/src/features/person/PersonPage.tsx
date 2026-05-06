@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import AppHeader from '../../components/AppHeader';
+import AppShell from '../../components/layout/AppShell';
 import Pagination from '../../components/Pagination';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PersonTable from './PersonTable';
@@ -139,8 +139,7 @@ export default function PersonPage() {
   const allSelected = persons.length > 0 && selectedIds.size === persons.length;
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <AppHeader />
+    <AppShell>
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-bold">{pageTitle}</h1>
@@ -258,6 +257,6 @@ export default function PersonPage() {
         onConfirm={bulkDelete}
         onCancel={() => setConfirmBulkDelete(false)}
       />
-    </main>
+    </AppShell>
   );
 }

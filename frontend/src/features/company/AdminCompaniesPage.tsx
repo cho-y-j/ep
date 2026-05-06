@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import type { CompanyResponse } from '../../types/auth';
-import AppHeader from '../../components/AppHeader';
+import AppShell from '../../components/layout/AppShell';
 import CompanyDetailPanel from './CompanyDetailPanel';
 import CompanyTable from './CompanyTable';
 import CompanyCreateForm from './CompanyCreateForm';
@@ -35,8 +35,7 @@ export default function AdminCompaniesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <AppHeader />
+    <AppShell>
       <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">회사 관리</h1>
@@ -65,6 +64,6 @@ export default function AdminCompaniesPage() {
         onClose={() => setSelected(null)}
         onChange={handleChange}
       />
-    </main>
+    </AppShell>
   );
 }

@@ -4,7 +4,7 @@ import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { COMPANY_TYPE_LABEL } from '../../types/auth';
 import type { DashboardSummary, ExpiringDocumentItem } from '../../types/dashboard';
-import AppHeader from '../../components/AppHeader';
+import AppShell from '../../components/layout/AppShell';
 import DocumentRenewDialog from '../document/DocumentRenewDialog';
 
 export default function HomePage() {
@@ -35,9 +35,8 @@ export default function HomePage() {
   const canRenew = isAdmin || isSupplier;
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <AppHeader />
-      <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+    <AppShell>
+      <div className="max-w-7xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold">환영합니다, {user.name}님</h1>
           <p className="text-sm text-slate-500 mt-1">
@@ -174,7 +173,7 @@ export default function HomePage() {
           onDone={() => { setRenewing(null); void loadSummary(); }}
         />
       )}
-    </main>
+    </AppShell>
   );
 }
 

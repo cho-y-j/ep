@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import AppHeader from '../../components/AppHeader';
+import AppShell from '../../components/layout/AppShell';
 import EquipmentTable from './EquipmentTable';
 import EquipmentCategoryFilter from './EquipmentCategoryFilter';
 import EquipmentCreateForm from './EquipmentCreateForm';
@@ -60,8 +60,7 @@ export default function EquipmentPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <AppHeader />
+    <AppShell>
       <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">장비 관리</h1>
@@ -96,6 +95,6 @@ export default function EquipmentPage() {
           />
         )}
       </div>
-    </main>
+    </AppShell>
   );
 }
