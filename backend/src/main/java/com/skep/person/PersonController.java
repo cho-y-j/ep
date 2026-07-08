@@ -1,7 +1,10 @@
 package com.skep.person;
 
+import com.skep.assignment.AssignmentService;
 import com.skep.common.ApiException;
 import com.skep.common.PageResponse;
+import com.skep.company.Company;
+import com.skep.company.CompanyRepository;
 import com.skep.person.dto.CreatePersonRequest;
 import com.skep.person.dto.PersonResponse;
 import com.skep.person.dto.UpdatePersonRequest;
@@ -19,15 +22,21 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/persons")
 public class PersonController {
 
     private final PersonService service;
+    private final AssignmentService assignmentService;
+    private final CompanyRepository companies;
 
-    public PersonController(PersonService service) {
+    public PersonController(PersonService service, AssignmentService assignmentService, CompanyRepository companies) {
         this.service = service;
+        this.assignmentService = assignmentService;
+        this.companies = companies;
     }
 
     @GetMapping
@@ -44,13 +53,52 @@ public class PersonController {
         var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
         var pg = service.search(actor, supplierId, role, q, pageable);
         var ids = pg.getContent().stream().map(Person::getId).toList();
-        var counts = service.expiringCountsByPersonIds(ids);
-        return PageResponse.of(pg, p -> PersonResponse.from(p, counts.getOrDefault(p.getId(), 0L)));
+        var expiring = service.expiringCountsByPersonIds(ids);
+        var totals = service.documentCountsByPersonIds(ids);
+        var siteNames = assignmentService.siteNamesByIds(
+                pg.getContent().stream().map(Person::getCurrentSiteId).toList()
+        );
+        var supplierIds = pg.getContent().stream()
+                .map(Person::getSupplierId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, String> supplierNames = Map.of();
+        Map<Long, com.skep.company.CompanyType> supplierTypes = Map.of();
+        if (!supplierIds.isEmpty()) {
+            var cos = companies.findAllById(supplierIds);
+            supplierNames = cos.stream().collect(Collectors.toMap(Company::getId, Company::getName));
+            supplierTypes = cos.stream().collect(Collectors.toMap(Company::getId, Company::getType));
+        }
+        final Map<Long, String> sNames = supplierNames;
+        final Map<Long, com.skep.company.CompanyType> sTypes = supplierTypes;
+        return PageResponse.of(pg, p -> PersonResponse.from(
+                p,
+                expiring.getOrDefault(p.getId(), 0L),
+                totals.getOrDefault(p.getId(), 0L),
+                p.getCurrentSiteId() != null ? siteNames.get(p.getCurrentSiteId()) : null,
+                p.getSupplierId() != null ? sNames.get(p.getSupplierId()) : null,
+                p.getSupplierId() != null ? sTypes.get(p.getSupplierId()) : null
+        ));
     }
 
     @GetMapping("/{id}")
     public PersonResponse get(@PathVariable Long id, @CurrentUser AuthenticatedUser actor) {
-        return PersonResponse.from(service.get(id, actor));
+        Person p = service.get(id, actor);
+        var ids = List.of(p.getId());
+        long expiring = service.expiringCountsByPersonIds(ids).getOrDefault(p.getId(), 0L);
+        long total = service.documentCountsByPersonIds(ids).getOrDefault(p.getId(), 0L);
+        String siteName = assignmentService.resolveSiteName(p.getCurrentSiteId());
+        String supplierName = null;
+        com.skep.company.CompanyType supplierType = null;
+        if (p.getSupplierId() != null) {
+            var co = companies.findById(p.getSupplierId()).orElse(null);
+            if (co != null) {
+                supplierName = co.getName();
+                supplierType = co.getType();
+            }
+        }
+        return PersonResponse.from(p, expiring, total, siteName, supplierName, supplierType);
     }
 
     @PostMapping

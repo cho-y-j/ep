@@ -130,6 +130,8 @@ GET /api/persons/{id}/detail
 
 ### 2. 상태 관리
 
+> **주의 (설계안 · 미구현):** 아래 `PATCH /{id}/status` 엔드포인트와 상태 enum 은 초기 설계 제안이며 **실제 구현과 다르다.** 현재 백엔드에는 상태 직접 변경 엔드포인트가 없고(상태는 자원 배치/해제로 파생됨), 실제 enum 은 장비 `AVAILABLE | ASSIGNED | BROKEN`, 인력 `ON_DUTY | OFF_DUTY | INACTIVE` 다 (ERD V11). 이 절은 향후 '상태 직접 관리' 도입 시의 제안으로만 참고.
+
 ```text
 PATCH /api/equipment/{id}/status
 PATCH /api/persons/{id}/status

@@ -1,0 +1,1602 @@
+[
+  {
+    "manufacturer": "CAT",
+    "model": "303-305",
+    "category": "굴삭기",
+    "fileName": "CAT_303-305_미니_제원표.pdf",
+    "path": "CAT/CAT_303-305_미니_제원표.pdf",
+    "subCategory": "미니굴삭기"
+  },
+  {
+    "manufacturer": "CAT",
+    "model": "308CR",
+    "category": "굴삭기",
+    "fileName": "CAT_308CR_미니_제원표.pdf",
+    "path": "CAT/CAT_308CR_미니_제원표.pdf",
+    "subCategory": "미니굴삭기"
+  },
+  {
+    "manufacturer": "CAT",
+    "model": "313",
+    "category": "굴삭기",
+    "fileName": "CAT_313_유압굴삭기_브로셔.pdf",
+    "path": "CAT/CAT_313_유압굴삭기_브로셔.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "CAT",
+    "model": "320",
+    "category": "굴삭기",
+    "fileName": "CAT_320_유압굴삭기_제원표.pdf",
+    "path": "CAT/CAT_320_유압굴삭기_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "CAT",
+    "model": "330",
+    "category": "굴삭기",
+    "fileName": "CAT_330_유압굴삭기_제원표.pdf",
+    "path": "CAT/CAT_330_유압굴삭기_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "Case",
+    "model": "FullSize Excavator",
+    "category": "굴삭기",
+    "fileName": "Case_FullSize_Excavator_제원표.pdf",
+    "path": "Case/Case_FullSize_Excavator_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "Clark지게차",
+    "model": "C20-25B",
+    "category": "지게차",
+    "fileName": "Clark_C20-25B_제원표.pdf",
+    "path": "Clark지게차/Clark_C20-25B_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Clark지게차",
+    "model": "C30-50B",
+    "category": "지게차",
+    "fileName": "Clark_C30-50B_제원표.pdf",
+    "path": "Clark지게차/Clark_C30-50B_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Clark지게차",
+    "model": "OM-1038",
+    "category": "지게차",
+    "fileName": "Clark_OM-1038_제원표.pdf",
+    "path": "Clark지게차/Clark_OM-1038_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Clark지게차",
+    "model": "OM-1045",
+    "category": "지게차",
+    "fileName": "Clark_OM-1045_제원표.pdf",
+    "path": "Clark지게차/Clark_OM-1045_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Clark지게차",
+    "model": "S20-35DLG",
+    "category": "지게차",
+    "fileName": "Clark_S20-35DLG_제원표.pdf",
+    "path": "Clark지게차/Clark_S20-35DLG_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Clark지게차",
+    "model": "S20-35",
+    "category": "지게차",
+    "fileName": "Clark_S20-35_제원표.pdf",
+    "path": "Clark지게차/Clark_S20-35_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Clark지게차",
+    "model": "S25",
+    "category": "지게차",
+    "fileName": "Clark_S25_Brochure_제원표.pdf",
+    "path": "Clark지게차/Clark_S25_Brochure_제원표.pdf",
+    "subCategory": "전동지게차"
+  },
+  {
+    "manufacturer": "DY",
+    "model": "2020 스틱크레인",
+    "category": "크레인",
+    "fileName": "DY_2020_스틱크레인.pdf",
+    "path": "DY/DY_2020_스틱크레인.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Genie",
+    "model": "BoomLift Family",
+    "category": "고소작업차",
+    "fileName": "Genie_BoomLift_Family_제원표.pdf",
+    "path": "Genie/Genie_BoomLift_Family_제원표.pdf",
+    "subCategory": "직진식"
+  },
+  {
+    "manufacturer": "Genie",
+    "model": "Z-45 25J DC",
+    "category": "고소작업차",
+    "fileName": "Genie_Z-45_25J_DC_제원표.pdf",
+    "path": "Genie/Genie_Z-45_25J_DC_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "Haulotte",
+    "model": "45XA",
+    "category": "고소작업차",
+    "fileName": "Haulotte_45XA_제원표.pdf",
+    "path": "Haulotte/Haulotte_45XA_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "Haulotte",
+    "model": "55XA",
+    "category": "고소작업차",
+    "fileName": "Haulotte_55XA_제원표.pdf",
+    "path": "Haulotte/Haulotte_55XA_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "Haulotte",
+    "model": "HA12CJ",
+    "category": "고소작업차",
+    "fileName": "Haulotte_HA12CJ_제원표.pdf",
+    "path": "Haulotte/Haulotte_HA12CJ_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "Haulotte",
+    "model": "HA15IP2",
+    "category": "고소작업차",
+    "fileName": "Haulotte_HA15IP2_제원표.pdf",
+    "path": "Haulotte/Haulotte_HA15IP2_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "Haulotte",
+    "model": "HA15IP",
+    "category": "고소작업차",
+    "fileName": "Haulotte_HA15IP_제원표.pdf",
+    "path": "Haulotte/Haulotte_HA15IP_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "Haulotte",
+    "model": "HTA",
+    "category": "고소작업차",
+    "fileName": "Haulotte_HTA_OperatorsManual_제원표.pdf",
+    "path": "Haulotte/Haulotte_HTA_OperatorsManual_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "JCB",
+    "model": "JS220 Excavator",
+    "category": "굴삭기",
+    "fileName": "JCB_JS220_Excavator_제원표.pdf",
+    "path": "JCB/JCB_JS220_Excavator_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "JLG",
+    "model": "1100SB",
+    "category": "고소작업차",
+    "fileName": "JLG_1100SB_OpManual_제원표.pdf",
+    "path": "JLG/JLG_1100SB_OpManual_제원표.pdf",
+    "subCategory": "직진식"
+  },
+  {
+    "manufacturer": "JLG",
+    "model": "1250AJP",
+    "category": "고소작업차",
+    "fileName": "JLG_1250AJP_OpManual_제원표.pdf",
+    "path": "JLG/JLG_1250AJP_OpManual_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "JLG",
+    "model": "400S",
+    "category": "고소작업차",
+    "fileName": "JLG_400S_Operator_제원표.pdf",
+    "path": "JLG/JLG_400S_Operator_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "JLG",
+    "model": "600S Spec",
+    "category": "고소작업차",
+    "fileName": "JLG_600S_Spec_제원표.pdf",
+    "path": "JLG/JLG_600S_Spec_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "JLG",
+    "model": "800AJ",
+    "category": "고소작업차",
+    "fileName": "JLG_800AJ_OpManual_제원표.pdf",
+    "path": "JLG/JLG_800AJ_OpManual_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "JLG",
+    "model": "E450AJ",
+    "category": "고소작업차",
+    "fileName": "JLG_E450AJ_OpManual_제원표.pdf",
+    "path": "JLG/JLG_E450AJ_OpManual_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "JLG",
+    "model": "E450AJ Spec",
+    "category": "고소작업차",
+    "fileName": "JLG_E450AJ_Spec_제원표.pdf",
+    "path": "JLG/JLG_E450AJ_Spec_제원표.pdf",
+    "subCategory": "굴절식"
+  },
+  {
+    "manufacturer": "JohnDeere",
+    "model": "Excavator120",
+    "category": "굴삭기",
+    "fileName": "JohnDeere_Excavator120_제원표.pdf",
+    "path": "JohnDeere/JohnDeere_Excavator120_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "JohnDeere",
+    "model": "Excavator600C-800C",
+    "category": "굴삭기",
+    "fileName": "JohnDeere_Excavator600C-800C_제원표.pdf",
+    "path": "JohnDeere/JohnDeere_Excavator600C-800C_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "Liebherr",
+    "model": "A920 WheeledExcavator",
+    "category": "굴삭기",
+    "fileName": "Liebherr_A920_WheeledExcavator_제원표.pdf",
+    "path": "Liebherr/Liebherr_A920_WheeledExcavator_제원표.pdf",
+    "subCategory": "휠굴삭기"
+  },
+  {
+    "manufacturer": "Liebherr",
+    "model": "LR1280 CrawlerCrane",
+    "category": "크레인",
+    "fileName": "Liebherr_LR1280_CrawlerCrane_제원표.pdf",
+    "path": "Liebherr/Liebherr_LR1280_CrawlerCrane_제원표.pdf",
+    "subCategory": "크롤러크레인"
+  },
+  {
+    "manufacturer": "Manitowoc",
+    "model": "10000",
+    "category": "크레인",
+    "fileName": "Manitowoc_10000_제원표.pdf",
+    "path": "Manitowoc/Manitowoc_10000_제원표.pdf",
+    "subCategory": "크롤러크레인"
+  },
+  {
+    "manufacturer": "Manitowoc",
+    "model": "12000",
+    "category": "크레인",
+    "fileName": "Manitowoc_12000_제원표.pdf",
+    "path": "Manitowoc/Manitowoc_12000_제원표.pdf",
+    "subCategory": "크롤러크레인"
+  },
+  {
+    "manufacturer": "Manitowoc",
+    "model": "14000",
+    "category": "크레인",
+    "fileName": "Manitowoc_14000_제원표.pdf",
+    "path": "Manitowoc/Manitowoc_14000_제원표.pdf",
+    "subCategory": "크롤러크레인"
+  },
+  {
+    "manufacturer": "Manitowoc",
+    "model": "16000WA",
+    "category": "크레인",
+    "fileName": "Manitowoc_16000WA_제원표.pdf",
+    "path": "Manitowoc/Manitowoc_16000WA_제원표.pdf",
+    "subCategory": "크롤러크레인"
+  },
+  {
+    "manufacturer": "Manitowoc",
+    "model": "2250 300T",
+    "category": "크레인",
+    "fileName": "Manitowoc_2250_300T_제원표.pdf",
+    "path": "Manitowoc/Manitowoc_2250_300T_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Manitowoc",
+    "model": "8000",
+    "category": "크레인",
+    "fileName": "Manitowoc_8000_제원표.pdf",
+    "path": "Manitowoc/Manitowoc_8000_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Manitowoc",
+    "model": "CrawlerCrane",
+    "category": "크레인",
+    "fileName": "Manitowoc_CrawlerCrane_제원표.pdf",
+    "path": "Manitowoc/Manitowoc_CrawlerCrane_제원표.pdf",
+    "subCategory": "크롤러크레인"
+  },
+  {
+    "manufacturer": "Manitowoc",
+    "model": "GHC Applications",
+    "category": "크레인",
+    "fileName": "Manitowoc_GHC_Applications_제원표.pdf",
+    "path": "Manitowoc/Manitowoc_GHC_Applications_제원표.pdf",
+    "subCategory": "카고크레인"
+  },
+  {
+    "manufacturer": "Manitowoc",
+    "model": "RT522B",
+    "category": "크레인",
+    "fileName": "Manitowoc_RT522B_제원표.pdf",
+    "path": "Manitowoc/Manitowoc_RT522B_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "MitsubishiLogisnext",
+    "model": "MitsuLogisnext mft-v-fg40n-fg55n-fd40n-fd55n-english",
+    "category": "지게차",
+    "fileName": "MitsuLogisnext_mft-v-fg40n-fg55n-fd40n-fd55n-english.pdf",
+    "path": "MitsubishiLogisnext/MitsuLogisnext_mft-v-fg40n-fg55n-fd40n-fd55n-english.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Mitsubishi지게차",
+    "model": "FB Electric",
+    "category": "지게차",
+    "fileName": "Mitsubishi_FB_Electric_제원표.pdf",
+    "path": "Mitsubishi지게차/Mitsubishi_FB_Electric_제원표.pdf",
+    "subCategory": "전동지게차"
+  },
+  {
+    "manufacturer": "Mitsubishi지게차",
+    "model": "FGC",
+    "category": "지게차",
+    "fileName": "Mitsubishi_FGC_BroSure_제원표.pdf",
+    "path": "Mitsubishi지게차/Mitsubishi_FGC_BroSure_제원표.pdf",
+    "subCategory": "전동지게차"
+  },
+  {
+    "manufacturer": "Mitsubishi지게차",
+    "model": "PriceList",
+    "category": "지게차",
+    "fileName": "Mitsubishi_PriceList_제원표.pdf",
+    "path": "Mitsubishi지게차/Mitsubishi_PriceList_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Sany",
+    "model": "FixedBoomSwing Family",
+    "category": "고소작업차",
+    "fileName": "Sany_FixedBoomSwing_Family_제원표.pdf",
+    "path": "Sany/Sany_FixedBoomSwing_Family_제원표.pdf",
+    "subCategory": "직진식"
+  },
+  {
+    "manufacturer": "Sany",
+    "model": "HEXPS22SY225C002-sany-sy225c-excavator-4pg-specsheet-d6",
+    "category": "굴삭기",
+    "fileName": "Sany_HEXPS22SY225C002-sany-sy225c-excavator-4pg-specsheet-d6.pdf",
+    "path": "Sany/Sany_HEXPS22SY225C002-sany-sy225c-excavator-4pg-specsheet-d6.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "Sany",
+    "model": "Sany crane-brochure SAC6000T7-8 163411",
+    "category": "크레인",
+    "fileName": "Sany_Sany_crane-brochure_SAC6000T7-8_163411.pdf",
+    "path": "Sany/Sany_Sany_crane-brochure_SAC6000T7-8_163411.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Sany",
+    "model": "Sany crane-brochure SCE1500TB-EV 115543",
+    "category": "크레인",
+    "fileName": "Sany_Sany_crane-brochure_SCE1500TB-EV_115543.pdf",
+    "path": "Sany/Sany_Sany_crane-brochure_SCE1500TB-EV_115543.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Sany",
+    "model": "Sany crane-brochure SPC100-101256",
+    "category": "크레인",
+    "fileName": "Sany_Sany_crane-brochure_SPC100-101256.pdf",
+    "path": "Sany/Sany_Sany_crane-brochure_SPC100-101256.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Sany",
+    "model": "Sany crane-brochure SRC650T 160308",
+    "category": "크레인",
+    "fileName": "Sany_Sany_crane-brochure_SRC650T_160308.pdf",
+    "path": "Sany/Sany_Sany_crane-brochure_SRC650T_160308.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Sany",
+    "model": "Sany crane-brochure SRE450",
+    "category": "크레인",
+    "fileName": "Sany_Sany_crane-brochure_SRE450.pdf",
+    "path": "Sany/Sany_Sany_crane-brochure_SRE450.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Sany",
+    "model": "Sany crane-brochure STC250T4-150858",
+    "category": "크레인",
+    "fileName": "Sany_Sany_crane-brochure_STC250T4-150858.pdf",
+    "path": "Sany/Sany_Sany_crane-brochure_STC250T4-150858.pdf",
+    "subCategory": "타워크레인"
+  },
+  {
+    "manufacturer": "Sany",
+    "model": "excavator-medium-2020",
+    "category": "굴삭기",
+    "fileName": "Sany_excavator-medium-2020_제원표.pdf",
+    "path": "Sany/Sany_excavator-medium-2020_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "Sany",
+    "model": "mini-excavator",
+    "category": "굴삭기",
+    "fileName": "Sany_mini-excavator_제원표.pdf",
+    "path": "Sany/Sany_mini-excavator_제원표.pdf",
+    "subCategory": "미니굴삭기"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "GR-1000XL",
+    "category": "크레인",
+    "fileName": "Tadano_GR-1000XL_제원표.pdf",
+    "path": "Tadano/Tadano_GR-1000XL_제원표.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "GR-1600XL",
+    "category": "크레인",
+    "fileName": "Tadano_GR-1600XL_제원표.pdf",
+    "path": "Tadano/Tadano_GR-1600XL_제원표.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "GT-550E",
+    "category": "크레인",
+    "fileName": "Tadano_GT-550E_제원표.pdf",
+    "path": "Tadano/Tadano_GT-550E_제원표.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "GT-600E",
+    "category": "크레인",
+    "fileName": "Tadano_GT-600E_제원표.pdf",
+    "path": "Tadano/Tadano_GT-600E_제원표.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "TM-ZE293",
+    "category": "크레인",
+    "fileName": "Tadano_TM-ZE293_제원표.pdf",
+    "path": "Tadano/Tadano_TM-ZE293_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "TM-ZR865RS",
+    "category": "크레인",
+    "fileName": "Tadano_TM-ZR865RS_제원표.pdf",
+    "path": "Tadano/Tadano_TM-ZR865RS_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "TM-ZT1004H",
+    "category": "크레인",
+    "fileName": "Tadano_TM-ZT1004H_제원표.pdf",
+    "path": "Tadano/Tadano_TM-ZT1004H_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "doc tadano AC8500-1 datasheet imperial en",
+    "category": "크레인",
+    "fileName": "Tadano_doc_tadano_AC8500-1_datasheet_imperial_en.pdf",
+    "path": "Tadano/Tadano_doc_tadano_AC8500-1_datasheet_imperial_en.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "doc tadano GT-1200XL-2 datasheet imperial en",
+    "category": "크레인",
+    "fileName": "Tadano_doc_tadano_GT-1200XL-2_datasheet_imperial_en.pdf",
+    "path": "Tadano/Tadano_doc_tadano_GT-1200XL-2_datasheet_imperial_en.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "doc tadano GT-550E-1-00202 C-101 specsheet",
+    "category": "크레인",
+    "fileName": "Tadano_doc_tadano_GT-550E-1-00202_C-101_specsheet.pdf",
+    "path": "Tadano/Tadano_doc_tadano_GT-550E-1-00202_C-101_specsheet.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "doc tadano GTC700 datasheet imperial en",
+    "category": "크레인",
+    "fileName": "Tadano_doc_tadano_GTC700_datasheet_imperial_en.pdf",
+    "path": "Tadano/Tadano_doc_tadano_GTC700_datasheet_imperial_en.pdf",
+    "subCategory": "타워크레인"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "doc tadano zx1000 series",
+    "category": "크레인",
+    "fileName": "Tadano_doc_tadano_zx1000_series_brochure_metric_oceania.pdf",
+    "path": "Tadano/Tadano_doc_tadano_zx1000_series_brochure_metric_oceania.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Tadano",
+    "model": "doc tadano zx1200 series",
+    "category": "크레인",
+    "fileName": "Tadano_doc_tadano_zx1200_series_brochure_metric_oceania.pdf",
+    "path": "Tadano/Tadano_doc_tadano_zx1200_series_brochure_metric_oceania.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Toyota지게차",
+    "model": "8FDG BR",
+    "category": "지게차",
+    "fileName": "Toyota_8FDG_BR_제원표.pdf",
+    "path": "Toyota지게차/Toyota_8FDG_BR_제원표.pdf",
+    "subCategory": "전동지게차"
+  },
+  {
+    "manufacturer": "Toyota지게차",
+    "model": "8FG-8FD 1.0-3.5Ton",
+    "category": "지게차",
+    "fileName": "Toyota_8FG-8FD_1.0-3.5Ton_제원표.pdf",
+    "path": "Toyota지게차/Toyota_8FG-8FD_1.0-3.5Ton_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Toyota지게차",
+    "model": "8FG-8FD 10-35",
+    "category": "지게차",
+    "fileName": "Toyota_8FG-8FD_10-35_제원표.pdf",
+    "path": "Toyota지게차/Toyota_8FG-8FD_10-35_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Toyota지게차",
+    "model": "8FG-8FD 10-80",
+    "category": "지게차",
+    "fileName": "Toyota_8FG-8FD_10-80_제원표.pdf",
+    "path": "Toyota지게차/Toyota_8FG-8FD_10-80_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Toyota지게차",
+    "model": "8FG-8FD 3.5-8.0Ton",
+    "category": "지게차",
+    "fileName": "Toyota_8FG-8FD_3.5-8.0Ton_제원표.pdf",
+    "path": "Toyota지게차/Toyota_8FG-8FD_3.5-8.0Ton_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Toyota지게차",
+    "model": "8FGU25",
+    "category": "지게차",
+    "fileName": "Toyota_8FGU25_제원표.pdf",
+    "path": "Toyota지게차/Toyota_8FGU25_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "Toyota지게차",
+    "model": "Core IC Pneumatic",
+    "category": "지게차",
+    "fileName": "Toyota_Core_IC_Pneumatic_제원표.pdf",
+    "path": "Toyota지게차/Toyota_Core_IC_Pneumatic_제원표.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "XCMG",
+    "model": "QY50K TruckCrane",
+    "category": "크레인",
+    "fileName": "XCMG_QY50K_TruckCrane_제원표.pdf",
+    "path": "XCMG/XCMG_QY50K_TruckCrane_제원표.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "XCMG",
+    "model": "QY70K-I TruckCrane",
+    "category": "크레인",
+    "fileName": "XCMG_QY70K-I_TruckCrane_제원표.pdf",
+    "path": "XCMG/XCMG_QY70K-I_TruckCrane_제원표.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "XCMG",
+    "model": "TruckCrane",
+    "category": "크레인",
+    "fileName": "XCMG_TruckCrane_제원표.pdf",
+    "path": "XCMG/XCMG_TruckCrane_제원표.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "XCMG",
+    "model": "XE55U MiniExcavator",
+    "category": "굴삭기",
+    "fileName": "XCMG_XE55U_MiniExcavator_제원표.pdf",
+    "path": "XCMG/XCMG_XE55U_MiniExcavator_제원표.pdf",
+    "subCategory": "미니굴삭기"
+  },
+  {
+    "manufacturer": "Zoomlion",
+    "model": "CrawlerCrane2",
+    "category": "크레인",
+    "fileName": "Zoomlion_CrawlerCrane2_제원표.pdf",
+    "path": "Zoomlion/Zoomlion_CrawlerCrane2_제원표.pdf",
+    "subCategory": "크롤러크레인"
+  },
+  {
+    "manufacturer": "Zoomlion",
+    "model": "CrawlerCrane",
+    "category": "크레인",
+    "fileName": "Zoomlion_CrawlerCrane_제원표.pdf",
+    "path": "Zoomlion/Zoomlion_CrawlerCrane_제원표.pdf",
+    "subCategory": "크롤러크레인"
+  },
+  {
+    "manufacturer": "Zoomlion",
+    "model": "QUY260 CrawlerCrane",
+    "category": "크레인",
+    "fileName": "Zoomlion_QUY260_CrawlerCrane_제원표.pdf",
+    "path": "Zoomlion/Zoomlion_QUY260_CrawlerCrane_제원표.pdf",
+    "subCategory": "크롤러크레인"
+  },
+  {
+    "manufacturer": "Zoomlion",
+    "model": "TC5013B TowerCrane",
+    "category": "크레인",
+    "fileName": "Zoomlion_TC5013B_TowerCrane_제원표.pdf",
+    "path": "Zoomlion/Zoomlion_TC5013B_TowerCrane_제원표.pdf",
+    "subCategory": "타워크레인"
+  },
+  {
+    "manufacturer": "Zoomlion",
+    "model": "TC7030B TowerCrane",
+    "category": "크레인",
+    "fileName": "Zoomlion_TC7030B_TowerCrane_제원표.pdf",
+    "path": "Zoomlion/Zoomlion_TC7030B_TowerCrane_제원표.pdf",
+    "subCategory": "타워크레인"
+  },
+  {
+    "manufacturer": "Zoomlion",
+    "model": "TowerCrane2",
+    "category": "크레인",
+    "fileName": "Zoomlion_TowerCrane2_제원표.pdf",
+    "path": "Zoomlion/Zoomlion_TowerCrane2_제원표.pdf",
+    "subCategory": "타워크레인"
+  },
+  {
+    "manufacturer": "Zoomlion",
+    "model": "TowerCrane EU Manual",
+    "category": "크레인",
+    "fileName": "Zoomlion_TowerCrane_EU_Manual.pdf",
+    "path": "Zoomlion/Zoomlion_TowerCrane_EU_Manual.pdf",
+    "subCategory": "타워크레인"
+  },
+  {
+    "manufacturer": "Zoomlion",
+    "model": "TowerCrane ProductManual",
+    "category": "크레인",
+    "fileName": "Zoomlion_TowerCrane_ProductManual_제원표.pdf",
+    "path": "Zoomlion/Zoomlion_TowerCrane_ProductManual_제원표.pdf",
+    "subCategory": "타워크레인"
+  },
+  {
+    "manufacturer": "Zoomlion",
+    "model": "TruckCrane",
+    "category": "크레인",
+    "fileName": "Zoomlion_TruckCrane_제원표.pdf",
+    "path": "Zoomlion/Zoomlion_TruckCrane_제원표.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "광림",
+    "model": "KS1256G",
+    "category": "크레인",
+    "fileName": "광림_KS1256G.pdf",
+    "path": "광림/광림_KS1256G.pdf",
+    "subCategory": "카고크레인"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "DX225 22Ton",
+    "category": "굴삭기",
+    "fileName": "Doosan_DX225_22Ton_제원표.pdf",
+    "path": "두산밥캣/Doosan_DX225_22Ton_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "DX225",
+    "category": "굴삭기",
+    "fileName": "Doosan_DX225_제원표.pdf",
+    "path": "두산밥캣/Doosan_DX225_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "DX300LC Hydraulic",
+    "category": "굴삭기",
+    "fileName": "Doosan_DX300LC_Hydraulic_제원표.pdf",
+    "path": "두산밥캣/Doosan_DX300LC_Hydraulic_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "DX300LC",
+    "category": "굴삭기",
+    "fileName": "Doosan_DX300LC_제원표.pdf",
+    "path": "두산밥캣/Doosan_DX300LC_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "DX480LC",
+    "category": "굴삭기",
+    "fileName": "Doosan_DX480LC_제원표.pdf",
+    "path": "두산밥캣/Doosan_DX480LC_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "두산 DX140LC-5 시리즈 인양능력표",
+    "category": "굴삭기",
+    "fileName": "두산_DX140LC-5_시리즈_인양능력표.pdf",
+    "path": "두산밥캣/두산_DX140LC-5_시리즈_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "두산 DX140LCR-5 시리즈 인양능력표",
+    "category": "굴삭기",
+    "fileName": "두산_DX140LCR-5_시리즈_인양능력표.pdf",
+    "path": "두산밥캣/두산_DX140LCR-5_시리즈_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "두산 DX140W-5 시리즈 인양능력표",
+    "category": "굴삭기",
+    "fileName": "두산_DX140W-5_시리즈_인양능력표.pdf",
+    "path": "두산밥캣/두산_DX140W-5_시리즈_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "두산 DX160W-5 시리즈 인양능력표",
+    "category": "굴삭기",
+    "fileName": "두산_DX160W-5_시리즈_인양능력표.pdf",
+    "path": "두산밥캣/두산_DX160W-5_시리즈_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "두산 DX210W-5 시리즈 인양능력표",
+    "category": "굴삭기",
+    "fileName": "두산_DX210W-5_시리즈_인양능력표.pdf",
+    "path": "두산밥캣/두산_DX210W-5_시리즈_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "두산 DX220LC-5 시리즈 인양능력표",
+    "category": "굴삭기",
+    "fileName": "두산_DX220LC-5_시리즈_인양능력표.pdf",
+    "path": "두산밥캣/두산_DX220LC-5_시리즈_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "두산 DX235LCR-5 시리즈 인양능력표",
+    "category": "굴삭기",
+    "fileName": "두산_DX235LCR-5_시리즈_인양능력표.pdf",
+    "path": "두산밥캣/두산_DX235LCR-5_시리즈_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "두산 DX300LC-3 5 5K 5L 인양능력표",
+    "category": "굴삭기",
+    "fileName": "두산_DX300LC-3_5_5K_5L_인양능력표.pdf",
+    "path": "두산밥캣/두산_DX300LC-3_5_5K_5L_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "두산 DX55W-5K 인양능력표",
+    "category": "굴삭기",
+    "fileName": "두산_DX55W-5K_인양능력표.pdf",
+    "path": "두산밥캣/두산_DX55W-5K_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "두산 DX55W-5L 인양능력표",
+    "category": "굴삭기",
+    "fileName": "두산_DX55W-5L_인양능력표.pdf",
+    "path": "두산밥캣/두산_DX55W-5L_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX1000LC-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX1000LC-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX1000LC-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX100W-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX100W-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX100W-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX150LC-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX150LC-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX150LC-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX150LCR-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX150LCR-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX150LCR-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX150W-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX150W-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX150W-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX170WAT-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX170WAT-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX170WAT-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX170WR-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX170WR-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX170WR-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX17Z굴삭기",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX17Z_미니굴삭기_브로셔.pdf",
+    "path": "두산밥캣/디벨론_DX17Z_미니굴삭기_브로셔.pdf",
+    "subCategory": "미니굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX220W-7 MaterialHandler 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX220W-7_MaterialHandler_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX220W-7_MaterialHandler_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX220W-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX220W-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX220W-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX240LC-7 DX240LC-7X 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX240LC-7_DX240LC-7X_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX240LC-7_DX240LC-7X_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX240LCR-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX240LCR-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX240LCR-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX300LC-7M",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX300LC-7M_제원표.pdf",
+    "path": "두산밥캣/디벨론_DX300LC-7M_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX300",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX300_제원표.pdf",
+    "path": "두산밥캣/디벨론_DX300_제원표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX320LC-7 SLR 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX320LC-7_SLR_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX320LC-7_SLR_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX320LC-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX320LC-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX320LC-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX350LC-7 PileDriver 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX350LC-7_PileDriver_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX350LC-7_PileDriver_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX400LC-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX400LC-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX400LC-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX530LC-5K L SLR 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX530LC-5K_L_SLR_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX530LC-5K_L_SLR_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX550LC-7 PileDriver 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX550LC-7_PileDriver_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX550LC-7_PileDriver_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX550LC-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX550LC-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX550LC-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX800LC-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX800LC-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX800LC-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 DX85R-7 인양능력표",
+    "category": "굴삭기",
+    "fileName": "디벨론_DX85R-7_인양능력표.pdf",
+    "path": "두산밥캣/디벨론_DX85R-7_인양능력표.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 건설기계 종합카탈로그",
+    "category": "굴삭기",
+    "fileName": "디벨론_건설기계_종합카탈로그.pdf",
+    "path": "두산밥캣/디벨론_건설기계_종합카탈로그.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 모바일 부품 매뉴얼 EN",
+    "category": "굴삭기",
+    "fileName": "디벨론_모바일_부품_매뉴얼_EN.pdf",
+    "path": "두산밥캣/디벨론_모바일_부품_매뉴얼_EN.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론굴삭기",
+    "category": "굴삭기",
+    "fileName": "디벨론_미니굴삭기_브로셔.pdf",
+    "path": "두산밥캣/디벨론_미니굴삭기_브로셔.pdf",
+    "subCategory": "미니굴삭기"
+  },
+  {
+    "manufacturer": "두산밥캣",
+    "model": "디벨론 크롤러굴삭기 174hp",
+    "category": "굴삭기",
+    "fileName": "디벨론_크롤러굴삭기_174hp.pdf",
+    "path": "두산밥캣/디벨론_크롤러굴삭기_174hp.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "두산산업차량",
+    "model": "B15-18S-7",
+    "category": "지게차",
+    "fileName": "Doosan_B15-18S-7_전동_제원표.pdf",
+    "path": "두산산업차량/Doosan_B15-18S-7_전동_제원표.pdf",
+    "subCategory": "전동지게차"
+  },
+  {
+    "manufacturer": "두산산업차량",
+    "model": "D35-50C-7",
+    "category": "지게차",
+    "fileName": "Doosan_D35-50C-7_디젤_제원표.pdf",
+    "path": "두산산업차량/Doosan_D35-50C-7_디젤_제원표.pdf",
+    "subCategory": "디젤지게차"
+  },
+  {
+    "manufacturer": "두산산업차량",
+    "model": "D35-50SE-7",
+    "category": "지게차",
+    "fileName": "Doosan_D35-50SE-7_디젤_제원표.pdf",
+    "path": "두산산업차량/Doosan_D35-50SE-7_디젤_제원표.pdf",
+    "subCategory": "디젤지게차"
+  },
+  {
+    "manufacturer": "두산산업차량",
+    "model": "D50-80S-7",
+    "category": "지게차",
+    "fileName": "Doosan_D50-80S-7_디젤_제원표.pdf",
+    "path": "두산산업차량/Doosan_D50-80S-7_디젤_제원표.pdf",
+    "subCategory": "디젤지게차"
+  },
+  {
+    "manufacturer": "두산산업차량",
+    "model": "Doosan-Tier-II-Models- Yellow-Trucks -Product-Line-Brochure",
+    "category": "지게차",
+    "fileName": "Doosan_Doosan-Tier-II-Models-_Yellow-Trucks_-Product-Line-Brochure.pdf",
+    "path": "두산산업차량/Doosan_Doosan-Tier-II-Models-_Yellow-Trucks_-Product-Line-Brochure.pdf",
+    "subCategory": "전동지게차"
+  },
+  {
+    "manufacturer": "두산산업차량",
+    "model": "br25s-9-brochure-EN",
+    "category": "지게차",
+    "fileName": "Doosan_br25s-9-brochure-EN.pdf",
+    "path": "두산산업차량/Doosan_br25s-9-brochure-EN.pdf",
+    "subCategory": "전동지게차"
+  },
+  {
+    "manufacturer": "수성기계",
+    "model": "SOOSAN-CRANE",
+    "category": "크레인",
+    "fileName": "Soosan_SOOSAN-CRANE.pdf",
+    "path": "수성기계/Soosan_SOOSAN-CRANE.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "수성기계",
+    "model": "TRUCK-MOUNTED-CRANE",
+    "category": "크레인",
+    "fileName": "Soosan_TRUCK-MOUNTED-CRANE.pdf",
+    "path": "수성기계/Soosan_TRUCK-MOUNTED-CRANE.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "수성기계",
+    "model": "Truck-Mounted-Crane-1",
+    "category": "크레인",
+    "fileName": "Soosan_Truck-Mounted-Crane-1.pdf",
+    "path": "수성기계/Soosan_Truck-Mounted-Crane-1.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "수성기계",
+    "model": "soosan crane",
+    "category": "크레인",
+    "fileName": "Soosan_soosan_crane_catalogue.pdf",
+    "path": "수성기계/Soosan_soosan_crane_catalogue.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "현대 HW210A 휠굴삭기",
+    "category": "굴삭기",
+    "fileName": "현대_HW210A_휠굴삭기_브로셔.pdf",
+    "path": "현대건설기계/현대_HW210A_휠굴삭기_브로셔.pdf",
+    "subCategory": "휠굴삭기"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "현대굴삭기 시리즈 2",
+    "category": "굴삭기",
+    "fileName": "현대_미니굴삭기_시리즈_2.pdf",
+    "path": "현대건설기계/현대_미니굴삭기_시리즈_2.pdf",
+    "subCategory": "미니굴삭기"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "현대굴삭기 시리즈",
+    "category": "굴삭기",
+    "fileName": "현대_미니굴삭기_시리즈_제원표.pdf",
+    "path": "현대건설기계/현대_미니굴삭기_시리즈_제원표.pdf",
+    "subCategory": "미니굴삭기"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "현대 전기굴삭기 2017",
+    "category": "굴삭기",
+    "fileName": "현대_전기굴삭기_2017.pdf",
+    "path": "현대건설기계/현대_전기굴삭기_2017.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "현대 300D-9 30톤디젤",
+    "category": "지게차",
+    "fileName": "현대_지게차_300D-9_30톤디젤.pdf",
+    "path": "현대건설기계/현대_지게차_300D-9_30톤디젤.pdf",
+    "subCategory": "디젤지게차"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "현대 8톤",
+    "category": "지게차",
+    "fileName": "현대_지게차_8톤_디젤.pdf",
+    "path": "현대건설기계/현대_지게차_8톤_디젤.pdf",
+    "subCategory": "디젤지게차"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "대형굴삭기 HX480 HX520",
+    "category": "굴삭기",
+    "fileName": "현대건설기계_대형굴삭기_HX480_HX520.pdf",
+    "path": "현대건설기계/현대건설기계_대형굴삭기_HX480_HX520.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "디젤 22-33D",
+    "category": "지게차",
+    "fileName": "현대건설기계_디젤_지게차_22-33D.pdf",
+    "path": "현대건설기계/현대건설기계_디젤_지게차_22-33D.pdf",
+    "subCategory": "디젤지게차"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "중형굴삭기 HX시리즈",
+    "category": "굴삭기",
+    "fileName": "현대건설기계_중형굴삭기_HX시리즈.pdf",
+    "path": "현대건설기계/현대건설기계_중형굴삭기_HX시리즈.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "중형굴삭기 HX시리즈 157PS",
+    "category": "굴삭기",
+    "fileName": "현대건설기계_중형굴삭기_HX시리즈_157PS.pdf",
+    "path": "현대건설기계/현대건설기계_중형굴삭기_HX시리즈_157PS.pdf",
+    "subCategory": "유압굴삭기"
+  },
+  {
+    "manufacturer": "현대건설기계",
+    "model": "지게차 사양",
+    "category": "지게차",
+    "fileName": "현대건설기계_지게차_사양.pdf",
+    "path": "현대건설기계/현대건설기계_지게차_사양.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "현대에버다임",
+    "model": "에버다임 타워크레인 종합카탈로그 ENG",
+    "category": "크레인",
+    "fileName": "에버다임_타워크레인_종합카탈로그_ENG.pdf",
+    "path": "현대에버다임/에버다임_타워크레인_종합카탈로그_ENG.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "현대지게차",
+    "model": "20D-33D-7E",
+    "category": "지게차",
+    "fileName": "Hyundai_20D-33D-7E_디젤_제원표.pdf",
+    "path": "현대지게차/Hyundai_20D-33D-7E_디젤_제원표.pdf",
+    "subCategory": "전동지게차"
+  },
+  {
+    "manufacturer": "현대지게차",
+    "model": "20D-33D-7",
+    "category": "지게차",
+    "fileName": "Hyundai_20D-33D-7_디젤_제원표.pdf",
+    "path": "현대지게차/Hyundai_20D-33D-7_디젤_제원표.pdf",
+    "subCategory": "디젤지게차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "HR250N",
+    "category": "고소작업차",
+    "fileName": "호룡_HR250N_brochure.pdf",
+    "path": "호룡/호룡_HR250N_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "HR250N",
+    "category": "고소작업차",
+    "fileName": "호룡_HR250N_radius.pdf",
+    "path": "호룡/호룡_HR250N_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "HR650N",
+    "category": "고소작업차",
+    "fileName": "호룡_HR650N_brochure.pdf",
+    "path": "호룡/호룡_HR650N_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "HR650N",
+    "category": "고소작업차",
+    "fileName": "호룡_HR650N_radius.pdf",
+    "path": "호룡/호룡_HR650N_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "PE3809",
+    "category": "고소작업차",
+    "fileName": "호룡_PE3809_radius.pdf",
+    "path": "호룡/호룡_PE3809_radius.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "PE450",
+    "category": "고소작업차",
+    "fileName": "호룡_PE450_radius.pdf",
+    "path": "호룡/호룡_PE450_radius.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "PE640Q",
+    "category": "고소작업차",
+    "fileName": "호룡_PE640Q_radius.pdf",
+    "path": "호룡/호룡_PE640Q_radius.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY210SQ",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY210SQ_brochure.pdf",
+    "path": "호룡/호룡_SKY210SQ_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY210SQ",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY210SQ_radius.pdf",
+    "path": "호룡/호룡_SKY210SQ_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY250SQ",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY250SQ_radius.pdf",
+    "path": "호룡/호룡_SKY250SQ_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY290",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY290_brochure.pdf",
+    "path": "호룡/호룡_SKY290_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY290",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY290_radius.pdf",
+    "path": "호룡/호룡_SKY290_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY3004N",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY3004N_radius.pdf",
+    "path": "호룡/호룡_SKY3004N_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY300SQ",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY300SQ_radius.pdf",
+    "path": "호룡/호룡_SKY300SQ_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY320",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY320_brochure.pdf",
+    "path": "호룡/호룡_SKY320_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY320",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY320_radius.pdf",
+    "path": "호룡/호룡_SKY320_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY350",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY350_brochure.pdf",
+    "path": "호룡/호룡_SKY350_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY350",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY350_radius.pdf",
+    "path": "호룡/호룡_SKY350_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY400VK",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY400VK_brochure.pdf",
+    "path": "호룡/호룡_SKY400VK_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY400VK",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY400VK_radius.pdf",
+    "path": "호룡/호룡_SKY400VK_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY4504N",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY4504N_radius.pdf",
+    "path": "호룡/호룡_SKY4504N_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY450Q",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY450Q_radius.pdf",
+    "path": "호룡/호룡_SKY450Q_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY450SQ",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY450SQ_brochure.pdf",
+    "path": "호룡/호룡_SKY450SQ_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY450SQ",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY450SQ_radius.pdf",
+    "path": "호룡/호룡_SKY450SQ_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY540Q",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY540Q_radius.pdf",
+    "path": "호룡/호룡_SKY540Q_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY580",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY580_brochure.pdf",
+    "path": "호룡/호룡_SKY580_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY580",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY580_radius.pdf",
+    "path": "호룡/호룡_SKY580_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY600AR",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY600AR_brochure.pdf",
+    "path": "호룡/호룡_SKY600AR_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY600AR",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY600AR_radius.pdf",
+    "path": "호룡/호룡_SKY600AR_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY750N(DW)",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY750N(DW)_brochure.pdf",
+    "path": "호룡/호룡_SKY750N(DW)_brochure.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY750N(DW)",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY750N(DW)_radius.pdf",
+    "path": "호룡/호룡_SKY750N(DW)_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY750N(HD)",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY750N(HD)_radius.pdf",
+    "path": "호룡/호룡_SKY750N(HD)_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "SKY900S",
+    "category": "고소작업차",
+    "fileName": "호룡_SKY900S_radius.pdf",
+    "path": "호룡/호룡_SKY900S_radius.pdf",
+    "subCategory": "사다리차"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "gcar-crane-4500",
+    "category": "크레인",
+    "fileName": "호룡_gcar-crane-4500.pdf",
+    "path": "호룡/호룡_gcar-crane-4500.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "gcar-crane-9000",
+    "category": "크레인",
+    "fileName": "호룡_gcar-crane-9000.pdf",
+    "path": "호룡/호룡_gcar-crane-9000.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "iX17ea1",
+    "category": "고소작업차",
+    "fileName": "호룡_iX17ea1.pdf",
+    "path": "호룡/호룡_iX17ea1.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "ix17e",
+    "category": "고소작업차",
+    "fileName": "호룡_ix17e.pdf",
+    "path": "호룡/호룡_ix17e.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "호룡",
+    "model": "ix35e",
+    "category": "고소작업차",
+    "fileName": "호룡_ix35e.pdf",
+    "path": "호룡/호룡_ix35e.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "호룡EI",
+    "model": "gcar-crane-4500",
+    "category": "크레인",
+    "fileName": "호룡EI_gcar-crane-4500.pdf",
+    "path": "호룡EI/호룡EI_gcar-crane-4500.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "호룡EI",
+    "model": "gcar-crane-9000",
+    "category": "크레인",
+    "fileName": "호룡EI_gcar-crane-9000.pdf",
+    "path": "호룡EI/호룡EI_gcar-crane-9000.pdf",
+    "subCategory": "유압크레인"
+  },
+  {
+    "manufacturer": "호룡EI",
+    "model": "iX17ea1",
+    "category": "고소작업차",
+    "fileName": "호룡EI_iX17ea1.pdf",
+    "path": "호룡EI/호룡EI_iX17ea1.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "호룡EI",
+    "model": "ix17e",
+    "category": "고소작업차",
+    "fileName": "호룡EI_ix17e.pdf",
+    "path": "호룡EI/호룡EI_ix17e.pdf",
+    "subCategory": "기타"
+  },
+  {
+    "manufacturer": "호룡EI",
+    "model": "ix35e",
+    "category": "고소작업차",
+    "fileName": "호룡EI_ix35e.pdf",
+    "path": "호룡EI/호룡EI_ix35e.pdf",
+    "subCategory": "기타"
+  }
+]

@@ -36,6 +36,48 @@ public class DocumentController {
         return service.listForOwner(ownerType, ownerId, actor);
     }
 
+    /**
+     * 갱신 이력: 같은 (owner_type, owner_id, document_type_id) 의 모든 버전.
+     * 가장 최신부터 옛 버전 순. previous_document_id 체인을 따라가는 history view 에 사용.
+     */
+    @GetMapping("/{id}/history")
+    public List<DocumentResponse> history(@PathVariable Long id, @CurrentUser AuthenticatedUser actor) {
+        return service.history(id, actor);
+    }
+
+    /**
+     * ADMIN 검토 큐. verification_status = OCR_REVIEW_REQUIRED 또는 REJECTED 인 chain head.
+     */
+    @GetMapping("/review-queue")
+    public List<com.skep.document.dto.ReviewItemResponse> reviewQueue(@CurrentUser AuthenticatedUser actor) {
+        return service.reviewQueue(actor);
+    }
+
+    /**
+     * ADMIN 처리 완료 큐. verifiedAt 이 있는 chain head (자동 + 수동 검증/반려).
+     */
+    @GetMapping("/processed-queue")
+    public List<com.skep.document.dto.ReviewItemResponse> processedQueue(@CurrentUser AuthenticatedUser actor) {
+        return service.processedQueue(actor);
+    }
+
+    /**
+     * ADMIN 만료 임박 큐. days(기본 30) 이내 만료 예정.
+     */
+    /** 공급사 자기 회사 자원 documents (만료 관리). */
+    @GetMapping("/my-supplier")
+    public List<com.skep.document.dto.ReviewItemResponse> mySupplierDocs(@CurrentUser AuthenticatedUser actor) {
+        return service.mySupplierDocuments(actor);
+    }
+
+    @GetMapping("/expiring")
+    public List<com.skep.document.dto.ReviewItemResponse> expiringQueue(
+            @CurrentUser AuthenticatedUser actor,
+            @RequestParam(required = false, defaultValue = "30") int days
+    ) {
+        return service.expiringQueue(actor, days);
+    }
+
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public DocumentResponse upload(
@@ -44,10 +86,21 @@ public class DocumentController {
             @RequestParam Long documentTypeId,
             @RequestParam(required = false) String expiryDate,
             @RequestParam("file") MultipartFile file,
+            // S-9-G.2: 사용자 보충 / OCR 미리보기에서 검토한 필드. extracted_data 에 manual_* 키로 저장.
+            // 예: manualBizNo, manualOwnerName, manualBusinessName, manualStartDate, manualAddress
+            @RequestParam(required = false) java.util.Map<String, String> allParams,
             @CurrentUser AuthenticatedUser actor
     ) {
         LocalDate expiry = parseDate(expiryDate);
-        return service.upload(ownerType, ownerId, documentTypeId, expiry, file, actor);
+        java.util.Map<String, String> manualFields = new java.util.HashMap<>();
+        if (allParams != null) {
+            for (var e : allParams.entrySet()) {
+                if (e.getKey() != null && e.getKey().startsWith("manual") && e.getValue() != null && !e.getValue().isBlank()) {
+                    manualFields.put(e.getKey(), e.getValue());
+                }
+            }
+        }
+        return service.upload(ownerType, ownerId, documentTypeId, expiry, file, manualFields, actor);
     }
 
     @GetMapping("/{id}/file")
@@ -55,10 +108,14 @@ public class DocumentController {
         Document d = service.getForDownload(id, actor);
         Resource res = service.loadFile(d);
         String encodedName = URLEncoder.encode(d.getFileName(), StandardCharsets.UTF_8).replace("+", "%20");
+        // XSS 방어: inline 은 PDF/이미지만. HTML/SVG/오피스 등은 attachment 로 강제 다운로드.
+        String disposition = (DocumentService.isInlinePreviewType(d.getContentType()) ? "inline" : "attachment")
+                + "; filename*=UTF-8''" + encodedName;
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(d.getContentType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename*=UTF-8''" + encodedName)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Security-Policy", "default-src 'none'; sandbox")
                 .body(res);
     }
 

@@ -43,6 +43,16 @@ public class User {
     @Column(nullable = false)
     private boolean enabled;
 
+    @Column(name = "show_in_quote", nullable = false)
+    private boolean showInQuote;
+
+    @Column(name = "quote_display_order")
+    private Integer quoteDisplayOrder;
+
+    /** BP/ADMIN 모바일 앱 FCM 토큰 — 작업자 현장 문제알림 푸시 수신용. 로그인 후 register-fcm-token 으로 등록. */
+    @Column(name = "fcm_token", length = 512)
+    private String fcmToken;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -83,5 +93,24 @@ public class User {
 
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
+    }
+
+    /** ADMIN 승인 시 첫 master 자동 부여용. signup 시점에는 호출 X. */
+    public void setIsCompanyAdmin(boolean isCompanyAdmin) {
+        this.isCompanyAdmin = isCompanyAdmin;
+    }
+
+    public void updateProfile(String name, String phone) {
+        if (name != null && !name.isBlank()) this.name = name;
+        if (phone != null) this.phone = phone;
+    }
+
+    public void updateQuoteVisibility(boolean show, Integer order) {
+        this.showInQuote = show;
+        this.quoteDisplayOrder = order;
+    }
+
+    public void updateFcmToken(String token) {
+        this.fcmToken = token;
     }
 }

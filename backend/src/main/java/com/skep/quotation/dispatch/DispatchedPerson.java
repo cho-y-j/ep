@@ -1,0 +1,80 @@
+package com.skep.quotation.dispatch;
+
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+
+/**
+ * 선정 통보 받은 공급사가 차량과 함께 보낼 인원(운전수/오퍼레이터/작업자) + 인당 단가.
+ * UNIQUE (quotation_request_id, person_id) — 같은 견적에 같은 인원 중복 send 차단.
+ * 장비 배차(DispatchedEquipment)와 동일 패턴.
+ */
+@Entity
+@Table(name = "quotation_dispatched_persons")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class DispatchedPerson {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "quotation_request_id", nullable = false)
+    private Long quotationRequestId;
+
+    @Column(name = "supplier_company_id", nullable = false)
+    private Long supplierCompanyId;
+
+    @Column(name = "person_id", nullable = false)
+    private Long personId;
+
+    @Column(name = "daily_price")
+    private Long dailyPrice;
+
+    @Column(name = "monthly_price")
+    private Long monthlyPrice;
+
+    @Column(columnDefinition = "TEXT")
+    private String notes;
+
+    @Column(name = "sent_at", nullable = false)
+    private LocalDateTime sentAt;
+
+    @Column(name = "sent_by")
+    private Long sentBy;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+
+    @Builder
+    private DispatchedPerson(Long quotationRequestId, Long supplierCompanyId, Long personId,
+                             Long dailyPrice, Long monthlyPrice, String notes, Long sentBy) {
+        this.quotationRequestId = quotationRequestId;
+        this.supplierCompanyId = supplierCompanyId;
+        this.personId = personId;
+        this.dailyPrice = dailyPrice;
+        this.monthlyPrice = monthlyPrice;
+        this.notes = notes;
+        this.sentBy = sentBy;
+    }
+
+    @PrePersist
+    void onCreate() {
+        var now = LocalDateTime.now();
+        this.sentAt = now;
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+}

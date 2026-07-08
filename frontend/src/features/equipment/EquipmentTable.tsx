@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { EQUIPMENT_CATEGORY_LABEL, type EquipmentResponse } from '../../types/equipment';
 import type { CompanyResponse } from '../../types/auth';
 import Avatar from '../../components/Avatar';
@@ -9,46 +10,97 @@ type Props = {
   onRowClick: (e: EquipmentResponse) => void;
 };
 
-function statusOf(e: EquipmentResponse): { label: string; cls: string; siteDot: 'green' | 'gray' | 'red' } {
+function statusOf(e: EquipmentResponse): { label: string; cls: string; rank: number } {
   if ((e.utilization_pct ?? 0) === 0 && e.expiring_count === 0) {
-    return { label: '미사용', cls: 'bg-slate-100 text-slate-600', siteDot: 'gray' };
+    return { label: '미사용', cls: 'bg-slate-100 text-slate-600', rank: 2 };
   }
   if (e.expiring_count > 0) {
-    return { label: '점검 필요', cls: 'bg-amber-100 text-amber-700', siteDot: 'red' };
+    return { label: '점검 필요', cls: 'bg-amber-100 text-amber-700', rank: 1 };
   }
-  return { label: '가동 중', cls: 'bg-emerald-100 text-emerald-700', siteDot: 'green' };
+  return { label: '가동 중', cls: 'bg-emerald-100 text-emerald-700', rank: 0 };
+}
+
+type SortKey = 'name' | 'category' | 'site' | 'status' | 'util' | 'expiring' | 'supplier';
+type SortDir = 'asc' | 'desc';
+
+function compareBy(
+  a: EquipmentResponse, b: EquipmentResponse, key: SortKey,
+  companiesById: Map<number, CompanyResponse>
+): number {
+  const cmp = (x: string | number | null | undefined, y: string | number | null | undefined): number => {
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    if (typeof x === 'number' && typeof y === 'number') return x - y;
+    return String(x).localeCompare(String(y), 'ko');
+  };
+  switch (key) {
+    case 'name': return cmp(a.vehicle_no || a.model || '', b.vehicle_no || b.model || '');
+    case 'category': return cmp(EQUIPMENT_CATEGORY_LABEL[a.category], EQUIPMENT_CATEGORY_LABEL[b.category]);
+    case 'site': return cmp(a.current_site_name ?? '', b.current_site_name ?? '');
+    case 'status': return cmp(statusOf(a).rank, statusOf(b).rank);
+    case 'util': return cmp(a.utilization_pct ?? 0, b.utilization_pct ?? 0);
+    case 'expiring': return cmp(a.expiring_count ?? 0, b.expiring_count ?? 0);
+    case 'supplier': return cmp(
+      a.supplier_name ?? companiesById.get(a.supplier_id)?.name ?? '',
+      b.supplier_name ?? companiesById.get(b.supplier_id)?.name ?? ''
+    );
+  }
 }
 
 export default function EquipmentTable({ equipment, companiesById, showSupplierColumn, onRowClick }: Props) {
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const sortedEquipment = useMemo(() => {
+    if (!sortKey) return equipment;
+    const arr = equipment.slice();
+    arr.sort((a, b) => {
+      const r = compareBy(a, b, sortKey, companiesById);
+      return sortDir === 'asc' ? r : -r;
+    });
+    return arr;
+  }, [equipment, sortKey, sortDir, companiesById]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey !== key) { setSortKey(key); setSortDir('asc'); return; }
+    if (sortDir === 'asc') { setSortDir('desc'); return; }
+    setSortKey(null);
+  };
+
+  const SortHeader = ({ k, label }: { k: SortKey; label: string }) => {
+    const active = sortKey === k;
+    const arrow = !active ? '↕' : sortDir === 'asc' ? '↑' : '↓';
+    return (
+      <button type="button" onClick={() => toggleSort(k)}
+        className={`inline-flex items-center gap-1 font-medium ${active ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
+        <span>{label}</span>
+        <span className={`text-[10px] ${active ? 'text-brand-600' : 'text-slate-300'}`}>{arrow}</span>
+      </button>
+    );
+  };
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 border-b border-slate-200">
           <tr className="text-left text-slate-500">
-            <th className="px-4 py-3 w-10">
-              <input type="checkbox" className="rounded border-slate-300" />
-            </th>
-            <th className="px-4 py-3 font-medium">장비명 / 장비코드</th>
-            <th className="px-4 py-3 font-medium">종류</th>
-            <th className="px-4 py-3 font-medium">현장(위치)</th>
-            <th className="px-4 py-3 font-medium">상태</th>
-            <th className="px-4 py-3 font-medium">가동률</th>
-            <th className="px-4 py-3 font-medium">최근 점검 / 다음 점검</th>
-            <th className="px-4 py-3 font-medium text-center">첨부 서류</th>
-            {showSupplierColumn && <th className="px-4 py-3 font-medium">공급사</th>}
-            <th className="px-4 py-3 w-10"></th>
+            <th className="px-4 py-3"><SortHeader k="name" label="장비명 / 장비코드" /></th>
+            <th className="px-4 py-3"><SortHeader k="category" label="종류" /></th>
+            <th className="px-4 py-3"><SortHeader k="site" label="현장(위치)" /></th>
+            <th className="px-4 py-3"><SortHeader k="status" label="상태" /></th>
+            <th className="px-4 py-3"><SortHeader k="util" label="가동률" /></th>
+            <th className="px-4 py-3 text-center"><SortHeader k="expiring" label="서류 위험" /></th>
+            {showSupplierColumn && <th className="px-4 py-3"><SortHeader k="supplier" label="공급사" /></th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {equipment.map((e) => {
+          {sortedEquipment.map((e) => {
             const supplier = companiesById.get(e.supplier_id);
             const st = statusOf(e);
             const util = e.utilization_pct ?? 0;
             return (
               <tr key={e.id} onClick={() => onRowClick(e)} className="cursor-pointer hover:bg-slate-50">
-                <td className="px-4 py-3" onClick={(ev) => ev.stopPropagation()}>
-                  <input type="checkbox" className="rounded border-slate-300" />
-                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <Avatar
@@ -73,11 +125,17 @@ export default function EquipmentTable({ equipment, companiesById, showSupplierC
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="text-slate-900">서울 A현장</div>
-                  <div className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-slate-500">
-                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${st.siteDot === 'green' ? 'bg-emerald-500' : st.siteDot === 'red' ? 'bg-rose-500' : 'bg-slate-300'}`} />
-                    위치 추적 중
-                  </div>
+                  {e.current_site_id ? (
+                    <>
+                      <div className="text-slate-900 truncate">{e.current_site_name ?? `현장 #${e.current_site_id}`}</div>
+                      <div className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-slate-500">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                        배치 중
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-xs text-slate-400">미배치</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${st.cls}`}>{st.label}</span>
@@ -93,26 +151,24 @@ export default function EquipmentTable({ equipment, companiesById, showSupplierC
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-slate-700">
-                  <div>2026.04.10</div>
-                  <div className="text-xs text-slate-500 mt-0.5">2026.07.10</div>
-                </td>
                 <td className="px-4 py-3 text-center">
-                  <span className="inline-flex min-w-[24px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-sm font-semibold">
-                    {/* 첨부 서류 카운트는 추후 백엔드 추가 — 우선 - 표시 */}
-                    -
-                  </span>
+                  {e.expiring_count > 0 ? (
+                    <span className="inline-flex min-w-[24px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">
+                      {e.expiring_count}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400">-</span>
+                  )}
                 </td>
                 {showSupplierColumn && (
-                  <td className="px-4 py-3 text-slate-500">{supplier?.name ?? `id=${e.supplier_id}`}</td>
+                  <td className="px-4 py-3 text-slate-500">{e.supplier_name ?? supplier?.name ?? `id=${e.supplier_id}`}</td>
                 )}
-                <td className="px-4 py-3 text-slate-400 text-center">⋮</td>
               </tr>
             );
           })}
           {equipment.length === 0 && (
             <tr>
-              <td colSpan={showSupplierColumn ? 10 : 9} className="px-4 py-12 text-center text-slate-400">
+              <td colSpan={showSupplierColumn ? 7 : 6} className="px-4 py-12 text-center text-slate-400">
                 장비 없음
               </td>
             </tr>

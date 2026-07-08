@@ -35,16 +35,25 @@ cd frontend && npm install && npm run dev
 
 ## 진행 현황
 
-기능은 하나씩 설계하며 추가합니다. 현재는 부팅 가능한 스캐폴드 + CI/CD 파이프라인만 깔린 상태.
+Phase 0~4 완료. Phase 5는 현장/배차/알림/안전점검까지 구현, 정산은 미구현. 이후 S-시리즈(S-1~S-11) + Phase Bid로 견적·공개입찰·보완요청까지 확장됨. DB 마이그레이션 V1~V46 (V29 결번).
 
 - [x] Phase 0: 스캐폴드 + CI/CD
-- [ ] Phase 1: 인증 (User + JWT + Spring Security)
-- [ ] Phase 2: Company / Person / Equipment / Document
-- [ ] Phase 3: 만료 추적 + OCR (verify-api 연동)
-- [ ] Phase 4: 작업계획서 (DOCX + OnlyOffice)
-- [ ] Phase 5: 현장/배차/점검/정산/알림
+- [x] Phase 1: 인증 (User + JWT + Spring Security)
+- [x] Phase 2: Company / Person / Equipment / Document
+- [x] Phase 3: 만료 추적 + OCR (verify-api 연동) — 만료 알림 스케줄러(cron)는 미구현
+- [x] Phase 4: 작업계획서 (DOCX + OnlyOffice)
+- [~] Phase 5: 현장 / 배차 / 알림 / 안전점검 구현 · **정산(settlement) 미구현** · 장비 점검이력은 시드 데이터만
 
-상세: `../skep/REWRITE_GUIDE.md`
+확장 (상세는 `docs/IMPLEMENTATION_LOG.md`):
+
+- [x] 견적 요청·응답·최종선정(TARGETED) / 공개입찰(OPEN_BID) / 배차 / 견적서 xlsx·pdf / 비교 스냅샷
+- [x] 영업견적(outgoing) / 원청기관(client-org)+투입이력 / 서류 보완요청 / 컴플라이언스 점검표 / compliance-orders(V46)
+- [x] 작업확인서 / 전자서명(이메일 토큰) / OnlyOffice 인플레이스 편집
+- [ ] 정산 / 만료 알림 cron / DOCX 표 행 반복 / AI 재작성(현재 stub)
+
+> 참고: 견적 최종선정(finalize)은 target을 FINAL_ACCEPTED로 바꿀 뿐 작업계획서를 자동 생성하지 않는다 — 작업계획서는 BP가 별도로 작성한다.
+
+문서: API 명세 `docs/API_SPEC.md` · 데이터 모델 `docs/ERD.md` · 비즈니스 규칙 `docs/CORE_BUSINESS_RULES.md` · rewrite 가이드 `../skep/REWRITE_GUIDE.md`
 
 ## 배포
 

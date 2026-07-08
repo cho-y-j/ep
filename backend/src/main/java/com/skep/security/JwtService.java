@@ -6,6 +6,7 @@ import com.skep.user.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -14,8 +15,10 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HexFormat;
+import java.util.Set;
 
 @Component
 public class JwtService {
@@ -24,9 +27,24 @@ public class JwtService {
     private final SecretKey signingKey;
     private final SecureRandom random = new SecureRandom();
 
-    public JwtService(JwtProperties props) {
+    // dev/test placeholder. prod profile 활성화 시 이 값이 사용되면 부팅 거부.
+    private static final Set<String> KNOWN_DEV_SECRETS = Set.of(
+            "dev-only-secret-change-in-prod-must-be-at-least-32-bytes-long",
+            "change_me_jwt_must_be_at_least_32_bytes_long"
+    );
+
+    public JwtService(JwtProperties props, Environment env) {
         this.props = props;
-        this.signingKey = Keys.hmacShaKeyFor(props.secret().getBytes(StandardCharsets.UTF_8));
+        String secret = props.secret();
+        if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT secret must be at least 32 bytes — set JWT_SECRET env var");
+        }
+        boolean isProd = Arrays.asList(env.getActiveProfiles()).contains("prod");
+        if (isProd && KNOWN_DEV_SECRETS.contains(secret)) {
+            throw new IllegalStateException(
+                    "JWT secret is a development placeholder — set a real JWT_SECRET (32+ bytes) in prod profile");
+        }
+        this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
     public String issueAccessToken(User user) {
@@ -43,6 +61,8 @@ public class JwtService {
         if (user.getCompanyId() != null) {
             builder.claim("company_id", user.getCompanyId());
         }
+        // 회사 관리자/일반 직원 분리 — 감사 로그 / 회사 범위 조회 권한 분기에 사용된다.
+        builder.claim("is_company_admin", user.isCompanyAdmin());
         return builder.signWith(signingKey).compact();
     }
 

@@ -10,13 +10,15 @@ services:
       PGTZ: Asia/Seoul
     volumes:
       - skep_v2_pg:/var/lib/postgresql/data
+    # 127.0.0.1 바인딩 — 외부에서 직접 접근 차단. 컨테이너 간 통신은 docker network 로.
     ports:
-      - "${DB_PORT:-5433}:5432"
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-skep_user} -d ${DB_NAME:-skep_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: 192m
     restart: unless-stopped
 
   redis:
@@ -24,13 +26,15 @@ services:
     container_name: skep-v2-redis
     environment:
       TZ: Asia/Seoul
+    # 127.0.0.1 바인딩 — 외부 접근 차단.
     ports:
-      - "${REDIS_PORT:-6380}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
+    mem_limit: 64m
     restart: unless-stopped
 
   backend:
@@ -38,6 +42,7 @@ services:
     container_name: skep-v2-backend
     volumes:
       - skep_v2_uploads:/app/uploads
+      - ./backend/firebase-admin-key.json:/app/firebase-admin-key.json:ro
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: 8080
@@ -51,6 +56,43 @@ services:
       SKEP_BOOTSTRAP_ADMIN_PASSWORD: ${SKEP_BOOTSTRAP_ADMIN_PASSWORD:-change-me-now}
       SKEP_BOOTSTRAP_ADMIN_NAME: ${SKEP_BOOTSTRAP_ADMIN_NAME:-System Admin}
       SKEP_BOOTSTRAP_TEST_USERS_ENABLED: ${SKEP_BOOTSTRAP_TEST_USERS_ENABLED:-true}
+      # Phase S-4 단계 2: 외부 verify-api / main-api 연동.
+      # 기본 비활성화 (개발 환경 보호). 운영에서 VERIFY_ENABLED=true 로 켠다.
+      VERIFY_ENABLED: ${VERIFY_ENABLED:-false}
+      VERIFY_MAIN_API_URL: ${VERIFY_MAIN_API_URL:-http://main-api:8080}
+      VERIFY_INNER_API_URL: ${VERIFY_INNER_API_URL:-http://verify-api:8081}
+      VERIFY_API_KEY: ${VERIFY_API_KEY:-}
+      # S-9-G: skep-v2 backend 자체 NTS 클라이언트 (verify-api 우회 옵션) — 사업자번호만으로 즉시 검증
+      NTS_SERVICE_KEY: ${NTS_SERVICE_KEY:-}
+      # Heat: 기상청 API Hub 초단기실황 — 폭염/휴식 알림용 체감온도 조회
+      KMA_API_KEY: ${KMA_API_KEY:-}
+      # 다온톡(와이드샷/세종) 알림톡 — 건강검진/차량점검/장비투입 요청 발송.
+      # 키 없으면 enabled=false → 발송 skip(로그만). 운영 .env 로 API_KEY+ENABLED 설정 시 발송.
+      SKEP_ALIMTALK_ENABLED: ${SKEP_ALIMTALK_ENABLED:-false}
+      SKEP_ALIMTALK_BASE_URL: ${SKEP_ALIMTALK_BASE_URL:-https://apimsg-test.wideshot.co.kr}
+      SKEP_ALIMTALK_API_KEY: ${SKEP_ALIMTALK_API_KEY:-}
+      # sender key 는 비밀값 — 기본값 비움(.env 로만 주입). 커밋 금지.
+      SKEP_ALIMTALK_SENDER_KEY: ${SKEP_ALIMTALK_SENDER_KEY:-}
+      SKEP_ALIMTALK_SMS_CALLBACK: ${SKEP_ALIMTALK_SMS_CALLBACK:-010-9780-4669}
+      SKEP_ALIMTALK_BRAND_NAME: ${SKEP_ALIMTALK_BRAND_NAME:-SKEP}
+      # Phase S-8.4: OnlyOffice 인플레이스 편집.
+      # 같은 docker network 의 onlyoffice 서비스를 server-url 로 사용. 브라우저 접근은 host:8083.
+      # public-backend-url 은 OnlyOffice 컨테이너가 우리 backend 로 callback/file-fetch 호출하는 주소.
+      ONLYOFFICE_ENABLED: ${ONLYOFFICE_ENABLED:-false}
+      ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://localhost:8083}
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-dev-onlyoffice-jwt-secret-change-in-prod-32bytes}
+      PUBLIC_BACKEND_URL: ${PUBLIC_BACKEND_URL:-http://backend:8080}
+      # S-12: 전자서명 워크플로우 — Naver SMTP
+      MAIL_HOST: ${MAIL_HOST:-smtp.naver.com}
+      MAIL_PORT: ${MAIL_PORT:-465}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      # 사인 페이지 BASE URL — 운영 배포 시 sk.on1.kr 등으로 치환
+      SKEP_PUBLIC_BASE_URL: ${SKEP_PUBLIC_BASE_URL:-http://localhost:8082}
+      # WHY: /app/uploads 는 docker volume 이라 mount 후 root:root 가 돼 skep user (uid 10001) 가
+      # 하위 디렉터리를 새로 못 만든다. worksheet-sessions 은 24h TTL 임시 세션이라 영구 보존 불필요 →
+      # 컨테이너 내부 /home/skep (Dockerfile 에서 chown 됨) 로 옮겨 권한 문제 회피.
+      SKEP_WORKSHEET_SESSION_DIR: /home/skep/worksheet-sessions
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,6 +106,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+    # 1.8GB 서버 OOM 방지 — backend + LibreOffice headless 동반이라 가장 큼
+    mem_limit: 640m
     restart: unless-stopped
 
   frontend:
@@ -75,8 +119,114 @@ services:
       - backend
     ports:
       - "${FRONTEND_PORT:-8082}:80"
+    healthcheck:
+      # nginx:alpine 의 busybox wget — `--spider` 로 본문 없이 HEAD 비슷한 확인. 가벼움.
+      test: ["CMD-SHELL", "wget -q --spider http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    mem_limit: 64m
     restart: unless-stopped
+
+  # ==========================================================
+  # Phase S-9-G: verify-server (main-api + verify-api) — 정부 API 자동 검증
+  # ==========================================================
+  # docker compose up -d 한 번에 다 뜨도록 profile 제거. 운영 lift-and-shift 시 그대로 작동.
+  # 외부 API (NTS/RIMS/KOSHA/Vision) — 키는 .env 에서 주입.
+  verify-api:
+    build:
+      context: ./external/verify-server/verify-api
+      dockerfile: Dockerfile
+    container_name: skep-v2-verify-api
+    expose:
+      - "8081"
+    environment:
+      TZ: Asia/Seoul
+      VERIFY_API_KEY: ${VERIFY_API_KEY:-}
+      GOOGLE_VISION_API_KEY: ${GOOGLE_VISION_API_KEY:-}
+      PUBLIC_API_BASE_URL: https://apis.data.go.kr/B553881/lcnsCheckService
+      PUBLIC_API_SERVICE_KEY: ${PUBLIC_API_SERVICE_KEY:-}
+      RIMS_API_URL: ${RIMS_API_URL:-}
+      RIMS_AUTH_KEY: ${RIMS_AUTH_KEY:-}
+      RIMS_SECRET_KEY: ${RIMS_SECRET_KEY:-}
+      NTS_API_BASE_URL: https://api.odcloud.kr/api/nts-businessman/v1
+      NTS_API_SERVICE_KEY: ${NTS_API_SERVICE_KEY:-}
+      TS_CAR_API_KEY: ${TS_CAR_API_KEY:-}
+      # JVM heap 명시 — base64 인코딩 시 OOM 방지 (mem_limit 의 60% 정도)
+      JAVA_TOOL_OPTIONS: "-Xmx320m -Xms128m"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --tries=1 --timeout=3 http://localhost:8081/ 2>&1 | grep -qE '401|200|500' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 512m
+    restart: unless-stopped
+
+  main-api:
+    build:
+      context: ./external/verify-server/main-api
+      dockerfile: Dockerfile
+    container_name: skep-v2-main-api
+    expose:
+      - "8080"
+    environment:
+      TZ: Asia/Seoul
+      VERIFY_API_URL: http://verify-api:8081
+      VERIFY_API_KEY: ${VERIFY_API_KEY:-}
+    depends_on:
+      - verify-api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || wget -qO- http://localhost:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 192m
+    restart: unless-stopped
+
+  # ==========================================================
+  # Phase S-8.4: OnlyOffice Document Server (Community Edition)
+  # ==========================================================
+  # 활성화하려면: docker compose --profile onlyoffice up -d
+  # 또는 ONLYOFFICE_ENABLED=true 와 함께 onlyoffice 프로필을 항상 포함.
+  #
+  # 운영 시 추가 작업:
+  #   - HTTPS 가 필수 (브라우저가 mixed content 차단). 리버스 프록시 또는 컨테이너 자체 인증서.
+  #   - PUBLIC_BACKEND_URL 을 OnlyOffice 컨테이너에서 도달 가능한 우리 backend 의 공개 URL 로 설정.
+  #     로컬에서는 docker network 안의 'http://backend:8080' 사용 가능.
+  #   - JWT_SECRET 은 16자 이상 랜덤 문자열로 양쪽(backend의 ONLYOFFICE_JWT_SECRET, 여기 JWT_SECRET) 일치 필수.
+  onlyoffice:
+    # 구 skep 와 동일 버전 8.1 — ARM64 안정 동작 검증된 버전.
+    image: onlyoffice/documentserver:8.1
+    container_name: skep-v2-onlyoffice
+    environment:
+      TZ: Asia/Seoul
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-dev-onlyoffice-jwt-secret-change-in-prod-32bytes}
+      # 브라우저 캐시 회피용
+      USE_UNAUTHORIZED_STORAGE: "false"
+    volumes:
+      - skep_v2_onlyoffice_data:/var/www/onlyoffice/Data
+      - skep_v2_onlyoffice_log:/var/log/onlyoffice
+      - skep_v2_onlyoffice_lib:/var/lib/onlyoffice
+      - skep_v2_onlyoffice_db:/var/lib/postgresql
+    ports:
+      - "${ONLYOFFICE_PORT:-8083}:80"
+    mem_limit: 448m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
 volumes:
   skep_v2_pg:
   skep_v2_uploads:
+  skep_v2_onlyoffice_data:
+  skep_v2_onlyoffice_log:
+  skep_v2_onlyoffice_lib:
+  skep_v2_onlyoffice_db:

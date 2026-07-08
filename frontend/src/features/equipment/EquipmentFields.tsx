@@ -8,6 +8,9 @@ export type EquipmentFieldValues = {
   model: string;
   manufacturer: string;
   year: string;
+  isExternal: boolean;
+  vehicleOwnerName: string;
+  vehicleOwnerBusinessNo: string;
 };
 
 type Props = {
@@ -34,7 +37,7 @@ export default function EquipmentFields({ values, onChange, equipmentSuppliers, 
     <div className="space-y-4">
       {equipmentSuppliers && (
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">장비공급사</span>
+          <span className="text-sm font-medium text-slate-700">장비공급사 <span className="text-xs text-rose-600 font-semibold">(필수)</span></span>
           <select
             value={values.supplierId}
             onChange={(e) => patch({ supplierId: e.target.value === '' ? '' : Number(e.target.value) })}
@@ -50,8 +53,41 @@ export default function EquipmentFields({ values, onChange, equipmentSuppliers, 
         </label>
       )}
 
+      <div className="block">
+        <span className="text-sm font-medium text-slate-700">장비 출처</span>
+        <label className={`mt-1 flex items-center gap-2.5 rounded-lg border px-3 py-2.5 select-none ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-slate-50'} ${values.isExternal ? 'border-amber-300 bg-amber-50/40' : 'border-slate-200'}`}>
+          <input
+            type="checkbox"
+            checked={!values.isExternal}
+            onChange={(e) => patch({ isExternal: !e.target.checked })}
+            disabled={disabled}
+            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+          />
+          <span className="text-sm font-semibold text-slate-800">우리 장비</span>
+          <span className="text-xs text-slate-400">— 체크 해제 시 외부 조달 장비</span>
+        </label>
+      </div>
+
+      {values.isExternal && (
+        <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+          <p className="text-xs text-amber-700">외부에서 조달한 장비입니다. 소유주(사업자) 정보를 입력하세요. <strong>사업자등록증</strong>은 장비 등록 후 상세 화면의 '서류 추가'로 등록할 수 있습니다. 사진(파일)이 없으면 나중에 추가해도 됩니다.</p>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">소유주(사업자)명</span>
+            <input type="text" value={values.vehicleOwnerName}
+              onChange={(e) => patch({ vehicleOwnerName: e.target.value })} disabled={disabled}
+              placeholder="○○건설기계" className="input mt-1" />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">사업자등록번호</span>
+            <input type="text" value={values.vehicleOwnerBusinessNo}
+              onChange={(e) => patch({ vehicleOwnerBusinessNo: e.target.value })} disabled={disabled}
+              placeholder="123-45-67890" className="input mt-1" />
+          </label>
+        </div>
+      )}
+
       <label className="block">
-        <span className="text-sm font-medium text-slate-700">장비 종류</span>
+        <span className="text-sm font-medium text-slate-700">장비 종류 <span className="text-xs text-rose-600 font-semibold">(필수)</span></span>
         <select
           value={values.category}
           onChange={(e) => patch({ category: e.target.value as EquipmentCategory })}
@@ -66,20 +102,22 @@ export default function EquipmentFields({ values, onChange, equipmentSuppliers, 
       </label>
 
       <label className="block">
-        <span className="text-sm font-medium text-slate-700">차량번호 (어태치먼트는 비워둘 수 있음)</span>
+        <span className="text-sm font-medium text-slate-700">차량번호 <span className="text-xs text-rose-600 font-semibold">(필수)</span></span>
         <input
           type="text"
           value={values.vehicleNo}
           onChange={(e) => patch({ vehicleNo: e.target.value })}
+          required={required}
           disabled={disabled}
           placeholder="경기99사1234"
           className="input mt-1"
         />
+        <span className="mt-1 block text-xs text-slate-400">부속 장비처럼 차량번호가 없는 경우 임의 식별번호를 입력하세요.</span>
       </label>
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">제조사</span>
+          <span className="text-sm font-medium text-slate-700">제조사 <span className="text-xs text-slate-400 font-semibold">(선택)</span></span>
           <input
             type="text"
             value={values.manufacturer}
@@ -90,7 +128,7 @@ export default function EquipmentFields({ values, onChange, equipmentSuppliers, 
           />
         </label>
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">제조년도</span>
+          <span className="text-sm font-medium text-slate-700">제조년도 <span className="text-xs text-slate-400 font-semibold">(선택)</span></span>
           <input
             type="number"
             min={1900}
@@ -105,7 +143,7 @@ export default function EquipmentFields({ values, onChange, equipmentSuppliers, 
       </div>
 
       <label className="block">
-        <span className="text-sm font-medium text-slate-700">모델명</span>
+        <span className="text-sm font-medium text-slate-700">모델명 <span className="text-xs text-slate-400 font-semibold">(선택)</span></span>
         <input
           type="text"
           value={values.model}
@@ -126,4 +164,7 @@ export const EMPTY_EQUIPMENT_FIELDS: EquipmentFieldValues = {
   model: '',
   manufacturer: '',
   year: '',
+  isExternal: false,
+  vehicleOwnerName: '',
+  vehicleOwnerBusinessNo: '',
 };

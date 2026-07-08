@@ -12,8 +12,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Arrays;
 
 import java.util.List;
 
@@ -50,10 +53,17 @@ public class TestUserSeeder {
             @Value("${skep.bootstrap.test-users.password:testpass123}") String password,
             UserRepository users,
             CompanyRepository companies,
-            PasswordEncoder encoder
+            PasswordEncoder encoder,
+            Environment env
     ) {
         return args -> {
             if (!enabled) return;
+            // 운영 프로필에서는 약한 default 비번의 테스트 시드 절대 실행하지 않음.
+            boolean isProd = Arrays.asList(env.getActiveProfiles()).contains("prod");
+            if (isProd) {
+                log.warn("test-users seeder disabled in prod profile (security)");
+                return;
+            }
             for (SeedSpec seed : SEEDS) {
                 upsert(seed, password, users, companies, encoder);
             }

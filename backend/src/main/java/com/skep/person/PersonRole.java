@@ -17,7 +17,8 @@ public enum PersonRole {
         return switch (companyType) {
             case EQUIPMENT -> this == OPERATOR;
             case MANPOWER -> this != OPERATOR;
-            case BP -> false;
+            // BP 회사도 자체 인원 보유 가능 (직속 운전수/지휘자 등 모든 역할) — #5 정책 확장
+            case BP -> true;
         };
     }
 
@@ -25,7 +26,8 @@ public enum PersonRole {
         return switch (companyType) {
             case EQUIPMENT -> Set.of(OPERATOR);
             case MANPOWER -> Set.of(WORK_DIRECTOR, GUIDE, FIRE_WATCH, SIGNALER, INSPECTOR, SITE_MANAGER);
-            case BP -> Set.of();
+            // BP 회사 자체 인원 — 모든 역할 허용
+            case BP -> Set.of(OPERATOR, WORK_DIRECTOR, GUIDE, FIRE_WATCH, SIGNALER, INSPECTOR, SITE_MANAGER);
         };
     }
 }

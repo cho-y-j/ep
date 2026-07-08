@@ -1,0 +1,149 @@
+import { useEffect, useState } from 'react';
+import { api } from '../../lib/api';
+import { useAuth } from '../auth/AuthContext';
+import { PERSON_ROLE_LABEL, type PersonRole } from '../../types/person';
+
+interface OperatorItem { id: number; person_id: number; priority: number; }
+interface PersonOption { id: number; name: string; supplier_id?: number; roles?: string[]; team?: string; }
+
+interface Props {
+  equipmentId: number;
+  /** 장비공급사 id — 자기 회사 OPERATOR 인원 목록 fetch 용. */
+  supplierId: number;
+  /** true 면 편집 가능. false 면 readonly 표시. */
+  canEdit: boolean;
+}
+
+/** V36: 장비의 기본 조종원 목록 (우선순위 N명). 견적/작업계획서 자동 prefill 대상. */
+export default function EquipmentDefaultOperators({ equipmentId, supplierId, canEdit }: Props) {
+  const { user } = useAuth();
+  const [items, setItems] = useState<OperatorItem[]>([]);
+  const [candidates, setCandidates] = useState<PersonOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    load();
+    if (canEdit) {
+      api.get<any>('/api/persons?size=200').then((r) => {
+        const list = Array.isArray(r.data) ? r.data : (r.data.content ?? []);
+        // 백엔드가 이미 actor 권한별로 인원을 필터링 (BP 는 자기 회사 + 자기 사이트 ACTIVE 참여 공급사).
+        // 그 안에서 OPERATOR 역할 가진 인원만 후보로. 직종을 바꾸려면 인원 목록에서 직접 수정.
+        setCandidates(list.filter((p: PersonOption) => (p.roles ?? []).includes('OPERATOR')));
+      }).catch(() => setCandidates([]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equipmentId, supplierId, canEdit, user?.company_id]);
+
+  const load = () => {
+    setLoading(true);
+    api.get<OperatorItem[]>(`/api/equipment/${equipmentId}/default-operators`)
+      .then((r) => setItems(r.data))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  };
+
+  const save = async (newIds: number[]) => {
+    setSaving(true); setError(null);
+    try {
+      const r = await api.put<OperatorItem[]>(
+        `/api/equipment/${equipmentId}/default-operators`,
+        { person_ids: newIds }
+      );
+      setItems(r.data);
+    } catch (e: any) {
+      setError(e?.response?.data?.message || '저장 실패');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const personLabel = (pid: number) => candidates.find((c) => c.id === pid)?.name ?? `인원 #${pid}`;
+
+  const handleRemove = (pid: number) => {
+    save(items.filter((it) => it.person_id !== pid).map((it) => it.person_id));
+  };
+
+  return (
+    <section className="card p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">기본 조종원 (우선순위)</h3>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            견적 제안 / 작업계획서 작성 시 이 장비에 자동 매칭됩니다. 1순위가 가장 먼저.
+          </p>
+        </div>
+        {loading && <span className="text-xs text-slate-400">로딩...</span>}
+      </div>
+
+      {items.length === 0 ? (
+        <div className="text-xs text-slate-400 italic py-3 text-center border border-dashed border-slate-200 rounded">
+          등록된 기본 조종원이 없습니다.
+        </div>
+      ) : (
+        <ul className="space-y-1">
+          {items.map((it) => {
+            const cand = candidates.find((c) => c.id === it.person_id);
+            return (
+              <li key={it.id} className="flex items-center gap-2 px-2 py-1.5 rounded border border-slate-200 bg-slate-50">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0" />
+                <span className="text-sm text-slate-900 flex-1 truncate">{personLabel(it.person_id)}</span>
+                {cand?.team && (
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">{cand.team}</span>
+                )}
+                {canEdit && (
+                  <button type="button" onClick={() => handleRemove(it.person_id)} disabled={saving}
+                    className="text-xs px-2 py-0.5 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-30">제거</button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {canEdit && (
+        <div className="mt-3 pt-3 border-t border-slate-100">
+          <div className="text-xs font-medium text-slate-600 mb-2">
+            추가할 수 있는 인원 ({candidates.filter((c) => !items.some((it) => it.person_id === c.id)).length}명)
+          </div>
+          <ul className="space-y-1">
+            {(() => {
+              const available = candidates.filter((c) => !items.some((it) => it.person_id === c.id));
+              if (available.length === 0) {
+                return (
+                  <li className="text-xs text-slate-400 italic py-3 text-center border border-dashed border-slate-200 rounded">
+                    추가할 인원이 없습니다
+                  </li>
+                );
+              }
+              return available.map((c) => (
+                <li key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded border border-slate-200 bg-white hover:bg-slate-50">
+                  <span className="text-sm text-slate-900 flex-1 truncate">{c.name}</span>
+                  {c.roles && c.roles.length > 0 && (
+                    <span className="text-[10px] text-slate-500">
+                      {c.roles.map((r) => PERSON_ROLE_LABEL[r as PersonRole] ?? r).join(', ')}
+                    </span>
+                  )}
+                  <button type="button"
+                    onClick={() => {
+                      // optimistic update — 다음 클릭이 빨라도 최신 items 반영. 응답 받으면 setItems(r.data) 로 정확한 priority 덮어쓰기.
+                      const newIds = [...items.map((it) => it.person_id), c.id];
+                      setItems(newIds.map((pid, i) => ({ id: -1 - i, person_id: pid, priority: i + 1 })));
+                      save(newIds);
+                    }}
+                    disabled={saving}
+                    className="text-xs px-2 py-0.5 rounded bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50">
+                    + 추가
+                  </button>
+                </li>
+              ));
+            })()}
+          </ul>
+        </div>
+      )}
+
+      {error && <p className="text-xs text-rose-600 mt-2">{error}</p>}
+    </section>
+  );
+}

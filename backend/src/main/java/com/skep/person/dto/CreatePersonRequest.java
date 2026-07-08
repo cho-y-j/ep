@@ -1,8 +1,10 @@
 package com.skep.person.dto;
 
+import com.skep.person.EmploymentType;
 import com.skep.person.PersonRole;
+import com.skep.person.PersonStatus;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
@@ -13,6 +15,19 @@ public record CreatePersonRequest(
         @NotBlank @Size(max = 100) String name,
         LocalDate birth,
         @Size(max = 32) String phone,
-        @NotEmpty Set<PersonRole> roles
+        // 간소 등록 허용 — 역할은 등록 후 상세에서 추가 (null/빈 Set 허용)
+        Set<PersonRole> roles,
+        @Size(max = 64) String employeeNo,
+        @Size(max = 100) String jobTitle,
+        @Size(max = 100) String team,
+        @Size(max = 255) String qualification,
+        @Size(max = 255) String address,
+        @Email @Size(max = 255) String email,
+        LocalDate hiredAt,
+        PersonStatus status,
+        EmploymentType employmentType,
+        // 작업자 앱 로그인 계정 (선택) — 공급사가 발급.
+        @Size(max = 64) String username,
+        @Size(max = 100) String password
 ) {
 }

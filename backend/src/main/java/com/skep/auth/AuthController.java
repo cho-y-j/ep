@@ -1,5 +1,6 @@
 package com.skep.auth;
 
+import com.skep.auth.dto.ChangePasswordRequest;
 import com.skep.auth.dto.LoginRequest;
 import com.skep.auth.dto.MeResponse;
 import com.skep.auth.dto.RefreshRequest;
@@ -58,6 +59,35 @@ public class AuthController {
     public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest req) {
         auth.logout(req.refreshToken());
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordRequest req,
+                                                @CurrentUser AuthenticatedUser principal) {
+        if (principal == null) {
+            throw ApiException.unauthorized("NOT_AUTHENTICATED", "no auth principal");
+        }
+        auth.changePassword(principal.id(), req.currentPassword(), req.newPassword());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** BP/ADMIN 모바일 앱 FCM 토큰 등록 — 작업자 현장 문제알림 푸시 수신용. (작업자용 field-auth/register-token 과 별개) */
+    @PostMapping("/register-fcm-token")
+    @org.springframework.transaction.annotation.Transactional
+    public Map<String, Object> registerFcmToken(@RequestBody Map<String, String> body,
+                                                @CurrentUser AuthenticatedUser principal) {
+        if (principal == null) {
+            throw ApiException.unauthorized("NOT_AUTHENTICATED", "no auth principal");
+        }
+        String token = body.get("fcm_token");
+        if (token == null || token.isBlank()) {
+            throw ApiException.badRequest("NO_FCM_TOKEN", "fcm_token 필수");
+        }
+        User u = users.findById(principal.id())
+                .orElseThrow(() -> ApiException.unauthorized("USER_NOT_FOUND", "user not found"));
+        u.updateFcmToken(token.trim());
+        users.save(u);
+        return Map.of("ok", true);
     }
 
     @GetMapping("/me")

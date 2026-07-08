@@ -28,8 +28,27 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: ${MAX_UPLOAD_SIZE:20MB}
-      max-request-size: ${MAX_UPLOAD_SIZE:20MB}
+      max-file-size: ${MAX_UPLOAD_SIZE:50MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:50MB}
+
+  # 메일 (Naver SMTP) — Phase S-12 전자서명 워크플로우
+  mail:
+    host: ${MAIL_HOST:smtp.naver.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+            trust: ${MAIL_HOST:smtp.naver.com}
+          starttls:
+            enable: false
+          timeout: 15000
+          connectiontimeout: 15000
+          writetimeout: 15000
 
 server:
   port: ${SERVER_PORT:8080}
@@ -60,3 +79,32 @@ skep:
       email: ${SKEP_BOOTSTRAP_ADMIN_EMAIL:admin@skep.local}
       password: ${SKEP_BOOTSTRAP_ADMIN_PASSWORD:change-me-now}
       name: ${SKEP_BOOTSTRAP_ADMIN_NAME:System Admin}
+  # SMS — WideShot. ENABLED=false default. 키 들어오면 true 로 toggle.
+  sms:
+    enabled: ${SKEP_SMS_ENABLED:false}
+    sender: ${SKEP_SMS_SENDER:}
+    api-key: ${SKEP_SMS_API_KEY:}
+    api-secret: ${SKEP_SMS_API_SECRET:}
+
+# Phase S-4 단계 2: verify-api / main-api 외부 검증 호출 설정.
+# 미연결/timeout 시 graceful fail (verification_status = OCR_REVIEW_REQUIRED).
+verify:
+  enabled: ${VERIFY_ENABLED:false}    # 외부 호출 비활성화 default. 프로덕션에서만 켠다.
+  main-api:
+    url: ${VERIFY_MAIN_API_URL:http://main-api:8080}
+  inner-api:
+    url: ${VERIFY_INNER_API_URL:http://verify-api:8081}
+  api-key: ${VERIFY_API_KEY:}
+
+# Phase S-8.4: OnlyOffice 인플레이스 편집. enabled=false 일 때 status endpoint 가 disabled 응답.
+onlyoffice:
+  enabled: ${ONLYOFFICE_ENABLED:false}
+  server-url: ${ONLYOFFICE_URL:}
+  jwt-secret: ${ONLYOFFICE_JWT_SECRET:}
+  public-backend-url: ${PUBLIC_BACKEND_URL:}
+
+# S-12: 작업계획서 생성 중 임시 OnlyOffice 세션 (worksheet-editor)
+app:
+  onlyoffice:
+    jwt-secret: ${ONLYOFFICE_JWT_SECRET:change_me_jwt_must_be_at_least_32_bytes_long}
+    internal-doc-service: ${PUBLIC_BACKEND_URL:http://backend:8080}

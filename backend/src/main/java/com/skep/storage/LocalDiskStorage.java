@@ -58,6 +58,42 @@ public class LocalDiskStorage implements FileStorage {
     }
 
     @Override
+    public String storeBytes(byte[] bytes, String suggestedExtension) {
+        if (bytes == null || bytes.length == 0) {
+            throw ApiException.badRequest("EMPTY_FILE", "저장할 바이트가 비어있습니다");
+        }
+        String ext = suggestedExtension == null ? "bin" : suggestedExtension.replaceFirst("^\\.", "");
+        LocalDate today = LocalDate.now();
+        String key = String.format("%04d/%02d/%s.%s",
+                today.getYear(), today.getMonthValue(), UUID.randomUUID(), ext);
+        Path target = root.resolve(key).normalize();
+        if (!target.startsWith(root)) {
+            throw ApiException.badRequest("INVALID_KEY", "잘못된 저장 경로");
+        }
+        try {
+            Files.createDirectories(target.getParent());
+            Files.write(target, bytes);
+            return key;
+        } catch (IOException e) {
+            throw new IllegalStateException("byte write failed: " + key, e);
+        }
+    }
+
+    @Override
+    public void overwrite(String key, byte[] bytes) {
+        Path target = root.resolve(key).normalize();
+        if (!target.startsWith(root)) {
+            throw ApiException.badRequest("INVALID_KEY", "잘못된 키");
+        }
+        try {
+            Files.createDirectories(target.getParent());
+            Files.write(target, bytes);
+        } catch (IOException e) {
+            throw new IllegalStateException("file overwrite failed: " + key, e);
+        }
+    }
+
+    @Override
     public Resource load(String key) {
         Path target = root.resolve(key).normalize();
         if (!target.startsWith(root)) {

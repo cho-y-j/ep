@@ -37,7 +37,10 @@ jobs:
           cd "${REMOTE_PATH:-/home/ec2-user/skep-v2}"
           git fetch --all
           git reset --hard origin/main
-          docker-compose build backend frontend
-          docker-compose up -d backend frontend
+          # 순차 빌드 — 동시 빌드 시 1.8GB 서버 OOM/swap thrash (retalk 사례 참고)
+          docker-compose build backend
+          docker-compose build frontend
+          docker-compose up -d backend
+          docker-compose up -d frontend
           docker image prune -f
           REMOTE

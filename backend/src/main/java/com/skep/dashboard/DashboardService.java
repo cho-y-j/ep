@@ -68,7 +68,7 @@ public class DashboardService {
             personsCount = personRepo.count();
             equipmentCount = equipmentRepo.count();
             companiesCount = companyRepo.count();
-            usersPending = userRepo.findAll().stream().filter(u -> !u.isEnabled()).count();
+            usersPending = userRepo.countByEnabled(false);
             expiringCount = docRepo.countExpiringByDate(maxDate);
             unverifiedCount = docRepo.countByVerified(false);
             expiringDocs = limit(docRepo.findExpiringAll(maxDate));

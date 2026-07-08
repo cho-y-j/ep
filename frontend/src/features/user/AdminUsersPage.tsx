@@ -41,14 +41,19 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <AppShell>
+    <AppShell breadcrumb={[{ label: '사용자 관리' }]}>
       <div className="max-w-5xl mx-auto px-6 py-8">
-        <h1 className="text-2xl font-bold mb-6">사용자 관리</h1>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold">사용자 관리</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            회원가입 신청 사용자를 승인하거나, 역할/상태를 변경합니다. 행을 클릭하면 상세 패널이 열립니다.
+          </p>
+        </div>
 
         {loading ? (
           <p className="text-slate-400">불러오는 중...</p>
         ) : (
-          <UserTable users={users} companiesById={companiesById} onRowClick={setSelected} />
+          <UserTable users={users} companiesById={companiesById} onRowClick={setSelected} onChange={handleChange} />
         )}
       </div>
 

@@ -14,6 +14,8 @@ public record UserResponse(
         Long companyId,
         boolean isCompanyAdmin,
         boolean enabled,
+        boolean showInQuote,
+        Integer quoteDisplayOrder,
         LocalDateTime createdAt
 ) {
     public static UserResponse from(User u) {
@@ -26,6 +28,8 @@ public record UserResponse(
                 u.getCompanyId(),
                 u.isCompanyAdmin(),
                 u.isEnabled(),
+                u.isShowInQuote(),
+                u.getQuoteDisplayOrder(),
                 u.getCreatedAt()
         );
     }

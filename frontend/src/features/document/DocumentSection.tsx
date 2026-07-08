@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import { type DocumentResponse, type OwnerType } from '../../types/document';
-import DocumentUploadForm from './DocumentUploadForm';
+import { type DocumentResponse, type DocumentTypeResponse, type OwnerType } from '../../types/document';
+import OcrUploadDialog from './OcrUploadDialog';
 import DocumentCard from './DocumentCard';
-import DocumentRenewDialog from './DocumentRenewDialog';
+import DocumentVerifyDialog from './DocumentVerifyDialog';
+import DocumentHistoryDialog from './DocumentHistoryDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { tokenStorage } from '../../lib/tokenStorage';
 
@@ -14,9 +16,11 @@ type Props = {
   ownerId: number;
   canEdit: boolean;
   title?: string;
+  /** 이 이름의 서류타입을 목록에서 제외 (예: 내부 장비일 때 외부장비 사업자등록증 숨김) */
+  excludeTypeName?: string;
 };
 
-export default function DocumentSection({ ownerType, ownerId, canEdit, title = '서류' }: Props) {
+export default function DocumentSection({ ownerType, ownerId, canEdit, title = '서류', excludeTypeName }: Props) {
   const [docs, setDocs] = useState<DocumentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -24,6 +28,12 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
   const [pendingDelete, setPendingDelete] = useState<DocumentResponse | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [renewing, setRenewing] = useState<DocumentResponse | null>(null);
+  const [verifying, setVerifying] = useState<{ doc: DocumentResponse; type: DocumentTypeResponse } | null>(null);
+  const [historyOf, setHistoryOf] = useState<DocumentResponse | null>(null);
+  const [docTypes, setDocTypes] = useState<Map<number, DocumentTypeResponse>>(new Map());
+  // 보완요청 deep-link — ?supplementType={typeId} 로 진입하면 해당 서류 업로드 다이얼로그 자동 오픈
+  const [supplementTypeId, setSupplementTypeId] = useState<number | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
@@ -31,10 +41,18 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get<DocumentResponse[]>('/api/documents', {
-        params: { ownerType, ownerId },
-      });
+      const [res, typesRes] = await Promise.all([
+        api.get<DocumentResponse[]>('/api/documents', { params: { ownerType, ownerId } }),
+        api.get<DocumentTypeResponse[]>('/api/document-types', { params: { appliesTo: ownerType } }),
+      ]);
       setDocs(res.data);
+      // type id → DocumentTypeResponse 매핑 (verify 모달이 사용)
+      const map = new Map<number, DocumentTypeResponse>();
+      typesRes.data.forEach((t) => map.set(t.id, t));
+      if (excludeTypeName) {
+        for (const [id, t] of map) if (t.name === excludeTypeName) map.delete(id);
+      }
+      setDocTypes(map);
     } catch (err) {
       if (err instanceof AxiosError) {
         setError(err.response?.data?.message ?? '서류 목록 불러오기 실패');
@@ -49,7 +67,20 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerType, ownerId]);
+  }, [ownerType, ownerId, excludeTypeName]);
+
+  // 보완요청에서 넘어온 경우: 해당 서류 타입 업로드 다이얼로그 자동 오픈 (1회) + 쿼리 소비
+  useEffect(() => {
+    const sp = searchParams.get('supplementType');
+    if (!sp || !canEdit || docTypes.size === 0) return;
+    const tid = Number(sp);
+    if (Number.isNaN(tid) || !docTypes.has(tid)) return;
+    setSupplementTypeId(tid);
+    const next = new URLSearchParams(searchParams);
+    next.delete('supplementType');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, canEdit, docTypes]);
 
   function downloadUrl(doc: DocumentResponse): string {
     return `/api/documents/${doc.id}/file`;
@@ -97,6 +128,35 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
     }
   }
 
+  /**
+   * S-4 단계 3: 자동 검증 모달 띄우기. type.required_fields 기반으로 사용자 보충 입력 받고 POST /verify.
+   */
+  function openVerifyDialog(doc: DocumentResponse) {
+    const type = docTypes.get(doc.document_type_id);
+    if (!type) {
+      alert('서류 타입 정보를 불러오지 못했습니다');
+      return;
+    }
+    if (!type.verify_endpoint) {
+      alert(`${type.name} 는 자동 검증 대상이 아닙니다`);
+      return;
+    }
+    setVerifying({ doc, type });
+  }
+
+  async function reject(doc: DocumentResponse) {
+    const reason = prompt(`반려 사유를 입력하세요\n(${doc.document_type_name})`);
+    if (!reason || !reason.trim()) return;
+    try {
+      await api.post(`/api/documents/${doc.id}/reject`, { reason: reason.trim() });
+      await load();
+    } catch (err) {
+      if (err instanceof AxiosError) {
+        alert(err.response?.data?.message ?? '반려 실패');
+      }
+    }
+  }
+
   // 토큰 없으면 노출 안 함
   if (!tokenStorage.access) return null;
 
@@ -122,15 +182,15 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
         )}
       </div>
 
-      {uploading && canEdit && (
-        <div className="mb-3">
-          <DocumentUploadForm
-            ownerType={ownerType}
-            ownerId={ownerId}
-            onUploaded={() => { setUploading(false); void load(); }}
-            onCancel={() => setUploading(false)}
-          />
-        </div>
+      {canEdit && (
+        <OcrUploadDialog
+          open={uploading}
+          ownerType={ownerType}
+          ownerId={ownerId}
+          types={Array.from(docTypes.values())}
+          onClose={() => setUploading(false)}
+          onUploaded={() => { setUploading(false); void load(); }}
+        />
       )}
 
       {loading ? (
@@ -147,9 +207,13 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
               doc={d}
               canEdit={canEdit}
               isAdmin={isAdmin}
+              canAutoVerify={!!docTypes.get(d.document_type_id)?.verify_endpoint}
               onOpen={() => openFile(d)}
               onDelete={() => setPendingDelete(d)}
               onToggleVerify={() => setVerified(d, !d.verified)}
+              onAutoVerify={() => openVerifyDialog(d)}
+              onHistory={() => setHistoryOf(d)}
+              onReject={() => reject(d)}
               onRenew={() => setRenewing(d)}
             />
           ))}
@@ -168,16 +232,55 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
       />
 
       {renewing && (
-        <DocumentRenewDialog
+        <OcrUploadDialog
           open
           ownerType={renewing.owner_type}
           ownerId={renewing.owner_id}
-          documentTypeId={renewing.document_type_id}
-          documentTypeName={renewing.document_type_name}
-          oldDocumentId={renewing.id}
-          hasExpiry={renewing.document_type_has_expiry}
+          types={Array.from(docTypes.values())}
+          presetTypeId={renewing.document_type_id}
+          title={`${renewing.document_type_name} 재업로드`}
           onClose={() => setRenewing(null)}
-          onDone={() => { setRenewing(null); void load(); }}
+          onUploaded={() => { setRenewing(null); void load(); }}
+        />
+      )}
+
+      {supplementTypeId !== null && (
+        <OcrUploadDialog
+          open
+          ownerType={ownerType}
+          ownerId={ownerId}
+          types={Array.from(docTypes.values())}
+          presetTypeId={supplementTypeId}
+          title={`${docTypes.get(supplementTypeId)?.name ?? '서류'} 보완 업로드`}
+          onClose={() => setSupplementTypeId(null)}
+          onUploaded={() => { setSupplementTypeId(null); void load(); }}
+        />
+      )}
+
+      {verifying && (
+        <DocumentVerifyDialog
+          open
+          doc={verifying.doc}
+          type={verifying.type}
+          onClose={() => setVerifying(null)}
+          onDone={(updated) => {
+            const label = updated.verification_status === 'VERIFIED' ? '검증 완료'
+              : updated.verification_status === 'REJECTED' ? '반려'
+              : updated.verification_status === 'OCR_REVIEW_REQUIRED' ? 'OCR 검토 필요'
+              : updated.verification_status;
+            alert(`결과: ${label}`);
+            setVerifying(null);
+            void load();
+          }}
+        />
+      )}
+
+      {historyOf && (
+        <DocumentHistoryDialog
+          open
+          documentId={historyOf.id}
+          documentTypeName={historyOf.document_type_name}
+          onClose={() => setHistoryOf(null)}
         />
       )}
     </div>

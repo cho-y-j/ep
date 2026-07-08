@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AxiosError } from 'axios';
+import { Link } from 'react-router-dom';
 import SidePanel from '../../components/SidePanel';
 import { api } from '../../lib/api';
 import { COMPANY_TYPE_LABEL, type CompanyResponse } from '../../types/auth';
@@ -92,7 +93,46 @@ export default function CompanyDetailPanel({ company, onClose, onChange }: Props
           <Row label="등록일" value={new Date(company.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} />
         </dl>
       )}
+
+      <CompanyShortcuts companyId={company.id} companyType={company.type} companyName={company.name} />
     </SidePanel>
+  );
+}
+
+/** 회사 컨텍스트로 기존 페이지를 여는 바로가기 — 기존 디자인 그대로 활용. */
+function CompanyShortcuts({ companyId, companyType, companyName }:
+  { companyId: number; companyType: 'BP' | 'EQUIPMENT' | 'MANPOWER'; companyName: string }) {
+  const showEquipment = companyType === 'EQUIPMENT';
+  const showPersons = true; // 모든 회사 type 가 직속 인원 가질 수 있음
+  return (
+    <div className="mt-6 pt-5 border-t border-slate-200 space-y-2">
+      <div className="text-xs text-slate-500 mb-2">
+        <strong className="text-slate-700">{companyName}</strong> 화면 바로가기
+      </div>
+      {showEquipment && (
+        <Link to={`/equipment?supplierId=${companyId}`}
+              className="block px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm">
+          <span className="font-medium text-slate-900">이 공급사의 장비</span>
+          <span className="block text-xs text-slate-500">자원 목록 페이지를 이 회사로 필터해서 봅니다</span>
+        </Link>
+      )}
+      {showPersons && (
+        <Link to={`/persons?supplierId=${companyId}`}
+              className="block px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm">
+          <span className="font-medium text-slate-900">
+            {companyType === 'BP' ? '이 BP의 직속 인원' : '이 공급사의 인원'}
+          </span>
+          <span className="block text-xs text-slate-500">인원 목록 페이지를 이 회사로 필터해서 봅니다</span>
+        </Link>
+      )}
+      {companyType === 'BP' && (
+        <Link to={`/sites?bpCompanyId=${companyId}`}
+              className="block px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm">
+          <span className="font-medium text-slate-900">이 BP의 현장</span>
+          <span className="block text-xs text-slate-500">현장 목록을 이 BP로 필터해서 봅니다</span>
+        </Link>
+      )}
+    </div>
   );
 }
 

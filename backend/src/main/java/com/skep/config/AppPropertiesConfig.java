@@ -7,7 +7,8 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties({
         JwtProperties.class,
         CorsProperties.class,
-        BootstrapAdminProperties.class
+        BootstrapAdminProperties.class,
+        com.skep.onlyoffice.OnlyOfficeProperties.class,
 })
 public class AppPropertiesConfig {
 }

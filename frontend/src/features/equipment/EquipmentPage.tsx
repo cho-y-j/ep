@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import EquipmentTable from './EquipmentTable';
 import EquipmentCreateForm from './EquipmentCreateForm';
 import EquipmentStatCards from './EquipmentStatCards';
@@ -13,6 +14,11 @@ import type { CompanyResponse } from '../../types/auth';
 export default function EquipmentPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [search] = useSearchParams();
+  // ADMIN 컨텍스트 필터: 회사 사이드 패널 "이 공급사의 장비" 링크에서 진입한 경우.
+  const supplierFilterId = search.get('supplierId') ? Number(search.get('supplierId')) : null;
+  // BP nav 분리: scope=own (BP 직속) / scope=external (외부 공급사)
+  const scope = (search.get('scope') ?? '') as '' | 'own' | 'external';
   const [equipment, setEquipment] = useState<EquipmentResponse[]>([]);
   const [companies, setCompanies] = useState<CompanyResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +27,8 @@ export default function EquipmentPage() {
   const [creating, setCreating] = useState(false);
 
   const isAdmin = user?.role === 'ADMIN';
-  const canEdit = isAdmin || user?.role === 'EQUIPMENT_SUPPLIER';
+  // #5: BP 도 자기 회사 직속 장비 등록 가능 (BP 보유 차량 등).
+  const canEdit = isAdmin || user?.role === 'EQUIPMENT_SUPPLIER' || user?.role === 'BP';
 
   const equipmentSuppliers = useMemo(
     () => companies.filter((c) => c.type === 'EQUIPMENT'),
@@ -61,7 +68,31 @@ export default function EquipmentPage() {
     navigate(`/equipment/${e.id}`);
   }
 
-  const filtered = equipment.filter((e) => {
+  const isBp = user?.role === 'BP';
+  const myCompanyId = user?.company_id ?? null;
+  // BP nav scope 적용 + URL 탭으로 공급사 1개 선택 (?focusSupplierId=...)
+  const focusSupplierId = search.get('focusSupplierId') ? Number(search.get('focusSupplierId')) : null;
+
+  const scopedAll = equipment.filter((e) => {
+    if (supplierFilterId != null && e.supplier_id !== supplierFilterId) return false;
+    if (isBp && scope === 'own' && myCompanyId != null && e.supplier_id !== myCompanyId) return false;
+    if (isBp && scope === 'external' && myCompanyId != null && e.supplier_id === myCompanyId) return false;
+    return true;
+  });
+
+  // 외부 보기일 때 공급사 탭 후보
+  const externalSuppliers = useMemo(() => {
+    if (!isBp || scope !== 'external') return [];
+    const map = new Map<number, string>();
+    for (const e of equipment) {
+      if (myCompanyId != null && e.supplier_id === myCompanyId) continue;
+      if (!map.has(e.supplier_id)) map.set(e.supplier_id, e.supplier_name ?? `공급사 #${e.supplier_id}`);
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [equipment, isBp, scope, myCompanyId]);
+
+  const filtered = scopedAll.filter((e) => {
+    if (focusSupplierId != null && e.supplier_id !== focusSupplierId) return false;
     if (!searchInput) return true;
     const q = searchInput.toLowerCase();
     return (
@@ -71,25 +102,47 @@ export default function EquipmentPage() {
       (e.manufacturer ?? '').toLowerCase().includes(q)
     );
   });
+  const supplierFilterName = supplierFilterId != null
+    ? companiesById.get(supplierFilterId)?.name : null;
+
+  const headerTitle = isBp
+    ? (scope === 'external' ? '공급사 장비' : scope === 'own' ? '내 장비' : '배치 장비')
+    : '장비 목록';
+  const headerSub = isBp
+    ? (scope === 'external'
+        ? '내 현장에 ACTIVE 참여 중인 공급사 장비입니다.'
+        : scope === 'own'
+          ? '우리 회사 직속 장비입니다.'
+          : '내 현장에 배치된 장비를 확인합니다.')
+    : '내 회사 장비 정보를 확인하고 관리합니다.';
 
   return (
-    <AppShell
-      breadcrumb={[{ label: '장비 관리', to: '/equipment' }, { label: '장비 목록' }]}
-      searchPlaceholder="장비명, 장비코드로 검색"
-    >
-      <div className="space-y-6">
-        {/* 헤더 */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">장비 목록</h1>
-            <p className="text-sm text-slate-500 mt-1">현장에 등록된 모든 장비 정보를 확인하고 관리할 수 있습니다.</p>
+    <AppShell breadcrumb={[{ label: '장비 관리', to: '/equipment' }, { label: '장비 목록' }]}>
+      <div className="space-y-4">
+        {supplierFilterId != null && (
+          <div className="flex items-center justify-between px-3 py-2 rounded-md bg-indigo-50 border border-indigo-200 text-xs">
+            <span className="text-indigo-800">
+              <strong>{supplierFilterName ?? `회사 #${supplierFilterId}`}</strong> 의 장비만 보는 중
+            </span>
+            <div className="flex items-center gap-3">
+              <Link to={`/persons?supplierId=${supplierFilterId}`}
+                    className="text-indigo-700 hover:text-indigo-900 underline">
+                이 회사의 인원 보기 →
+              </Link>
+              <Link to="/equipment" className="text-slate-600 hover:text-slate-900 underline">필터 해제</Link>
+            </div>
           </div>
-          {canEdit && !creating && (
-            <button onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700">
-              <span>+</span> 장비 등록
+        )}
+
+        <PageHeader
+          title={headerTitle}
+          subtitle={headerSub}
+          actions={canEdit && !creating ? (
+            <button onClick={() => setCreating(true)} className="btn-primary">
+              + 장비 등록
             </button>
-          )}
-        </div>
+          ) : null}
+        />
 
         {creating && canEdit && (
           <EquipmentCreateForm
@@ -100,96 +153,76 @@ export default function EquipmentPage() {
           />
         )}
 
-        {/* 검색 + 필터 행 */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[240px]">
-              <input
-                type="text"
-                placeholder="장비명, 장비코드로 검색"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:border-brand-300 outline-none text-sm"
-              />
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
-            </div>
-            <FilterSelect
-              value={filterCategory}
-              onChange={(v) => setFilterCategory(v as EquipmentCategory | '')}
-              placeholder="장비 종류 전체"
-              options={EQUIPMENT_CATEGORIES.map((c) => ({ value: c, label: EQUIPMENT_CATEGORY_LABEL[c] }))}
-            />
-            <FilterSelect value="" onChange={() => {}} placeholder="상태 전체" options={[
-              { value: 'RUNNING', label: '가동 중' },
-              { value: 'NEED_INSPECT', label: '점검 필요' },
-              { value: 'BROKEN', label: '고장' },
-              { value: 'IDLE', label: '미사용' },
-            ]} />
-            <FilterSelect value="" onChange={() => {}} placeholder="현장 전체" options={[]} />
-            <FilterSelect value="" onChange={() => {}} placeholder="가동률 전체" options={[
-              { value: 'high', label: '70% 이상' },
-              { value: 'mid', label: '40-70%' },
-              { value: 'low', label: '40% 미만' },
-            ]} />
-            <button type="button" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 hover:bg-slate-50">
-              <span>⛁</span> 더보기
+        {isBp && scope === 'external' && externalSuppliers.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/equipment?scope=external')}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                focusSupplierId == null
+                  ? 'bg-brand-600 text-white border-brand-600'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              전체 ({scopedAll.length})
             </button>
+            {externalSuppliers.map((s) => {
+              const count = scopedAll.filter((e) => e.supplier_id === s.id).length;
+              const active = focusSupplierId === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => navigate(`/equipment?scope=external&focusSupplierId=${s.id}`)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                    active
+                      ? 'bg-amber-500 text-white border-amber-500'
+                      : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'
+                  }`}
+                >
+                  {s.name} ({count})
+                </button>
+              );
+            })}
           </div>
-        </div>
+        )}
 
-        {/* 통계 카드 */}
+        <FilterBar
+          search={{
+            value: searchInput,
+            placeholder: '장비명, 차량번호, 모델로 검색',
+            onChange: setSearchInput,
+          }}
+        >
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value as EquipmentCategory | '')}
+            className="input max-w-[160px]"
+          >
+            <option value="">장비 종류 전체</option>
+            {EQUIPMENT_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{EQUIPMENT_CATEGORY_LABEL[c]}</option>
+            ))}
+          </select>
+        </FilterBar>
+
         <EquipmentStatCards equipment={equipment} />
 
-        {/* 테이블 */}
         {loading ? (
-          <p className="text-slate-400">불러오는 중...</p>
+          <div className="card text-center text-sm text-slate-400 py-10">불러오는 중...</div>
         ) : (
           <EquipmentTable
             equipment={filtered}
             companiesById={companiesById}
-            showSupplierColumn={isAdmin}
+            showSupplierColumn={isAdmin || (isBp && scope === 'external')}
             onRowClick={(e) => navigate(`/equipment/${e.id}`)}
           />
         )}
 
-        {/* 페이지네이션 (간단 버전) */}
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500">전체 {filtered.length}대</span>
-          <div className="flex items-center gap-1">
-            <button type="button" className="px-2 py-1 rounded text-slate-400 hover:bg-slate-100">‹</button>
-            <button type="button" className="min-w-[28px] px-2 py-1 rounded bg-brand-600 text-white">1</button>
-            <button type="button" className="px-2 py-1 rounded text-slate-400 hover:bg-slate-100">›</button>
-          </div>
-          <select className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm">
-            <option>10개씩 보기</option>
-            <option>20개씩 보기</option>
-            <option>50개씩 보기</option>
-          </select>
-        </div>
+        <div className="text-xs text-slate-500">전체 {filtered.length}대</div>
 
-        {/* 하단 위젯 */}
         <EquipmentBottomWidgets equipment={equipment} />
       </div>
     </AppShell>
-  );
-}
-
-function FilterSelect({
-  value, onChange, placeholder, options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 min-w-[140px]"
-    >
-      <option value="">{placeholder}</option>
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
   );
 }

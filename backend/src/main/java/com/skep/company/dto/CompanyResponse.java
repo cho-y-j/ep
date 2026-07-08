@@ -10,9 +10,18 @@ public record CompanyResponse(
         String name,
         String businessNumber,
         CompanyType type,
+        String businessAddress,
+        String businessCategory,
+        String businessSubcategory,
+        String ceoName,
+        String phone,
+        String fax,
         LocalDateTime createdAt
 ) {
     public static CompanyResponse from(Company c) {
-        return new CompanyResponse(c.getId(), c.getName(), c.getBusinessNumber(), c.getType(), c.getCreatedAt());
+        return new CompanyResponse(c.getId(), c.getName(), c.getBusinessNumber(), c.getType(),
+                c.getBusinessAddress(), c.getBusinessCategory(), c.getBusinessSubcategory(),
+                c.getCeoName(), c.getPhone(), c.getFax(),
+                c.getCreatedAt());
     }
 }

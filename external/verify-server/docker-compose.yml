@@ -1,0 +1,41 @@
+services:
+  main-api:
+    build:
+      context: ./main-api
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8080"
+    container_name: main-api
+    environment:
+      - VERIFY_API_URL=http://verify-api:8081
+      - VERIFY_API_KEY=${VERIFY_API_KEY}
+    depends_on:
+      - verify-api
+    networks:
+      - app-network
+
+  verify-api:
+    build:
+      context: ./verify-api
+      dockerfile: Dockerfile
+    expose:
+      - "8081"
+    container_name: verify-api
+    environment:
+      - VERIFY_API_KEY=${VERIFY_API_KEY}
+      - GOOGLE_VISION_API_KEY=${GOOGLE_VISION_API_KEY}
+      - PUBLIC_API_BASE_URL=https://apis.data.go.kr/B553881/lcnsCheckService
+      - PUBLIC_API_SERVICE_KEY=${PUBLIC_API_SERVICE_KEY}
+      - RIMS_API_URL=${RIMS_API_URL}
+      - RIMS_AUTH_KEY=${RIMS_AUTH_KEY}
+      - RIMS_SECRET_KEY=${RIMS_SECRET_KEY}
+      - NTS_API_BASE_URL=https://api.odcloud.kr/api/nts-businessman/v1
+      - NTS_API_SERVICE_KEY=${NTS_API_SERVICE_KEY}
+      - TS_CAR_API_KEY=${TS_CAR_API_KEY}
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    name: app-network
+    driver: bridge

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @Transactional
@@ -35,11 +36,12 @@ public class UserService {
     }
 
     public User create(CreateUserRequest req) {
-        if (users.existsByEmail(req.email())) {
+        String email = normalizeEmail(req.email());
+        if (users.existsByEmail(email)) {
             throw ApiException.conflict("EMAIL_EXISTS", "email already in use");
         }
         User user = User.builder()
-                .email(req.email())
+                .email(email)
                 .password(encoder.encode(req.password()))
                 .name(req.name())
                 .phone(req.phone())
@@ -51,9 +53,24 @@ public class UserService {
         return users.save(user);
     }
 
+    private static String normalizeEmail(String email) {
+        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * ADMIN 이 가입 신청을 승인할 때 호출. enabled=true 로 전이.
+     * 회사에 master 가 한 명도 없으면 이 사용자를 자동으로 master 로 승격 (운영 흐름 유지).
+     * 가입 시점에 자동 부여하지 않는 이유 — 임의의 사업자번호로 부적격자가 master 가 되는 race 차단.
+     */
     public User enable(Long id) {
         User u = get(id);
         u.enable();
+        if (u.getCompanyId() != null && !u.isCompanyAdmin()) {
+            long currentMasters = users.countByCompanyIdAndIsCompanyAdminTrue(u.getCompanyId());
+            if (currentMasters == 0) {
+                u.setIsCompanyAdmin(true);
+            }
+        }
         return u;
     }
 
@@ -63,9 +80,7 @@ public class UserService {
             throw ApiException.badRequest("CANNOT_DISABLE_SELF", "본인 계정은 비활성화할 수 없습니다");
         }
         if (u.getRole() == Role.ADMIN) {
-            long activeAdmins = users.findAll().stream()
-                    .filter(other -> other.getRole() == Role.ADMIN && other.isEnabled() && !other.getId().equals(u.getId()))
-                    .count();
+            long activeAdmins = users.countByRoleAndEnabledAndIdNot(Role.ADMIN, true, u.getId());
             if (activeAdmins == 0) {
                 throw ApiException.badRequest("LAST_ADMIN", "마지막 활성 관리자는 비활성화할 수 없습니다");
             }

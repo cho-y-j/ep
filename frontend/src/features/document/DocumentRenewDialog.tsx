@@ -16,11 +16,15 @@ type Props = {
 };
 
 /**
- * 만료 임박 서류 재업로드 (renewal). 새 파일 + 새 만료일 업로드 후 기존 doc 삭제.
+ * 만료 임박 서류 재업로드 (renewal).
+ *
+ * V14 부터: 백엔드가 같은 (owner_type, owner_id, document_type_id) 의 가장 최신 문서를
+ * 자동으로 `previous_document_id` 로 묶는다. 옛 문서는 보존되고 list 에서는 chain head 만 노출.
+ * → 프론트는 옛 doc 삭제를 호출하지 않는다 (이력 추적성 유지).
  */
 export default function DocumentRenewDialog({
   open, ownerType, ownerId, documentTypeId, documentTypeName,
-  oldDocumentId, hasExpiry = true, onClose, onDone,
+  hasExpiry = true, onClose, onDone,
 }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [expiry, setExpiry] = useState('');
@@ -51,14 +55,7 @@ export default function DocumentRenewDialog({
       };
       if (expiry) params.expiryDate = expiry;
       await api.post('/api/documents', formData, { params });
-      // 옛 doc 삭제 (renewal)
-      if (oldDocumentId) {
-        try {
-          await api.delete(`/api/documents/${oldDocumentId}`);
-        } catch {
-          // 새 doc는 이미 등록됐으므로 옛것 삭제 실패는 경고만
-        }
-      }
+      // V14: 백엔드가 자동으로 previous_document_id 묶음. 옛 doc 삭제 불필요.
       onDone();
     } catch (err) {
       if (err instanceof AxiosError) {
@@ -84,6 +81,8 @@ export default function DocumentRenewDialog({
           <span className="text-sm font-medium text-slate-700">새 파일</span>
           <input
             type="file"
+            accept="image/*,application/pdf"
+            capture="environment"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             required
             className="block w-full mt-1 text-sm text-slate-700 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-brand-600 file:text-white file:cursor-pointer hover:file:bg-brand-700"
@@ -103,9 +102,9 @@ export default function DocumentRenewDialog({
           </label>
         )}
 
-        {oldDocumentId && (
-          <p className="text-xs text-slate-500">기존 서류는 새 업로드 후 자동 삭제됩니다.</p>
-        )}
+        <p className="text-xs text-slate-500">
+          기존 서류는 보존되며 갱신 이력으로 연결됩니다 (previous_document_id).
+        </p>
 
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>

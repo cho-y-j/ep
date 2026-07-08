@@ -9,6 +9,9 @@ public record UpdateEquipmentRequest(
         EquipmentCategory category,
         @Size(max = 100) String model,
         @Size(max = 100) String manufacturer,
-        @Min(1900) Integer year
+        @Min(1900) Integer year,
+        Boolean isExternal,
+        @Size(max = 100) String vehicleOwnerName,
+        @Size(max = 32) String vehicleOwnerBusinessNo
 ) {
 }

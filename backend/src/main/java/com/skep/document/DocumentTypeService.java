@@ -41,6 +41,14 @@ public class DocumentTypeService {
                 .requiresVerification(req.requiresVerification())
                 .sortOrder(req.sortOrder())
                 .active(true)
+                .required(Boolean.TRUE.equals(req.required()))
+                .blocksAssignment(Boolean.TRUE.equals(req.blocksAssignment()))
+                .defaultValidMonths(req.defaultValidMonths())
+                .ocrEnabled(Boolean.TRUE.equals(req.ocrEnabled()))
+                .ocrExtractType(req.ocrExtractType())
+                .ocrExpiryFieldKey(req.ocrExpiryFieldKey())
+                .verifyEndpoint(req.verifyEndpoint())
+                .requiredFields(req.requiredFields() != null ? req.requiredFields() : "[]")
                 .build());
     }
 

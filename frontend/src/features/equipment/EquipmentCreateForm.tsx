@@ -18,6 +18,8 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
   const [values, setValues] = useState<EquipmentFieldValues>(EMPTY_EQUIPMENT_FIELDS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Phase4: 외부 장비 기사(조종원) 로그인 계정 — 외부일 때만, 셋 다 채우면 등록과 동시에 발급.
+  const [operator, setOperator] = useState({ name: '', phone: '', username: '', password: '' });
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -36,12 +38,20 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
         model: values.model || null,
         manufacturer: values.manufacturer || null,
         year: values.year ? Number(values.year) : null,
+        is_external: values.isExternal,
+        vehicle_owner_name: values.isExternal ? (values.vehicleOwnerName || null) : null,
+        vehicle_owner_business_no: values.isExternal ? (values.vehicleOwnerBusinessNo || null) : null,
+        operator_name: values.isExternal ? (operator.name.trim() || null) : null,
+        operator_phone: values.isExternal ? (operator.phone.trim() || null) : null,
+        operator_username: values.isExternal ? (operator.username.trim() || null) : null,
+        operator_password: values.isExternal ? (operator.password || null) : null,
       };
       if (values.supplierId) {
         body.supplier_id = values.supplierId;
       }
       const res = await api.post<EquipmentResponse>('/api/equipment', body);
       setValues(EMPTY_EQUIPMENT_FIELDS);
+      setOperator({ name: '', phone: '', username: '', password: '' });
       onCreated(res.data);
     } catch (err) {
       if (err instanceof AxiosError) {
@@ -63,6 +73,29 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
         equipmentSuppliers={equipmentSuppliers}
         required
       />
+      {values.isExternal && (
+        <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+          <p className="text-xs text-blue-700">외부 장비 <strong>기사(조종원) 로그인 계정</strong> (선택) — 이름·아이디·비밀번호를 모두 채우면 등록과 동시에 계정이 발급되어 앱에서 로그인할 수 있습니다.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">기사 이름</span>
+              <input type="text" value={operator.name} onChange={(e) => setOperator({ ...operator, name: e.target.value })} placeholder="홍길동" className="input mt-1" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">기사 전화</span>
+              <input type="text" value={operator.phone} onChange={(e) => setOperator({ ...operator, phone: e.target.value })} placeholder="010-0000-0000" className="input mt-1" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">로그인 아이디</span>
+              <input type="text" autoComplete="off" value={operator.username} onChange={(e) => setOperator({ ...operator, username: e.target.value })} placeholder="아이디" className="input mt-1" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">비밀번호</span>
+              <input type="password" autoComplete="new-password" value={operator.password} onChange={(e) => setOperator({ ...operator, password: e.target.value })} placeholder="비밀번호" className="input mt-1" />
+            </label>
+          </div>
+        </div>
+      )}
       {error && (
         <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
       )}

@@ -25,21 +25,25 @@ export default function EquipmentBottomWidgets({ equipment }: Props) {
         ) : (
           <ul className="divide-y divide-slate-100">
             {expiringSoon.map((e) => (
-              <li key={e.id} className="py-3 flex items-center gap-3">
-                <Avatar
-                  fetchUrl={e.has_photo ? `/api/equipment/${e.id}/photo` : undefined}
-                  fallbackText={e.vehicle_no || ''}
-                  size={40}
-                  rounded="lg"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate">
-                    {EQUIPMENT_CATEGORY_LABEL[e.category]} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
+              <li key={e.id}>
+                <Link to={`/equipment/${e.id}`} className="py-3 flex items-center gap-3 hover:bg-slate-50 -mx-2 px-2 rounded-lg transition-colors">
+                  <Avatar
+                    fetchUrl={e.has_photo ? `/api/equipment/${e.id}/photo` : undefined}
+                    fallbackText={e.vehicle_no || ''}
+                    size={40}
+                    rounded="lg"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold truncate">
+                      {EQUIPMENT_CATEGORY_LABEL[e.category]} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {e.expiring_count > 0
+                        ? <>위험 서류 <span className="text-rose-600 font-semibold">{e.expiring_count}건</span></>
+                        : (e.insurance_expiry ? <>보험 만료 <span className="text-amber-600 font-semibold">{e.insurance_expiry}</span></> : '-')}
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    다음 점검일 <span className="text-rose-600 font-semibold">2026.05.15 (D-5)</span>
-                  </div>
-                </div>
+                </Link>
               </li>
             ))}
           </ul>
@@ -52,21 +56,24 @@ export default function EquipmentBottomWidgets({ equipment }: Props) {
         ) : (
           <ul className="divide-y divide-slate-100">
             {broken.map((e) => (
-              <li key={e.id} className="py-3 flex items-center gap-3">
-                <Avatar
-                  fetchUrl={e.has_photo ? `/api/equipment/${e.id}/photo` : undefined}
-                  fallbackText={e.vehicle_no || ''}
-                  size={40}
-                  rounded="lg"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate">
-                    {EQUIPMENT_CATEGORY_LABEL[e.category]} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
+              <li key={e.id}>
+                <Link to={`/equipment/${e.id}`} className="py-3 flex items-center gap-3 hover:bg-slate-50 -mx-2 px-2 rounded-lg transition-colors">
+                  <Avatar
+                    fetchUrl={e.has_photo ? `/api/equipment/${e.id}/photo` : undefined}
+                    fallbackText={e.vehicle_no || ''}
+                    size={40}
+                    rounded="lg"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold truncate">
+                      {EQUIPMENT_CATEGORY_LABEL[e.category]} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      가동률 <span className="text-slate-700 font-semibold">{e.utilization_pct ?? 0}%</span>
+                      {e.usage_hours != null && <> · 사용 {e.usage_hours.toLocaleString()}시간</>}
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    고장일 <span className="text-rose-600 font-semibold">2026.05.01 (3일 경과)</span>
-                  </div>
-                </div>
+                </Link>
               </li>
             ))}
           </ul>
@@ -107,9 +114,8 @@ export default function EquipmentBottomWidgets({ equipment }: Props) {
 function Widget({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between mb-2">
+      <div className="mb-2">
         <h3 className="text-base font-bold">{title}</h3>
-        <button type="button" className="text-xs text-slate-500 hover:text-slate-900">더보기 ›</button>
       </div>
       {children}
     </div>

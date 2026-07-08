@@ -2,6 +2,8 @@ package com.skep.document.dto;
 
 import com.skep.document.Document;
 import com.skep.document.OwnerType;
+import com.skep.document.PiiMasker;
+import com.skep.document.VerificationStatus;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -18,6 +20,15 @@ public record DocumentResponse(
         String contentType,
         LocalDate expiryDate,
         boolean verified,
+        // V14 검증 필드
+        VerificationStatus verificationStatus,
+        Long verifiedBy,
+        LocalDateTime verifiedAt,
+        String rejectedReason,
+        Long previousDocumentId,
+        String verificationResult,    // JSON 문자열
+        String extractedData,         // JSON 문자열
+        // ---
         LocalDateTime createdAt
 ) {
     public static DocumentResponse from(Document d, String typeName, boolean hasExpiry) {
@@ -33,6 +44,13 @@ public record DocumentResponse(
                 d.getContentType(),
                 d.getExpiryDate(),
                 d.isVerified(),
+                d.getVerificationStatus(),
+                d.getVerifiedBy(),
+                d.getVerifiedAt(),
+                d.getRejectedReason(),
+                d.getPreviousDocumentId(),
+                PiiMasker.mask(d.getVerificationResult()),
+                PiiMasker.mask(d.getExtractedData()),
                 d.getCreatedAt()
         );
     }

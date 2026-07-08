@@ -108,6 +108,8 @@ export default function DocumentUploadForm({ ownerType, ownerId, onUploaded, onC
         <span className="text-xs font-medium text-slate-600">파일</span>
         <input
           type="file"
+          accept="image/*,application/pdf"
+          capture="environment"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           required
           className="block w-full mt-1 text-sm text-slate-700 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-brand-600 file:text-white file:cursor-pointer hover:file:bg-brand-700"

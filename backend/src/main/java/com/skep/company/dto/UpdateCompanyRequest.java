@@ -7,3 +7,5 @@ public record UpdateCompanyRequest(
         @NotBlank @Size(max = 255) String name
 ) {
 }
+
+

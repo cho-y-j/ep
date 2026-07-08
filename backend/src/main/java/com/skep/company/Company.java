@@ -28,6 +28,24 @@ public class Company {
     @Column(nullable = false, length = 32)
     private CompanyType type;
 
+    @Column(name = "business_address", length = 255)
+    private String businessAddress;
+
+    @Column(name = "business_category", length = 100)
+    private String businessCategory;
+
+    @Column(name = "business_subcategory", length = 200)
+    private String businessSubcategory;
+
+    @Column(name = "ceo_name", length = 100)
+    private String ceoName;
+
+    @Column(length = 32)
+    private String phone;
+
+    @Column(length = 32)
+    private String fax;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -54,5 +72,15 @@ public class Company {
 
     public void rename(String newName) {
         this.name = newName;
+    }
+
+    public void updateProfile(String businessAddress, String businessCategory, String businessSubcategory,
+                              String ceoName, String phone, String fax) {
+        this.businessAddress = businessAddress;
+        this.businessCategory = businessCategory;
+        this.businessSubcategory = businessSubcategory;
+        this.ceoName = ceoName;
+        this.phone = phone;
+        this.fax = fax;
     }
 }

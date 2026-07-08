@@ -17,6 +17,8 @@ type Props = {
 
 export default function PersonCreateForm({ suppliers, selfSupplierType, requireSupplierId, onCreated, onCancel }: Props) {
   const [values, setValues] = useState<PersonFieldValues>(EMPTY_PERSON_FIELDS);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,10 +30,7 @@ export default function PersonCreateForm({ suppliers, selfSupplierType, requireS
       setError('소속 공급사를 선택하세요');
       return;
     }
-    if (values.roles.length === 0) {
-      setError('역할을 1개 이상 선택하세요');
-      return;
-    }
+    // 간소 등록 — 역할은 등록 후 상세에서 추가 (필수 아님).
 
     setBusy(true);
     try {
@@ -42,6 +41,7 @@ export default function PersonCreateForm({ suppliers, selfSupplierType, requireS
         roles: values.roles,
       };
       if (values.supplierId) body.supplier_id = values.supplierId;
+      if (username.trim()) { body.username = username.trim(); body.password = password; }
       const res = await api.post<PersonResponse>('/api/persons', body);
       setValues(EMPTY_PERSON_FIELDS);
       onCreated(res.data);
@@ -58,14 +58,25 @@ export default function PersonCreateForm({ suppliers, selfSupplierType, requireS
 
   return (
     <form onSubmit={onSubmit} className="card mb-6 space-y-4">
-      <h2 className="text-base font-bold">새 인원 등록</h2>
+      <div>
+        <h2 className="text-base font-bold">새 인원 등록</h2>
+        <p className="text-xs text-slate-500 mt-0.5">이름·전화만 입력하면 됩니다. 역할·생년월일·서류는 등록 후 상세에서 추가하세요.</p>
+      </div>
       <PersonFields
         values={values}
         onChange={setValues}
         suppliers={suppliers}
         supplierType={selfSupplierType}
         required
+        minimal
       />
+      <div className="border-t border-slate-100 pt-3">
+        <p className="text-sm font-semibold text-slate-700">앱 로그인 계정 <span className="font-normal text-slate-400">(선택 — 작업자 앱 아이디/비번)</span></p>
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="아이디" className="input" autoComplete="off" />
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="비밀번호" className="input" autoComplete="new-password" />
+        </div>
+      </div>
       {error && (
         <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
       )}

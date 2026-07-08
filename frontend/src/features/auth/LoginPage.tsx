@@ -6,17 +6,11 @@ import { AxiosError } from 'axios';
 type Location = { from?: string };
 
 const TEST_ACCOUNTS = [
-  { label: 'ADMIN', email: 'admin@skep.local', password: 'change-me-now', color: 'bg-slate-900 hover:bg-slate-800' },
-  { label: 'BP', email: 'bp1@example.com', password: 'testpass123', color: 'bg-brand-600 hover:bg-brand-700' },
-  { label: '장비공급사', email: 'equipment1@example.com', password: 'testpass123', color: 'bg-emerald-600 hover:bg-emerald-700' },
-  { label: '인력공급사', email: 'manpower1@example.com', password: 'testpass123', color: 'bg-amber-600 hover:bg-amber-700' },
+  { label: 'ADMIN', email: 'admin@skep.local', password: 'test1234', color: 'bg-slate-900 hover:bg-slate-800' },
+  { label: 'BP', email: 'bp1@example.com', password: 'test1234', color: 'bg-brand-600 hover:bg-brand-700' },
+  { label: '장비공급사', email: 'equipment1@example.com', password: 'test1234', color: 'bg-emerald-600 hover:bg-emerald-700' },
+  { label: '인력공급사', email: 'manpower1@example.com', password: 'test1234', color: 'bg-amber-600 hover:bg-amber-700' },
 ];
-
-function isLocalEnv(): boolean {
-  if (typeof window === 'undefined') return false;
-  const host = window.location.hostname;
-  return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
-}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -103,24 +97,22 @@ export default function LoginPage() {
           </Link>
         </p>
 
-        {isLocalEnv() && (
-          <div className="pt-4 border-t border-dashed border-slate-300">
-            <p className="text-xs text-slate-400 mb-2">테스트 빠른 로그인 (개발 환경 전용)</p>
-            <div className="grid grid-cols-2 gap-2">
-              {TEST_ACCOUNTS.map((acc) => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  disabled={submitting}
-                  onClick={() => doLogin(acc.email, acc.password)}
-                  className={`py-2 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 ${acc.color}`}
-                >
-                  {acc.label}
-                </button>
-              ))}
-            </div>
+        <div className="pt-4 border-t border-dashed border-slate-300">
+          <p className="text-xs text-slate-400 mb-2">테스트 빠른 로그인 (시연용)</p>
+          <div className="grid grid-cols-2 gap-2">
+            {TEST_ACCOUNTS.map((acc) => (
+              <button
+                key={acc.email}
+                type="button"
+                disabled={submitting}
+                onClick={() => doLogin(acc.email, acc.password)}
+                className={`py-2 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 ${acc.color}`}
+              >
+                {acc.label}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
       </form>
     </main>
   );

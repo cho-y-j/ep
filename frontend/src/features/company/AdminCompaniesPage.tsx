@@ -1,16 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
-import type { CompanyResponse } from '../../types/auth';
+import type { CompanyResponse, CompanyType } from '../../types/auth';
 import AppShell from '../../components/layout/AppShell';
 import CompanyDetailPanel from './CompanyDetailPanel';
 import CompanyTable from './CompanyTable';
 import CompanyCreateForm from './CompanyCreateForm';
 
-export default function AdminCompaniesPage() {
+interface Props {
+  /** undefined = 전체. ['BP'] = BP 만. ['EQUIPMENT','MANPOWER'] = 공급사. */
+  filterTypes?: CompanyType[];
+  title?: string;
+  breadcrumbLabel?: string;
+  description?: string;
+}
+
+export default function AdminCompaniesPage({
+  filterTypes,
+  title = '회사 관리',
+  breadcrumbLabel,
+  description,
+}: Props) {
+  const navigate = useNavigate();
   const [companies, setCompanies] = useState<CompanyResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<CompanyResponse | null>(null);
   const [creating, setCreating] = useState(false);
+
+  /** 행 클릭 시 회사 상세 풀페이지로 — 탭(정보/장비/인원/서류). */
+  function handleRowClick(c: CompanyResponse) {
+    navigate(`/admin/companies/${c.id}`);
+  }
 
   async function load() {
     setLoading(true);
@@ -34,15 +54,21 @@ export default function AdminCompaniesPage() {
     setSelected(updated);
   }
 
+  const visible = useMemo(() => {
+    if (!filterTypes || filterTypes.length === 0) return companies;
+    return companies.filter((c) => filterTypes.includes(c.type));
+  }, [companies, filterTypes]);
+
   return (
-    <AppShell>
+    <AppShell breadcrumb={[{ label: breadcrumbLabel ?? title }]}>
       <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">회사 관리</h1>
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <h1 className="text-2xl font-bold">{title}</h1>
           {!creating && (
             <button onClick={() => setCreating(true)} className="btn-primary">회사 등록</button>
           )}
         </div>
+        {description && <p className="text-sm text-slate-500 mb-6">{description}</p>}
 
         {creating && (
           <CompanyCreateForm
@@ -54,7 +80,7 @@ export default function AdminCompaniesPage() {
         {loading ? (
           <p className="text-slate-400">불러오는 중...</p>
         ) : (
-          <CompanyTable companies={companies} onRowClick={setSelected} />
+          <CompanyTable companies={visible} onRowClick={handleRowClick} onEdit={setSelected} />
         )}
       </div>
 

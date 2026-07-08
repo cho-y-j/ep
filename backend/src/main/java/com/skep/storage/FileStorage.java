@@ -14,8 +14,14 @@ public interface FileStorage {
     /** 파일을 저장하고 key 를 반환. */
     String store(MultipartFile file);
 
+    /** byte 배열을 저장하고 key 를 반환 (서버 측 생성 콘텐츠용). */
+    String storeBytes(byte[] bytes, String suggestedExtension);
+
     /** 저장된 파일 리소스를 반환 (다운로드용). */
     Resource load(String key);
+
+    /** key 의 내용을 새 byte 로 덮어씀 (없으면 생성). OnlyOffice 콜백 등 in-place 갱신용. */
+    void overwrite(String key, byte[] bytes);
 
     /** 저장된 파일 삭제. 없어도 예외 없음. */
     void delete(String key);

@@ -1,12 +1,24 @@
+import { AxiosError } from 'axios';
+import { api } from '../../lib/api';
 import { ROLE_LABEL, type CompanyResponse, type UserResponse } from '../../types/auth';
 
 type Props = {
   users: UserResponse[];
   companiesById: Map<number, CompanyResponse>;
   onRowClick: (u: UserResponse) => void;
+  onChange?: (u: UserResponse) => void;
 };
 
-export default function UserTable({ users, companiesById, onRowClick }: Props) {
+export default function UserTable({ users, companiesById, onRowClick, onChange }: Props) {
+  async function approve(u: UserResponse) {
+    try {
+      const res = await api.patch<UserResponse>(`/api/users/${u.id}/enable`);
+      onChange?.(res.data);
+    } catch (err) {
+      if (err instanceof AxiosError) alert(err.response?.data?.message ?? '승인 실패');
+    }
+  }
+
   return (
     <div className="card overflow-x-auto p-0">
       <table className="w-full text-sm">
@@ -17,6 +29,7 @@ export default function UserTable({ users, companiesById, onRowClick }: Props) {
             <th className="px-4 py-3 font-medium">역할</th>
             <th className="px-4 py-3 font-medium">소속 회사</th>
             <th className="px-4 py-3 font-medium">상태</th>
+            <th className="px-4 py-3 font-medium w-[120px]">액션</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -52,12 +65,23 @@ export default function UserTable({ users, companiesById, onRowClick }: Props) {
                     </span>
                   )}
                 </td>
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  {!u.enabled && (
+                    <button
+                      type="button"
+                      onClick={() => void approve(u)}
+                      className="text-xs px-2 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+                    >
+                      승인
+                    </button>
+                  )}
+                </td>
               </tr>
             );
           })}
           {users.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-4 py-8 text-center text-slate-400">사용자 없음</td>
+              <td colSpan={6} className="px-4 py-8 text-center text-slate-400">사용자 없음</td>
             </tr>
           )}
         </tbody>

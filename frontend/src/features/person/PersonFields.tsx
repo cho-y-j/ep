@@ -19,6 +19,8 @@ type Props = {
   supplierType?: CompanyType;
   required?: boolean;
   disabled?: boolean;
+  /** 간소 등록 — 이름+전화만 받고 생년월일/역할 입력은 숨김 (등록 후 상세에서 추가). */
+  minimal?: boolean;
 };
 
 export const EMPTY_PERSON_FIELDS: PersonFieldValues = {
@@ -29,7 +31,7 @@ export const EMPTY_PERSON_FIELDS: PersonFieldValues = {
   roles: [],
 };
 
-export default function PersonFields({ values, onChange, suppliers, supplierType, required, disabled }: Props) {
+export default function PersonFields({ values, onChange, suppliers, supplierType, required, disabled, minimal }: Props) {
   function patch(partial: Partial<PersonFieldValues>) {
     onChange({ ...values, ...partial });
   }
@@ -52,7 +54,7 @@ export default function PersonFields({ values, onChange, suppliers, supplierType
     <div className="space-y-4">
       {suppliers && (
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">소속 공급사</span>
+          <span className="text-sm font-medium text-slate-700">소속 공급사 <span className="text-xs text-rose-600 font-semibold">(필수)</span></span>
           <select
             value={values.supplierId}
             onChange={(e) => {
@@ -80,7 +82,7 @@ export default function PersonFields({ values, onChange, suppliers, supplierType
       )}
 
       <label className="block">
-        <span className="text-sm font-medium text-slate-700">이름</span>
+        <span className="text-sm font-medium text-slate-700">이름 <span className="text-xs text-rose-600 font-semibold">(필수)</span></span>
         <input
           type="text"
           value={values.name}
@@ -91,28 +93,38 @@ export default function PersonFields({ values, onChange, suppliers, supplierType
         />
       </label>
 
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">생년월일</span>
-          <input
-            type="date"
-            value={values.birth}
-            onChange={(e) => patch({ birth: e.target.value })}
-            disabled={disabled}
-            className="input mt-1"
-          />
-        </label>
+      {minimal ? (
         <label className="block">
           <span className="text-sm font-medium text-slate-700">휴대폰</span>
           <div className="mt-1">
             <PhoneInput value={values.phone} onChange={(v) => patch({ phone: v })} disabled={disabled} />
           </div>
         </label>
-      </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">생년월일 <span className="text-xs text-slate-400 font-semibold">(선택)</span></span>
+            <input
+              type="date"
+              value={values.birth}
+              onChange={(e) => patch({ birth: e.target.value })}
+              disabled={disabled}
+              className="input mt-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">휴대폰 <span className="text-xs text-slate-400 font-semibold">(선택)</span></span>
+            <div className="mt-1">
+              <PhoneInput value={values.phone} onChange={(v) => patch({ phone: v })} disabled={disabled} />
+            </div>
+          </label>
+        </div>
+      )}
 
+      {!minimal && (
       <fieldset>
         <legend className="text-sm font-medium text-slate-700 mb-2">
-          역할 (다중 선택)
+          역할 (다중 선택) <span className="text-xs text-slate-400 font-semibold">(선택)</span>
           {effectiveType && (
             <span className="ml-2 text-xs text-slate-500">
               {effectiveType === 'EQUIPMENT' ? '장비공급사 — 조종원만 가능' : '인력공급사 — 6개 역할 선택 가능'}
@@ -138,6 +150,7 @@ export default function PersonFields({ values, onChange, suppliers, supplierType
           </div>
         )}
       </fieldset>
+      )}
     </div>
   );
 }
