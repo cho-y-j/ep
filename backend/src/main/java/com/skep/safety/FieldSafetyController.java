@@ -4,9 +4,11 @@ import com.skep.attendance.AttendanceSession;
 import com.skep.attendance.AttendanceSessionRepository;
 import com.skep.common.ApiException;
 import com.skep.field.FieldTokenAuth;
+import com.skep.field.FieldTokenRateLimiter;
 import com.skep.person.Person;
 import com.skep.workplan.WorkPlan;
 import com.skep.workplan.WorkPlanRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -30,12 +32,14 @@ public class FieldSafetyController {
     private final FieldSensorReadingRepository sensorRepo;
     private final FieldBaselineRepository baselineRepo;
     private final SafetyAlertBroadcaster broadcaster;
+    private final FieldTokenRateLimiter rateLimiter;
 
     /** 5분 주기 센서 데이터. raw 저장만 (분석/그래프용). */
     @PostMapping("/sensor")
     @Transactional
     public Map<String, Object> sensor(@RequestHeader("X-Field-Token") String token,
-                                      @RequestBody SensorRequest req) {
+                                      @RequestBody SensorRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         var ctx = openContext(p);
         FieldSensorReading r = new FieldSensorReading();
@@ -57,7 +61,8 @@ public class FieldSafetyController {
     @PostMapping("/emergency")
     @Transactional
     public Map<String, Object> emergency(@RequestHeader("X-Field-Token") String token,
-                                         @RequestBody EmergencyRequest req) {
+                                         @RequestBody EmergencyRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         var ctx = openContext(p);
         FieldSafetyAlert a = new FieldSafetyAlert();
@@ -83,7 +88,8 @@ public class FieldSafetyController {
     @PostMapping("/baseline/sync")
     @Transactional
     public Map<String, Object> baselineSync(@RequestHeader("X-Field-Token") String token,
-                                            @RequestBody BaselineRequest req) {
+                                            @RequestBody BaselineRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         FieldBaseline b = baselineRepo.findById(p.getId()).orElseGet(() -> {
             FieldBaseline nb = new FieldBaseline();
@@ -110,7 +116,8 @@ public class FieldSafetyController {
 
     /** 베이스라인 복원 (서버 → 워치). 워치 재설치 후 첫 부팅. */
     @GetMapping("/baseline/restore")
-    public Map<String, Object> baselineRestore(@RequestHeader("X-Field-Token") String token) {
+    public Map<String, Object> baselineRestore(@RequestHeader("X-Field-Token") String token, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         return baselineRepo.findById(p.getId())
                 .map(this::baselineMap)
@@ -120,7 +127,8 @@ public class FieldSafetyController {
     /** 폰 BridgeService 가 폴링 (15초). 미확인 알림 최근 5건. */
     @GetMapping("/alerts/recent")
     public List<Map<String, Object>> recentAlerts(@RequestHeader("X-Field-Token") String token,
-                                                  @RequestParam(defaultValue = "5") int limit) {
+                                                  @RequestParam(defaultValue = "5") int limit, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         return alertRepo.findByPersonIdAndCreatedAtAfterOrderByCreatedAtDesc(p.getId(),
                         LocalDateTime.now().minusHours(1))
@@ -131,7 +139,8 @@ public class FieldSafetyController {
     @PostMapping("/alerts/{id}/ack")
     @Transactional
     public Map<String, Object> ackAlert(@RequestHeader("X-Field-Token") String token,
-                                        @org.springframework.web.bind.annotation.PathVariable Long id) {
+                                        @org.springframework.web.bind.annotation.PathVariable Long id, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         FieldSafetyAlert a = alertRepo.findById(id)
                 .orElseThrow(() -> ApiException.notFound("ALERT_NOT_FOUND", "알림을 찾을 수 없습니다"));

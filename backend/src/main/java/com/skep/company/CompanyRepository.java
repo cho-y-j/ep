@@ -9,4 +9,5 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
     Optional<Company> findByBusinessNumber(String businessNumber);
     boolean existsByBusinessNumber(String businessNumber);
     List<Company> findByType(CompanyType type);
+    List<Company> findByParentCompanyId(Long parentCompanyId);
 }

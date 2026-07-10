@@ -2,6 +2,7 @@ package com.skep.company;
 
 import com.skep.common.ApiException;
 import com.skep.company.dto.CompanyResponse;
+import com.skep.company.dto.CreateChildRequest;
 import com.skep.company.dto.CreateCompanyRequest;
 import com.skep.company.dto.UpdateCompanyRequest;
 import com.skep.security.AuthenticatedUser;
@@ -40,6 +41,7 @@ public class CompanyController {
 
     /** BP/공급사 모두 접근 가능한 공급사 목록 — WP 작성 '전체 보기 토글' 시 사용. */
     @GetMapping("/suppliers")
+    @PreAuthorize("hasAnyRole('ADMIN','BP','EQUIPMENT_SUPPLIER','MANPOWER_SUPPLIER')")
     public List<CompanyResponse> suppliers(@RequestParam("type") CompanyType type) {
         if (type != CompanyType.EQUIPMENT && type != CompanyType.MANPOWER) {
             return List.of();
@@ -83,6 +85,24 @@ public class CompanyController {
         return service.usersByCompany(id).stream()
                 .filter(u -> u.role() == Role.BP)
                 .toList();
+    }
+
+    /** V77: 하위(자식) 공급사 등록. EQUIPMENT_SUPPLIER master 는 본인 자식, ADMIN 은 body parentCompanyId 지정. */
+    @PostMapping("/children")
+    @PreAuthorize("hasAnyRole('ADMIN','EQUIPMENT_SUPPLIER')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CompanyResponse createChild(@Valid @RequestBody CreateChildRequest req,
+                                       @CurrentUser AuthenticatedUser actor) {
+        return CompanyResponse.from(service.createChild(actor, req));
+    }
+
+    /** V77: 직속 자식 공급사 목록. EQUIPMENT_SUPPLIER=본인 자식, ADMIN=쿼리 parentId. */
+    @GetMapping("/children")
+    @PreAuthorize("hasAnyRole('ADMIN','EQUIPMENT_SUPPLIER')")
+    public List<CompanyResponse> children(@RequestParam(required = false) Long parentId,
+                                          @CurrentUser AuthenticatedUser actor) {
+        Long pid = actor.role() == Role.ADMIN ? parentId : actor.companyId();
+        return service.listChildren(pid).stream().map(CompanyResponse::from).toList();
     }
 
     /**

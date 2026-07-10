@@ -24,6 +24,7 @@ import com.skep.workplan.WorkPlanPerson;
 import com.skep.workplan.WorkPlanPersonRepository;
 import com.skep.workplan.WorkPlanRepository;
 import com.skep.workplan.WorkPlanStatus;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -54,9 +55,11 @@ public class FieldAuthController {
     private final NotificationService notifications;
     private final UserRepository users;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    private final FieldTokenRateLimiter rateLimiter;
 
     @PostMapping("/auth")
-    public Map<String, Object> auth(@RequestBody AuthRequest req) {
+    public Map<String, Object> auth(@RequestBody AuthRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         if (req.code == null || req.code.isBlank()) {
             throw ApiException.badRequest("NO_CODE", "코드 입력 필수");
         }
@@ -67,7 +70,8 @@ public class FieldAuthController {
 
     /** POST /api/field-auth/login { username, password } — 공급사 발급 계정 로그인. 성공 시 기존 출근코드 토큰 반환. */
     @PostMapping("/login")
-    public Map<String, Object> login(@RequestBody LoginRequest req) {
+    public Map<String, Object> login(@RequestBody LoginRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         if (req.username == null || req.username.isBlank() || req.password == null || req.password.isBlank()) {
             throw ApiException.badRequest("NO_CREDENTIALS", "아이디/비밀번호를 입력하세요");
         }
@@ -80,7 +84,8 @@ public class FieldAuthController {
     }
 
     @GetMapping("/me")
-    public Map<String, Object> me(@RequestHeader("X-Field-Token") String token) {
+    public Map<String, Object> me(@RequestHeader("X-Field-Token") String token, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         Map<String, Object> out = personMap(p);
         out.put("active_work_plans", listActiveWorkPlans(p.getId()));
@@ -90,7 +95,8 @@ public class FieldAuthController {
     /** NFC(RFC) 태그 → 자원 식별. 작업자 카드(PERSON) 또는 차량 태그(EQUIPMENT). 인증된 작업자만. */
     @GetMapping("/nfc/{tagId}")
     public Map<String, Object> resolveNfc(@RequestHeader("X-Field-Token") String token,
-                                          @PathVariable String tagId) {
+                                          @PathVariable String tagId, HttpServletRequest request) {
+        rateLimiter.check(request);
         fieldAuth.authenticate(token);
         String tag = tagId == null ? "" : tagId.trim();
         var person = personRepo.findByNfcTagId(tag);
@@ -116,7 +122,8 @@ public class FieldAuthController {
     /** 데모용 — 본인 폰으로 본인에게 공지 푸시. firebase-admin-key.json 있어야 실제 발송. */
     @PostMapping("/announce-test")
     public Map<String, Object> announceTest(@RequestHeader("X-Field-Token") String token,
-                                            @RequestBody AnnounceTestRequest req) {
+                                            @RequestBody AnnounceTestRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         if (p.getFcmToken() == null || p.getFcmToken().isBlank()) {
             throw ApiException.badRequest("NO_FCM", "FCM 토큰 미등록 — 앱에서 한 번 로그인 필요");
@@ -130,7 +137,8 @@ public class FieldAuthController {
     @PostMapping("/register-token")
     @Transactional
     public Map<String, Object> registerToken(@RequestHeader("X-Field-Token") String token,
-                                             @RequestBody RegisterTokenRequest req) {
+                                             @RequestBody RegisterTokenRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         if (req.fcmToken == null || req.fcmToken.isBlank()) {
             throw ApiException.badRequest("NO_FCM_TOKEN", "fcm_token 필수");
@@ -143,7 +151,8 @@ public class FieldAuthController {
     @PostMapping("/register-watch-token")
     @Transactional
     public Map<String, Object> registerWatchToken(@RequestHeader("X-Field-Token") String token,
-                                                  @RequestBody RegisterTokenRequest req) {
+                                                  @RequestBody RegisterTokenRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         if (req.fcmToken == null || req.fcmToken.isBlank()) {
             throw ApiException.badRequest("NO_FCM_TOKEN", "fcm_token 필수");
@@ -155,10 +164,25 @@ public class FieldAuthController {
 
     @PostMapping("/check-in")
     @Transactional
-    public Map<String, Object> checkIn(@RequestHeader("X-Field-Token") String token,
-                                       @RequestBody CheckInRequest req) {
+    public ResponseEntity<Map<String, Object>> checkIn(@RequestHeader("X-Field-Token") String token,
+                                       @RequestBody CheckInRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         if (req.workPlanId == null) throw ApiException.badRequest("NO_WP", "work_plan_id 필수");
+        // 서버측 지오펜스 — 현장 중심좌표가 설정된 경우 출근 위치를 검증(GPS 위조 차단).
+        WorkPlan wp = wpRepo.findById(req.workPlanId).orElse(null);
+        Site site = wp != null && wp.getSiteId() != null ? sites.findById(wp.getSiteId()).orElse(null) : null;
+        if (site != null && site.getLatitude() != null && site.getLongitude() != null) {
+            int radius = site.getGeofenceRadiusM() != null ? site.getGeofenceRadiusM() : 300;
+            if (req.lat == null || req.lng == null) {
+                return ResponseEntity.status(403).body(Map.of("code", "OUT_OF_SITE", "distance_m", -1));
+            }
+            int distance = (int) Math.round(haversineMeters(
+                    site.getLatitude(), site.getLongitude(), req.lat, req.lng));
+            if (distance > radius) {
+                return ResponseEntity.status(403).body(Map.of("code", "OUT_OF_SITE", "distance_m", distance));
+            }
+        }
         var open = attRepo.findFirstByPersonIdAndWorkPlanIdAndCheckOutAtIsNullOrderByIdDesc(p.getId(), req.workPlanId);
         if (open.isPresent()) {
             throw ApiException.badRequest("ALREADY_CHECKED_IN", "이미 출근 상태입니다");
@@ -173,13 +197,25 @@ public class FieldAuthController {
                 .checkInMethod(req.method)
                 .build();
         attRepo.save(row);
-        return sessionMap(row);
+        return ResponseEntity.ok(sessionMap(row));
+    }
+
+    /** 두 좌표 간 haversine 거리(m). */
+    private static double haversineMeters(double lat1, double lng1, double lat2, double lng2) {
+        double r = 6371000.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 2 * r * Math.asin(Math.sqrt(a));
     }
 
     @PostMapping("/break/start")
     @Transactional
     public Map<String, Object> startBreak(@RequestHeader("X-Field-Token") String token,
-                                          @RequestBody(required = false) Map<String, Object> req) {
+                                          @RequestBody(required = false) Map<String, Object> req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         Long wpId = req != null && req.get("work_plan_id") != null
                 ? Long.valueOf(req.get("work_plan_id").toString()) : null;
@@ -196,7 +232,8 @@ public class FieldAuthController {
     @PostMapping("/break/end")
     @Transactional
     public Map<String, Object> endBreak(@RequestHeader("X-Field-Token") String token,
-                                        @RequestBody(required = false) Map<String, Object> req) {
+                                        @RequestBody(required = false) Map<String, Object> req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         Long wpId = req != null && req.get("work_plan_id") != null
                 ? Long.valueOf(req.get("work_plan_id").toString()) : null;
@@ -213,7 +250,8 @@ public class FieldAuthController {
     @PostMapping("/check-out")
     @Transactional
     public Map<String, Object> checkOut(@RequestHeader("X-Field-Token") String token,
-                                        @RequestBody CheckOutRequest req) {
+                                        @RequestBody CheckOutRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         if (req.workPlanId == null) throw ApiException.badRequest("NO_WP", "work_plan_id 필수");
         var open = attRepo.findFirstByPersonIdAndWorkPlanIdAndCheckOutAtIsNullOrderByIdDesc(p.getId(), req.workPlanId)
@@ -265,7 +303,8 @@ public class FieldAuthController {
 
     /** 본인 출/퇴근 기록 (최근순). work_plan 제목 + site 명 포함. */
     @GetMapping("/my-attendance")
-    public List<Map<String, Object>> myAttendance(@RequestHeader("X-Field-Token") String token) {
+    public List<Map<String, Object>> myAttendance(@RequestHeader("X-Field-Token") String token, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         var sessions = attRepo.findByPersonIdOrderByCheckInAtDesc(p.getId());
         // N+1 회피 — 세션들의 work_plan/site 를 한 번에 로드.
@@ -297,7 +336,8 @@ public class FieldAuthController {
 
     /** 본인 작업확인서 목록 — status 무관, 최근순. */
     @GetMapping("/work-confirmations")
-    public List<Map<String, Object>> myWorkConfirmations(@RequestHeader("X-Field-Token") String token) {
+    public List<Map<String, Object>> myWorkConfirmations(@RequestHeader("X-Field-Token") String token, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         return wcRepo.findByPersonIdOrderByWorkDateDescIdDesc(p.getId()).stream().map(this::wcMap).toList();
     }
@@ -307,7 +347,8 @@ public class FieldAuthController {
     @Transactional
     public Map<String, Object> signWorkConfirmation(@RequestHeader("X-Field-Token") String token,
                                                     @org.springframework.web.bind.annotation.PathVariable Long id,
-                                                    @RequestBody SignWcRequest req) {
+                                                    @RequestBody SignWcRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         WorkConfirmation wc = wcRepo.findById(id)
                 .orElseThrow(() -> ApiException.notFound("WC_NOT_FOUND", "작업확인서를 찾을 수 없습니다"));
@@ -342,7 +383,8 @@ public class FieldAuthController {
     @PostMapping("/issue-report")
     @Transactional
     public Map<String, Object> issueReport(@RequestHeader("X-Field-Token") String token,
-                                           @RequestBody IssueReportRequest req) {
+                                           @RequestBody IssueReportRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         if (req.workPlanId == null) throw ApiException.badRequest("NO_WP", "work_plan_id 필수");
         if (req.message == null || req.message.isBlank()) throw ApiException.badRequest("NO_MESSAGE", "내용 필수");
@@ -388,7 +430,8 @@ public class FieldAuthController {
     /** 출/퇴근 사진 업로드 — 파일 key 반환. 이후 check-in/out 호출 시 photo_key 로 전달. */
     @PostMapping(value = "/upload-photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, Object> uploadPhoto(@RequestHeader("X-Field-Token") String token,
-                                           @RequestParam("file") MultipartFile file) {
+                                           @RequestParam("file") MultipartFile file, HttpServletRequest request) {
+        rateLimiter.check(request);
         fieldAuth.authenticate(token);
         if (file == null || file.isEmpty()) {
             throw ApiException.badRequest("NO_FILE", "사진 파일 필수");
@@ -403,7 +446,8 @@ public class FieldAuthController {
 
     /** 본인 프로필 사진 — has_photo=true 일 때만. */
     @GetMapping("/my-photo")
-    public ResponseEntity<Resource> myPhoto(@RequestHeader("X-Field-Token") String token) {
+    public ResponseEntity<Resource> myPhoto(@RequestHeader("X-Field-Token") String token, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         if (p.getPhotoKey() == null) throw ApiException.notFound("NO_PHOTO", "프로필 사진 없음");
         Resource res = storage.load(p.getPhotoKey());
@@ -417,7 +461,8 @@ public class FieldAuthController {
     /** 사진 다운로드 — 본인 출/퇴근 사진만 조회 가능. */
     @GetMapping("/photo")
     public ResponseEntity<Resource> photo(@RequestHeader("X-Field-Token") String token,
-                                          @RequestParam("key") String key) {
+                                          @RequestParam("key") String key, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         boolean owns = attRepo.existsByPersonIdAndCheckInPhotoKey(p.getId(), key)
                 || attRepo.existsByPersonIdAndCheckOutPhotoKey(p.getId(), key);

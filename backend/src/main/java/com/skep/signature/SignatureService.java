@@ -185,6 +185,9 @@ public class SignatureService {
         if (sig.getStatus() == SignatureStatus.INVALIDATED) {
             throw new IllegalStateException("이 사인 요청은 무효화되었습니다. 재발송을 요청하세요");
         }
+        if (sig.getStatus() == SignatureStatus.SIGNED) {
+            throw new IllegalStateException("이미 서명 완료된 요청입니다. 재서명할 수 없습니다");
+        }
         if (sig.getTokenExpiresAt() != null && LocalDateTime.now().isAfter(sig.getTokenExpiresAt())) {
             sig.setStatus(SignatureStatus.EXPIRED);
             repo.save(sig);

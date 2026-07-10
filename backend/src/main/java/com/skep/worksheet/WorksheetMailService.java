@@ -93,6 +93,11 @@ public class WorksheetMailService {
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
         com.openhtmltopdf.pdfboxout.PdfRendererBuilder b = new com.openhtmltopdf.pdfboxout.PdfRendererBuilder();
         b.useFastMode();
+        // SSRF 심층방어: 임베드된 data: 리소스만 허용. http/https/file 절대 URL 서버측 fetch 차단.
+        // (템플릿들은 인라인 <style> + data:image PNG 만 사용, 원격 CSS/폰트/이미지 미사용. 폰트는 useFont 로 등록.)
+        b.useExternalResourceAccessControl(
+                (uri, type) -> uri != null && uri.startsWith("data:"),
+                com.openhtmltopdf.outputdevice.helper.ExternalResourceControlPriority.RUN_BEFORE_RESOLVING_URI);
         b.withHtmlContent(xhtml, null);
         b.toStream(out);
         // 한글 폰트 등록 — .ttc 는 openhtmltopdf 호환 안 됨. NanumGothic.ttf 우선.

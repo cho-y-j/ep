@@ -4,6 +4,7 @@ import com.skep.alimtalk.dto.DirectAlimTalkRequest;
 import com.skep.common.ApiException;
 import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
+import com.skep.sms.SmsLog;
 import com.skep.sms.SmsLogRepository;
 import com.skep.user.Role;
 import jakarta.validation.Valid;
@@ -57,7 +58,10 @@ public class AlimTalkController {
     @GetMapping("/logs")
     public List<LogRow> logs(@CurrentUser AuthenticatedUser actor) {
         ensureSender(actor);
-        return smsLogs.findTop100ByProviderStartingWithOrderByIdDesc("DAON").stream()
+        List<SmsLog> rows = actor.role() == Role.ADMIN
+                ? smsLogs.findTop100ByProviderStartingWithOrderByIdDesc("DAON")
+                : smsLogs.findTop100ByProviderStartingWithAndSentByOrderByIdDesc("DAON", actor.id());
+        return rows.stream()
                 .map(l -> new LogRow(l.getId(), l.getPhone(), l.getPurpose(), l.getStatus(), l.getProvider(), l.getCreatedAt()))
                 .toList();
     }

@@ -57,13 +57,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/collect/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/collect/*/documents").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/collect/*/submit").permitAll()
-                        // skep-app(현장 작업자): 등록/현장목록은 공개, 작업자 엔드포인트는 X-Field-Token(서비스 검증).
+                        // skep-app(현장 작업자): 작업자 엔드포인트는 X-Field-Token(서비스 검증).
                         // announcements/attendance/today/safety-alerts(ADMIN)는 아래 anyRequest().authenticated() + @PreAuthorize 로 JWT 보호.
-                        .requestMatchers(HttpMethod.POST, "/api/field/register").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/field/sites").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/field/attendance/check-in").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/field/register-token").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/field/safety-alert").permitAll()
                         // skep-v2 근무자 코드 인증 (/api/field-auth/**) — X-Field-Token 헤더로 컨트롤러가 직접 검증.
                         .requestMatchers("/api/field-auth/**").permitAll()
                         // STOMP WebSocket — HTTP 핸드셰이크는 permitAll. 인증/인가는 STOMP CONNECT·SUBSCRIBE

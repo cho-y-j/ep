@@ -37,10 +37,12 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,14 +65,23 @@ import java.util.Set;
 @Configuration
 public class DemoDataSeeder {
 
+    private static final Logger seederLog = LoggerFactory.getLogger(DemoDataSeeder.class);
+
     @Bean
     @Order(100)
     public ApplicationRunner seedDemoData(
             @Value("${skep.bootstrap.test-users.enabled:false}") boolean enabled,
-            DemoSeederRunner runner
+            DemoSeederRunner runner,
+            Environment env
     ) {
         return args -> {
             if (!enabled) return;
+            // 운영 프로필에서는 약한 default 비번(testpass123) 시드 절대 실행하지 않음. (TestUserSeeder 와 동일)
+            boolean isProd = Arrays.asList(env.getActiveProfiles()).contains("prod");
+            if (isProd) {
+                seederLog.warn("demo seeder disabled in prod profile (security)");
+                return;
+            }
             runner.run();
         };
     }

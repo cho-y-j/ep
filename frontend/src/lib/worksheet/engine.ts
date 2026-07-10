@@ -7,6 +7,7 @@ import Docxtemplater from "docxtemplater";
 // @ts-ignore — no types ship with the module
 import ImageModule from "docxtemplater-image-module-free";
 import { normalizeForRender } from "./schema";
+import { tokenStorage } from "../tokenStorage";
 
 const TEMPLATE_URL = "/worksheet/template.docx";
 // 이미지 로드: skep document-service의 /api/documents/{id}/file (인증 필요)
@@ -42,8 +43,7 @@ async function loadImage(storageKey: string): Promise<ArrayBuffer | null> {
     return cached;
   }
   try {
-    // v2 tokenStorage 의 ACCESS_KEY 와 동일해야 함 (lib/tokenStorage.ts).
-    const token = typeof localStorage !== "undefined" ? localStorage.getItem("skep.access") : null;
+    const token = typeof localStorage !== "undefined" ? tokenStorage.access : null;
     const res = await fetch(DOC_FILE_URL(storageKey), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });

@@ -2,13 +2,19 @@ package com.skep.company;
 
 import com.skep.common.ApiException;
 import com.skep.company.dto.CompanyResponse;
+import com.skep.company.dto.CreateChildRequest;
+import com.skep.security.AuthenticatedUser;
+import com.skep.user.Role;
+import com.skep.user.User;
 import com.skep.user.UserRepository;
 import com.skep.user.dto.UserResponse;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,13 +24,108 @@ public class CompanyService {
 
     private final CompanyRepository repo;
     private final UserRepository userRepo;
+    private final PasswordEncoder passwordEncoder;
 
     @PersistenceContext
     private EntityManager em;
 
-    public CompanyService(CompanyRepository repo, UserRepository userRepo) {
+    public CompanyService(CompanyRepository repo, UserRepository userRepo, PasswordEncoder passwordEncoder) {
         this.repo = repo;
         this.userRepo = userRepo;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    /**
+     * V77 보안 불변식 1: 읽기 스코프 = 자식이면 {본인}, 부모면 {본인} ∪ {직속 자식}. 1단계만(재귀 없음).
+     * 부모를 가진 회사는 자식 생성이 차단되므로 findByParentCompanyId 는 항상 비어 있어 자연히 {본인} 이 된다.
+     */
+    @Transactional(readOnly = true)
+    public List<Long> selfAndChildren(Long companyId) {
+        if (companyId == null) return List.of();
+        List<Long> ids = new ArrayList<>();
+        ids.add(companyId);
+        for (Company child : repo.findByParentCompanyId(companyId)) {
+            ids.add(child.getId());
+        }
+        return ids;
+    }
+
+    /** V77: 부모의 직속 자식 목록(1단계). */
+    @Transactional(readOnly = true)
+    public List<Company> listChildren(Long parentCompanyId) {
+        if (parentCompanyId == null) return List.of();
+        return repo.findByParentCompanyId(parentCompanyId);
+    }
+
+    /**
+     * V77: 부모(EQUIPMENT 공급사 master)가 하위 공급사(자식)를 등록.
+     * - ADMIN: body 의 parentCompanyId 지정. 그 외 EQUIPMENT_SUPPLIER: 본인이 부모(master 필수).
+     * - 부모는 EQUIPMENT type, 그리고 스스로 자식이 아니어야 함(1단계 강제).
+     * - 자식 type ∈ {EQUIPMENT, MANPOWER}.
+     * - admin 계정(email/password/name) 3개 모두 있으면 자식 회사 master 계정 함께 생성.
+     */
+    public Company createChild(AuthenticatedUser actor, CreateChildRequest req) {
+        Long parentId;
+        if (actor.role() == Role.ADMIN) {
+            if (req.parentCompanyId() == null) {
+                throw ApiException.badRequest("PARENT_REQUIRED", "부모 회사 id 가 필요합니다 (ADMIN)");
+            }
+            parentId = req.parentCompanyId();
+        } else if (actor.role() == Role.EQUIPMENT_SUPPLIER) {
+            if (actor.companyId() == null) {
+                throw ApiException.forbidden("NO_COMPANY", "소속 회사가 없습니다");
+            }
+            if (!actor.isCompanyAdmin()) {
+                throw ApiException.forbidden("NOT_COMPANY_ADMIN", "회사 관리자만 하위 공급사를 등록할 수 있습니다");
+            }
+            parentId = actor.companyId();
+        } else {
+            throw ApiException.forbidden("ROLE_NOT_ALLOWED", "하위 공급사 등록 권한이 없는 역할입니다");
+        }
+
+        Company parent = get(parentId);
+        if (parent.getType() != CompanyType.EQUIPMENT) {
+            throw ApiException.forbidden("PARENT_NOT_EQUIPMENT", "장비공급사만 하위 공급사를 둘 수 있습니다");
+        }
+        if (parent.getParentCompanyId() != null) {
+            throw ApiException.forbidden("PARENT_IS_CHILD", "이미 하위 공급사인 회사는 다시 하위를 둘 수 없습니다 (1단계만 허용)");
+        }
+        if (req.type() != CompanyType.EQUIPMENT && req.type() != CompanyType.MANPOWER) {
+            throw ApiException.badRequest("CHILD_TYPE_INVALID", "자식 유형은 EQUIPMENT 또는 MANPOWER 만 가능합니다");
+        }
+        if (repo.existsByBusinessNumber(req.businessNumber())) {
+            throw ApiException.conflict("BUSINESS_NUMBER_EXISTS", "이미 등록된 사업자번호입니다");
+        }
+
+        Company child = Company.builder()
+                .name(req.name())
+                .businessNumber(req.businessNumber())
+                .type(req.type())
+                .build();
+        child.assignParent(parentId);
+        repo.save(child);
+
+        boolean hasEmail = req.adminEmail() != null && !req.adminEmail().isBlank();
+        if (hasEmail) {
+            if (req.adminPassword() == null || req.adminPassword().isBlank()
+                    || req.adminName() == null || req.adminName().isBlank()) {
+                throw ApiException.badRequest("ADMIN_FIELDS_REQUIRED", "관리자 계정은 이메일/비밀번호/이름을 모두 입력하세요");
+            }
+            if (userRepo.existsByEmail(req.adminEmail())) {
+                throw ApiException.conflict("EMAIL_EXISTS", "이미 사용 중인 이메일입니다");
+            }
+            Role childRole = req.type() == CompanyType.EQUIPMENT ? Role.EQUIPMENT_SUPPLIER : Role.MANPOWER_SUPPLIER;
+            userRepo.save(User.builder()
+                    .email(req.adminEmail())
+                    .password(passwordEncoder.encode(req.adminPassword()))
+                    .name(req.adminName())
+                    .role(childRole)
+                    .companyId(child.getId())
+                    .isCompanyAdmin(true)
+                    .enabled(true)
+                    .build());
+        }
+        return child;
     }
 
     @Transactional(readOnly = true)

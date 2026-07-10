@@ -13,7 +13,7 @@ public class FieldMapController {
 
     private final String kakaoJsKey;
 
-    public FieldMapController(@Value("${skep.kakao.js-key:b59b1a8e9a3df2de8cfa33158061f337}") String kakaoJsKey) {
+    public FieldMapController(@Value("${skep.kakao.js-key:}") String kakaoJsKey) {
         this.kakaoJsKey = kakaoJsKey;
     }
 

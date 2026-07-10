@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../../../lib/api';
+import { useAuth } from '../../auth/AuthContext';
 import { toast } from '../../../lib/toast';
 import { EQUIPMENT_CATEGORY_LABEL, type EquipmentResponse, type EquipmentCategory } from '../../../types/equipment';
 import { PERSON_ROLE_LABEL, type PersonResponse, type PersonRole } from '../../../types/person';
@@ -42,6 +43,8 @@ const emptyEq = (id: number, selected: boolean): EqRow => ({
 type Defaults = Pick<EqRow, 'dailyPrice'|'otDailyPrice'|'monthlyPrice'|'otMonthlyPrice'|'dailyNote'|'otDailyNote'|'monthlyNote'|'otMonthlyNote'>;
 
 export default function DispatchSendDialog({ open, quotationRequestId, requestedCategory, requestedManpowerRole, onClose, onSent }: Props) {
+  const { user } = useAuth();
+  const selfCompanyId = user?.company_id ?? null;
   const [allEquipment, setAllEquipment] = useState<EquipmentResponse[]>([]);
   const [allPersons, setAllPersons] = useState<PersonResponse[]>([]);
   const [eqRows, setEqRows] = useState<Record<number, EqRow>>({});
@@ -252,6 +255,11 @@ export default function DispatchSendDialog({ open, quotationRequestId, requested
                           <span className={`text-xs px-1.5 py-0.5 rounded ${match ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
                             {EQUIPMENT_CATEGORY_LABEL[e.category as EquipmentCategory] ?? e.category}
                           </span>
+                          {selfCompanyId != null && e.supplier_id !== selfCompanyId && e.supplier_name && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-semibold">
+                              소속: {e.supplier_name}
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-slate-500 mt-0.5">{e.model ?? '-'}{e.manufacturer ? ` · ${e.manufacturer}` : ''}</div>
                       </div>
@@ -310,6 +318,11 @@ export default function DispatchSendDialog({ open, quotationRequestId, requested
                           {(p.roles ?? []).map((r) => (
                             <span key={r} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{PERSON_ROLE_LABEL[r] ?? r}</span>
                           ))}
+                          {selfCompanyId != null && p.supplier_id !== selfCompanyId && p.supplier_name && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-semibold">
+                              소속: {p.supplier_name}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </label>

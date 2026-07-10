@@ -56,6 +56,9 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                     principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + principal.role().name()))));
         } else if (StompCommand.SUBSCRIBE.equals(command)) {
             authorizeSubscribe(accessor);
+        } else if (StompCommand.SEND.equals(command)) {
+            // 안전알림은 서버가 SimpMessagingTemplate 로만 발행 — 클라이언트 SEND 전면 거부(위조 발행 차단).
+            throw new IllegalArgumentException("WS_SEND_FORBIDDEN");
         }
         return message;
     }

@@ -18,6 +18,9 @@ public interface WorkPlanRepository extends JpaRepository<WorkPlan, Long> {
     /** BP 자기 회사 작업계획서. 기본 정렬은 작업일 오름차순. */
     Page<WorkPlan> findByBpCompanyIdOrderByWorkDateAscIdAsc(Long bpCompanyId, Pageable pageable);
 
+    /** BP 회사 작업계획서 전체 — 공지 발송 스코프 검증용. */
+    List<WorkPlan> findByBpCompanyId(Long bpCompanyId);
+
     /** BP 회사의 작업계획서 중 특정 상태 — 투입 현황 board 용. 사인 완료된(SUBMITTED+) 것 가져오기. */
     List<WorkPlan> findByBpCompanyIdAndStatusInOrderByIdDesc(Long bpCompanyId, java.util.Collection<WorkPlanStatus> statuses);
 
@@ -64,4 +67,7 @@ public interface WorkPlanRepository extends JpaRepository<WorkPlan, Long> {
     /** S-10: 견적 finalize 시 같은 사이트 + work_date + DRAFT 매칭 작업계획서 우선 활용. */
     Optional<WorkPlan> findFirstBySiteIdAndWorkDateAndStatusOrderByIdDesc(
             Long siteId, LocalDate workDate, WorkPlanStatus status);
+
+    /** 현장 상황판 — 특정 현장의 특정일 작업계획서 전체(작업 진행/투입 자원 조립용). */
+    List<WorkPlan> findBySiteIdAndWorkDateOrderByStartTimeAsc(Long siteId, LocalDate workDate);
 }

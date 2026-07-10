@@ -29,6 +29,10 @@ public class DispatchedEquipment {
     @Column(name = "supplier_company_id", nullable = false)
     private Long supplierCompanyId;
 
+    /** V77 4-a: 자원 실소유 자식 공급사 id. 부모가 자식 장비를 자기 명의로 발송했을 때만 채워짐. 본인 자원이면 NULL. */
+    @Column(name = "sub_supplier_company_id")
+    private Long subSupplierCompanyId;
+
     @Column(name = "equipment_id")
     private Long equipmentId;
 
@@ -72,13 +76,14 @@ public class DispatchedEquipment {
     private LocalDateTime updatedAt;
 
     @Builder
-    private DispatchedEquipment(Long quotationRequestId, Long supplierCompanyId, Long equipmentId,
+    private DispatchedEquipment(Long quotationRequestId, Long supplierCompanyId, Long subSupplierCompanyId, Long equipmentId,
                                 Long dailyPrice, Long otDailyPrice, Long monthlyPrice, Long otMonthlyPrice,
                                 String notes,
                                 String dailyNote, String otDailyNote, String monthlyNote, String otMonthlyNote,
                                 Long sentBy) {
         this.quotationRequestId = quotationRequestId;
         this.supplierCompanyId = supplierCompanyId;
+        this.subSupplierCompanyId = subSupplierCompanyId;
         this.equipmentId = equipmentId;
         this.dailyPrice = dailyPrice;
         this.otDailyPrice = otDailyPrice;

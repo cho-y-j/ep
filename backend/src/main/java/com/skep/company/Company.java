@@ -28,6 +28,10 @@ public class Company {
     @Column(nullable = false, length = 32)
     private CompanyType type;
 
+    /** V77: 상위(부모) 장비공급사 id. null = 최상위. 1단계만 — 부모를 가진 회사는 다시 부모가 될 수 없다. */
+    @Column(name = "parent_company_id")
+    private Long parentCompanyId;
+
     @Column(name = "business_address", length = 255)
     private String businessAddress;
 
@@ -72,6 +76,11 @@ public class Company {
 
     public void rename(String newName) {
         this.name = newName;
+    }
+
+    /** V77: 부모(상위 장비공급사) 지정. */
+    public void assignParent(Long parentCompanyId) {
+        this.parentCompanyId = parentCompanyId;
     }
 
     public void updateProfile(String businessAddress, String businessCategory, String businessSubcategory,

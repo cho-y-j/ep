@@ -216,6 +216,7 @@ export default function EquipmentPage() {
             companiesById={companiesById}
             showSupplierColumn={isAdmin || (isBp && scope === 'external')}
             onRowClick={(e) => navigate(`/equipment/${e.id}`)}
+            selfCompanyId={myCompanyId}
           />
         )}
 

@@ -2,11 +2,13 @@ package com.skep.equipment;
 
 import com.skep.common.ApiException;
 import com.skep.field.FieldTokenAuth;
+import com.skep.field.FieldTokenRateLimiter;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
 import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
 import com.skep.user.Role;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -25,13 +27,15 @@ public class EquipmentInspectionController {
     private final EquipmentRepository equipmentRepo;
     private final PersonRepository personRepo;
     private final FieldTokenAuth fieldAuth;
+    private final FieldTokenRateLimiter rateLimiter;
     private final com.skep.site.SiteRepository siteRepo;
 
     /** 작업자(폰, X-Field-Token) 일상점검 제출. */
     @PostMapping("/api/field-auth/equipment-inspection")
     @Transactional
     public Map<String, Object> submit(@RequestHeader("X-Field-Token") String token,
-                                      @RequestBody SubmitRequest req) {
+                                      @RequestBody SubmitRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         if (req.equipmentId == null) throw ApiException.badRequest("NO_EQUIPMENT", "equipment_id 필수");
         Equipment e = equipmentRepo.findById(req.equipmentId).orElseThrow(() ->

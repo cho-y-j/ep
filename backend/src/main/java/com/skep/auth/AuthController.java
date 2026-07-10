@@ -14,6 +14,7 @@ import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
 import com.skep.user.User;
 import com.skep.user.UserRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +29,9 @@ public class AuthController {
     private final AuthService auth;
     private final UserRepository users;
     private final CompanyRepository companies;
+
+    // 로그인 IP별 레이트리밋 — 인메모리 고정윈도(1분/10회). slot = {윈도시작 millis, count}. (FieldAuthController 패턴 복제)
+    private final Map<String, long[]> loginRateLimit = new java.util.concurrent.ConcurrentHashMap<>();
 
     public AuthController(AuthService auth, UserRepository users, CompanyRepository companies) {
         this.auth = auth;
@@ -46,8 +50,26 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public TokenResponse login(@Valid @RequestBody LoginRequest req) {
+    public TokenResponse login(@Valid @RequestBody LoginRequest req, HttpServletRequest request) {
+        checkLoginRateLimit(clientIp(request));
         return auth.login(req);
+    }
+
+    private void checkLoginRateLimit(String ip) {
+        long now = System.currentTimeMillis();
+        long[] slot = loginRateLimit.compute(ip, (k, v) -> {
+            if (v == null || now - v[0] >= 60_000L) return new long[]{now, 1};
+            v[1]++;
+            return v;
+        });
+        if (slot[1] > 10) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "요청이 너무 많습니다. 잠시 후 다시 시도하세요");
+        }
+    }
+
+    private static String clientIp(HttpServletRequest request) {
+        // forward-headers-strategy=framework 이므로 getRemoteAddr 가 신뢰 프록시 기준으로 해석됨.
+        return request.getRemoteAddr();
     }
 
     @PostMapping("/refresh")

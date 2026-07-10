@@ -35,6 +35,7 @@ public class DispatchedPersonService {
     private final QuotationProposalRepository proposals;
     private final PersonRepository persons;
     private final CompanyRepository companies;
+    private final com.skep.company.CompanyService companyService;
     private final NotificationService notifications;
 
     @Transactional
@@ -70,21 +71,25 @@ public class DispatchedPersonService {
         var personIds = req.items().stream().map(DispatchPersonRequest.Item::personId).distinct().toList();
         var personMap = persons.findAllById(personIds).stream()
                 .collect(Collectors.toMap(Person::getId, p -> p));
+        final Long finalSupplier = supplierCompanyId;
+        // V77 4-a: 본인 + 직속 자식 소유 인원까지 발송 허용(부모 명의). 자식/형제/타사는 selfAndChildren={본인} 이라 차단.
+        java.util.List<Long> ownScope = companyService.selfAndChildren(finalSupplier);
         for (var item : req.items()) {
             Person p = personMap.get(item.personId());
             if (p == null) {
                 throw ApiException.badRequest("PERSON_NOT_FOUND", "인원 #" + item.personId() + " 없음");
             }
-            if (!supplierCompanyId.equals(p.getSupplierId())) {
-                throw ApiException.forbidden("PERSON_NOT_OWNED", "본인 회사 인원만 보낼 수 있습니다");
+            if (!ownScope.contains(p.getSupplierId())) {
+                throw ApiException.forbidden("PERSON_NOT_OWNED", "본인/하위 공급사 인원만 보낼 수 있습니다");
             }
         }
 
-        final Long finalSupplier = supplierCompanyId;
         var entities = req.items().stream()
                 .map(item -> DispatchedPerson.builder()
                         .quotationRequestId(requestId)
                         .supplierCompanyId(finalSupplier)
+                        // 대외 명의는 부모(finalSupplier), 실소유가 자식이면 sub 에 자식 귀속.
+                        .subSupplierCompanyId(subOwnerOrNull(personMap.get(item.personId()).getSupplierId(), finalSupplier))
                         .personId(item.personId())
                         .dailyPrice(item.dailyPrice())
                         .monthlyPrice(item.monthlyPrice())
@@ -117,8 +122,9 @@ public class DispatchedPersonService {
         ensureCanView(qr, actor);
 
         boolean isSupplier = actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER;
+        // V77: 공급사는 (본인+직속자식 명의) 행 + 자기 귀속(sub==본인) 행만.
         List<DispatchedPerson> list = (isSupplier && actor.companyId() != null)
-                ? dispatched.findByQuotationRequestIdAndSupplierCompanyId(requestId, actor.companyId())
+                ? dispatched.findVisibleForSupplier(requestId, companyService.selfAndChildren(actor.companyId()), actor.companyId())
                 : dispatched.findByQuotationRequestId(requestId);
         if (list.isEmpty()) return List.of();
 
@@ -139,6 +145,11 @@ public class DispatchedPersonService {
                 .toList();
     }
 
+    /** V77: 자원 실소유가 발송자(부모)와 다르면(=자식) 자식 id, 같으면 null. */
+    private static Long subOwnerOrNull(Long resourceSupplierId, Long senderCompanyId) {
+        return resourceSupplierId != null && !resourceSupplierId.equals(senderCompanyId) ? resourceSupplierId : null;
+    }
+
     private DispatchedPersonResponse toResponse(DispatchedPerson d, Person p) {
         String label = p != null ? p.getName() : "#" + d.getPersonId();
         String jobTitle = p != null ? p.getJobTitle() : null;
@@ -153,8 +164,9 @@ public class DispatchedPersonService {
         if (qr.getBpCompanyId() != null && qr.getBpCompanyId().equals(companyId)) return;
         boolean selected = proposals.existsByRequestIdAndSupplierCompanyIdAndStatusIn(
                 qr.getId(), companyId, List.of(QuotationProposalStatus.FINAL_ACCEPTED));
-        if (!selected) {
-            throw ApiException.forbidden("NOT_PERMITTED", "조회 권한 없음");
-        }
+        if (selected) return;
+        // V77: 부모가 4-a 로 자기 명의 발송한 자원의 실소유 자식 — 자기 귀속분 열람 허용(읽기 전용).
+        if (dispatched.existsByQuotationRequestIdAndSubSupplierCompanyId(qr.getId(), companyId)) return;
+        throw ApiException.forbidden("NOT_PERMITTED", "조회 권한 없음");
     }
 }

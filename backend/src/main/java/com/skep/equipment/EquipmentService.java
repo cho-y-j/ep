@@ -34,6 +34,7 @@ public class EquipmentService {
 
     private final EquipmentRepository repo;
     private final CompanyRepository companies;
+    private final com.skep.company.CompanyService companyService;
     private final DocumentRepository docRepo;
     private final FileStorage storage;
     private final SiteRepository sites;
@@ -43,6 +44,7 @@ public class EquipmentService {
     private final com.skep.person.PersonService personService;
 
     public EquipmentService(EquipmentRepository repo, CompanyRepository companies,
+                            com.skep.company.CompanyService companyService,
                             DocumentRepository docRepo, FileStorage storage,
                             SiteRepository sites, SiteParticipantRepository participants,
                             EquipmentDefaultOperatorRepository defaultOperators,
@@ -50,6 +52,7 @@ public class EquipmentService {
                             com.skep.person.PersonService personService) {
         this.repo = repo;
         this.companies = companies;
+        this.companyService = companyService;
         this.docRepo = docRepo;
         this.storage = storage;
         this.sites = sites;
@@ -148,6 +151,18 @@ public class EquipmentService {
         }
         if (actor.role() == Role.MANPOWER_SUPPLIER || actor.role() == Role.WORKER) {
             throw ApiException.forbidden("EQUIPMENT_DENIED", "장비 도메인 조회 권한이 없습니다");
+        }
+
+        // V77: 장비공급사 목록은 본인 + 직속 자식(있으면) 자원 포함. 자식이 없으면 selfAndChildren = {본인} 이라 기존과 동일.
+        if (actor.role() == Role.EQUIPMENT_SUPPLIER) {
+            requireCompany(actor);
+            List<Long> scope = companyService.selfAndChildren(actor.companyId());
+            List<Long> targets = supplierIdParam != null
+                    ? (scope.contains(supplierIdParam) ? List.of(supplierIdParam) : List.of())
+                    : scope;
+            if (targets.isEmpty()) return List.of();
+            List<Equipment> all = repo.findBySupplierIdInOrderByIdDesc(targets);
+            return category != null ? all.stream().filter(e -> e.getCategory() == category).toList() : all;
         }
 
         Long supplierId = resolveListSupplier(actor, supplierIdParam);
@@ -326,7 +341,8 @@ public class EquipmentService {
     private void ensureCanAccess(AuthenticatedUser actor, Long supplierId) {
         if (actor.role() == Role.ADMIN) return;
         if (actor.role() == Role.EQUIPMENT_SUPPLIER) {
-            if (!supplierId.equals(actor.companyId())) {
+            // V77: 읽기만 본인 + 직속 자식 확장(부모→자식 단방향). 자식/형제는 selfAndChildren={본인} 이라 자동 차단.
+            if (!companyService.selfAndChildren(actor.companyId()).contains(supplierId)) {
                 throw ApiException.forbidden("FORBIDDEN_OTHER_COMPANY", "본인 회사의 장비만 조회 가능합니다");
             }
             return;

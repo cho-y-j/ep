@@ -79,6 +79,9 @@ skep:
       email: ${SKEP_BOOTSTRAP_ADMIN_EMAIL:admin@skep.local}
       password: ${SKEP_BOOTSTRAP_ADMIN_PASSWORD:change-me-now}
       name: ${SKEP_BOOTSTRAP_ADMIN_NAME:System Admin}
+  # 카카오맵 JS 앱키 — 현장 지도 WebView. 운영 .env 로 주입(KAKAO_JS_KEY). 미설정 시 지도 로드 실패.
+  kakao:
+    js-key: ${KAKAO_JS_KEY:}
   # SMS — WideShot. ENABLED=false default. 키 들어오면 true 로 toggle.
   sms:
     enabled: ${SKEP_SMS_ENABLED:false}

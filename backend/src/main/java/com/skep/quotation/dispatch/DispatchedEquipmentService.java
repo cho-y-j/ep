@@ -6,8 +6,11 @@ import com.skep.company.CompanyRepository;
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentRepository;
 import com.skep.notification.NotificationService;
+import com.skep.quotation.QuotationMode;
 import com.skep.quotation.QuotationRequest;
 import com.skep.quotation.QuotationRequestRepository;
+import com.skep.quotation.QuotationRequestTarget;
+import com.skep.quotation.QuotationRequestTargetRepository;
 import com.skep.quotation.dispatch.dto.DispatchRequest;
 import com.skep.quotation.dispatch.dto.DispatchedEquipmentResponse;
 import com.skep.quotation.proposal.QuotationProposalRepository;
@@ -32,9 +35,11 @@ public class DispatchedEquipmentService {
 
     private final DispatchedEquipmentRepository dispatched;
     private final QuotationRequestRepository requests;
+    private final QuotationRequestTargetRepository requestTargets;
     private final QuotationProposalRepository proposals;
     private final EquipmentRepository equipments;
     private final CompanyRepository companies;
+    private final com.skep.company.CompanyService companyService;
     private final NotificationService notifications;
 
     @Transactional
@@ -103,17 +108,22 @@ public class DispatchedEquipmentService {
             var eqIds = req.items().stream().map(DispatchRequest.Item::equipmentId).distinct().toList();
             eqMap = equipments.findAllById(eqIds).stream()
                     .collect(Collectors.toMap(Equipment::getId, e -> e));
+            // V77 4-a: 본인 + 직속 자식 소유 장비까지 발송 허용(부모 명의). 자식/형제/타사는 selfAndChildren={본인} 이라 차단.
+            java.util.List<Long> ownScope = companyService.selfAndChildren(finalSupplier);
             for (var item : req.items()) {
                 Equipment e = eqMap.get(item.equipmentId());
                 if (e == null) throw ApiException.badRequest("EQUIPMENT_NOT_FOUND", "장비 #" + item.equipmentId() + " 없음");
-                if (!e.getSupplierId().equals(supplierCompanyId)) {
-                    throw ApiException.forbidden("EQUIPMENT_NOT_OWNED", "본인 회사 장비만 보낼 수 있습니다");
+                if (!ownScope.contains(e.getSupplierId())) {
+                    throw ApiException.forbidden("EQUIPMENT_NOT_OWNED", "본인/하위 공급사 장비만 보낼 수 있습니다");
                 }
             }
+            final Map<Long, Equipment> itemEqMap = eqMap;
             entities = req.items().stream()
                     .map(item -> DispatchedEquipment.builder()
                             .quotationRequestId(requestId)
                             .supplierCompanyId(finalSupplier)
+                            // 대외 명의는 부모(finalSupplier), 실소유가 자식이면 sub 에 자식 귀속.
+                            .subSupplierCompanyId(subOwnerOrNull(itemEqMap.get(item.equipmentId()).getSupplierId(), finalSupplier))
                             .equipmentId(item.equipmentId())
                             .dailyPrice(item.dailyPrice())
                             .otDailyPrice(item.otDailyPrice())
@@ -155,8 +165,9 @@ public class DispatchedEquipmentService {
         ensureCanView(qr, actor);
 
         boolean isSupplier = actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER;
+        // V77: 공급사는 (본인+직속자식 명의) 행 + 자기 귀속(sub==본인) 행만. 부모↔자식 각자 필요한 만큼만 노출.
         List<DispatchedEquipment> list = (isSupplier && actor.companyId() != null)
-                ? dispatched.findByQuotationRequestIdAndSupplierCompanyId(requestId, actor.companyId())
+                ? dispatched.findVisibleForSupplier(requestId, companyService.selfAndChildren(actor.companyId()), actor.companyId())
                 : dispatched.findByQuotationRequestId(requestId);
         if (list.isEmpty()) return List.of();
 
@@ -179,6 +190,11 @@ public class DispatchedEquipmentService {
                 .toList();
     }
 
+    /** V77: 자원 실소유가 발송자(부모)와 다르면(=자식) 자식 id, 같으면 null. */
+    private static Long subOwnerOrNull(Long resourceSupplierId, Long senderCompanyId) {
+        return resourceSupplierId != null && !resourceSupplierId.equals(senderCompanyId) ? resourceSupplierId : null;
+    }
+
     private DispatchedEquipmentResponse toResponse(DispatchedEquipment d, Equipment e, Long bpCompanyId) {
         String label = e != null
                 ? (e.getVehicleNo() != null ? e.getVehicleNo() : (e.getModel() != null ? e.getModel() : "#" + e.getId()))
@@ -196,6 +212,26 @@ public class DispatchedEquipmentService {
         ensureCanView(qr, actor);
     }
 
+    /**
+     * 발송 전 미리보기 권한 — 선정(FINAL_ACCEPTED) 전 단계에서도 호출되므로 ensureCanView 보다 넓다.
+     * 허용: ADMIN / 요청 소유 BP / OPEN_BID(공개 게시판이라 임의 공급사) / TARGETED 의 지정 대상 공급사.
+     */
+    public void ensureCanPreviewRequest(Long requestId, AuthenticatedUser actor) {
+        QuotationRequest qr = requests.findById(requestId)
+                .orElseThrow(() -> ApiException.notFound("REQUEST_NOT_FOUND", "견적 없음"));
+        if (actor.role() == Role.ADMIN) return;
+        Long companyId = actor.companyId();
+        if (companyId == null) throw ApiException.forbidden("NO_COMPANY", "회사 미지정");
+        if (qr.getBpCompanyId() != null && qr.getBpCompanyId().equals(companyId)) return;
+        if (qr.getMode() == QuotationMode.OPEN_BID) return;
+        boolean targeted = requestTargets.findByRequestIdOrderByIdAsc(requestId).stream()
+                .map(QuotationRequestTarget::getSupplierCompanyId)
+                .anyMatch(companyId::equals);
+        if (!targeted) {
+            throw ApiException.forbidden("NOT_PERMITTED", "미리보기 권한 없음");
+        }
+    }
+
     private void ensureCanView(QuotationRequest qr, AuthenticatedUser actor) {
         if (actor.role() == Role.ADMIN) return;
         Long companyId = actor.companyId();
@@ -204,8 +240,9 @@ public class DispatchedEquipmentService {
         // 본인이 선정된 공급사인 경우
         boolean selected = proposals.existsByRequestIdAndSupplierCompanyIdAndStatusIn(
                 qr.getId(), companyId, List.of(QuotationProposalStatus.FINAL_ACCEPTED));
-        if (!selected) {
-            throw ApiException.forbidden("NOT_PERMITTED", "조회 권한 없음");
-        }
+        if (selected) return;
+        // V77: 부모가 4-a 로 자기 명의 발송한 자원의 실소유 자식 — 자기 귀속분 열람 허용(읽기 전용).
+        if (dispatched.existsByQuotationRequestIdAndSubSupplierCompanyId(qr.getId(), companyId)) return;
+        throw ApiException.forbidden("NOT_PERMITTED", "조회 권한 없음");
     }
 }

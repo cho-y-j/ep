@@ -41,6 +41,7 @@ public class DocumentCollectionService {
     private final CollectionMailService mail;
     private final EquipmentRepository equipmentRepo;
     private final PersonRepository personRepo;
+    private final com.skep.company.CompanyService companyService;
     private final com.skep.alimtalk.AlimTalkService alimTalk;
 
     @Value("${SKEP_PUBLIC_BASE_URL:http://localhost:8082}")
@@ -50,6 +51,7 @@ public class DocumentCollectionService {
                                      DocumentTypeRepository typeRepo, DocumentRepository docRepo, DocumentService documentService,
                                      FileStorage storage, PdfMergeService pdfMerge, CollectionMailService mail,
                                      EquipmentRepository equipmentRepo, PersonRepository personRepo,
+                                     com.skep.company.CompanyService companyService,
                                      com.skep.alimtalk.AlimTalkService alimTalk) {
         this.reqRepo = reqRepo;
         this.itemRepo = itemRepo;
@@ -61,6 +63,7 @@ public class DocumentCollectionService {
         this.mail = mail;
         this.equipmentRepo = equipmentRepo;
         this.personRepo = personRepo;
+        this.companyService = companyService;
         this.alimTalk = alimTalk;
     }
 
@@ -71,6 +74,7 @@ public class DocumentCollectionService {
         if (req.ownerType() == null || req.ownerId() == null) {
             throw ApiException.badRequest("OWNER_REQUIRED", "대상(장비/인원)을 지정하세요");
         }
+        ensureOwnsResource(req.ownerType(), req.ownerId(), actor);
         List<Long> required = req.requiredTypeIds() == null ? List.of() : req.requiredTypeIds();
         List<Long> optional = req.optionalTypeIds() == null ? List.of() : req.optionalTypeIds();
         if (required.isEmpty() && optional.isEmpty()) {
@@ -119,14 +123,14 @@ public class DocumentCollectionService {
     @Transactional(readOnly = true)
     public List<CollectionDtos.Response> listByOwner(OwnerType ownerType, Long ownerId, AuthenticatedUser actor) {
         return reqRepo.findByOwnerTypeAndOwnerIdOrderByIdDesc(ownerType, ownerId).stream()
-                .filter(r -> canAccess(actor, r)).map(this::toResponse).toList();
+                .filter(r -> canRead(actor, r)).map(this::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
     public CollectionDtos.Response get(Long id, AuthenticatedUser actor) {
         DocumentCollectionRequest r = reqRepo.findById(id)
                 .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "수집 요청을 찾을 수 없습니다"));
-        if (!canAccess(actor, r)) throw ApiException.forbidden("FORBIDDEN", "조회 권한이 없습니다");
+        if (!canRead(actor, r)) throw ApiException.forbidden("FORBIDDEN", "조회 권한이 없습니다");
         return toResponse(r);
     }
 
@@ -225,12 +229,37 @@ public class DocumentCollectionService {
         DocumentCollectionRequest r = reqRepo.findByToken(token)
                 .orElseThrow(() -> ApiException.notFound("INVALID_TOKEN", "유효하지 않은 링크입니다"));
         if ("CANCELLED".equals(r.getStatus())) throw ApiException.badRequest("CANCELLED", "취소된 요청입니다");
+        if (r.isExpired()) throw ApiException.badRequest("EXPIRED", "링크가 만료되었습니다");
         return r;
     }
 
+    /** create 대상(장비/인원)이 actor 회사 소유 자원인지 검증. ADMIN 예외. */
+    private void ensureOwnsResource(OwnerType ownerType, Long ownerId, AuthenticatedUser actor) {
+        if (actor.role() == Role.ADMIN) return;
+        Long supplierId;
+        if (ownerType == OwnerType.EQUIPMENT) {
+            supplierId = equipmentRepo.findById(ownerId).map(Equipment::getSupplierId).orElse(null);
+        } else if (ownerType == OwnerType.PERSON) {
+            supplierId = personRepo.findById(ownerId).map(Person::getSupplierId).orElse(null);
+        } else {
+            throw ApiException.badRequest("BAD_OWNER_TYPE", "지원하지 않는 대상 유형입니다");
+        }
+        if (supplierId == null || actor.companyId() == null || !supplierId.equals(actor.companyId())) {
+            throw ApiException.forbidden("FORBIDDEN", "본인 회사 자원만 서류수집을 생성할 수 있습니다");
+        }
+    }
+
+    /** 쓰기(취소/발송/링크전송) 권한 — 본인 회사 고정. V77 자식 확장 금지. */
     private boolean canAccess(AuthenticatedUser actor, DocumentCollectionRequest r) {
         if (actor.role() == Role.ADMIN) return true;
         return actor.companyId() != null && actor.companyId().equals(r.getSupplierCompanyId());
+    }
+
+    /** V77 읽기 전용 권한 — 본인 + 직속 자식(부모→자식 단방향). 자식/형제는 selfAndChildren={본인} 이라 자동 차단. */
+    private boolean canRead(AuthenticatedUser actor, DocumentCollectionRequest r) {
+        if (actor.role() == Role.ADMIN) return true;
+        return actor.companyId() != null
+                && companyService.selfAndChildren(actor.companyId()).contains(r.getSupplierCompanyId());
     }
 
     private String genToken() {

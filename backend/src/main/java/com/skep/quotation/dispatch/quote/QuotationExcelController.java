@@ -75,6 +75,7 @@ public class QuotationExcelController {
             @CurrentUser AuthenticatedUser actor
     ) {
         ensureSupplierForPreview(actor);
+        dispatchedService.ensureCanPreviewRequest(requestId, actor);
         Long sid = resolveSupplier(null, actor);
         byte[] bytes = excelService.buildPreviewXlsx(requestId, sid, rates);
         return binary(bytes,
@@ -90,6 +91,7 @@ public class QuotationExcelController {
             @CurrentUser AuthenticatedUser actor
     ) {
         ensureSupplierForPreview(actor);
+        dispatchedService.ensureCanPreviewRequest(requestId, actor);
         Long sid = resolveSupplier(null, actor);
         byte[] bytes = excelService.buildPreviewPdf(requestId, sid, rates);
         return binary(bytes,

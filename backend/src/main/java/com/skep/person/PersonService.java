@@ -36,6 +36,7 @@ public class PersonService {
 
     private final PersonRepository repo;
     private final CompanyRepository companies;
+    private final com.skep.company.CompanyService companyService;
     private final DocumentRepository docRepo;
     private final FileStorage storage;
     private final SiteRepository sites;
@@ -43,11 +44,13 @@ public class PersonService {
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     public PersonService(PersonRepository repo, CompanyRepository companies,
+                         com.skep.company.CompanyService companyService,
                          DocumentRepository docRepo, FileStorage storage,
                          SiteRepository sites, SiteParticipantRepository participants,
                          org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
         this.repo = repo;
         this.companies = companies;
+        this.companyService = companyService;
         this.docRepo = docRepo;
         this.storage = storage;
         this.sites = sites;
@@ -111,6 +114,17 @@ public class PersonService {
         }
         if (actor.role() == Role.WORKER) {
             throw ApiException.forbidden("PERSON_DENIED", "인원 조회 권한이 없습니다");
+        }
+
+        // V77: 공급사 목록은 본인 + 직속 자식(있으면) 자원 포함. 자식이 없으면 selfAndChildren = {본인} 이라 기존과 동일.
+        if (actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER) {
+            requireCompany(actor);
+            List<Long> scope = companyService.selfAndChildren(actor.companyId());
+            if (supplierIdParam != null) {
+                if (!scope.contains(supplierIdParam)) return org.springframework.data.domain.Page.empty(pageable);
+                return repo.search(supplierIdParam, role, searchTerm, pageable);
+            }
+            return repo.searchInSuppliers(scope, role, searchTerm, pageable);
         }
 
         Long supplierId = resolveListSupplier(actor, supplierIdParam);
@@ -307,7 +321,8 @@ public class PersonService {
     private void ensureCanAccess(AuthenticatedUser actor, Long supplierId) {
         if (actor.role() == Role.ADMIN) return;
         if (actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER) {
-            if (!supplierId.equals(actor.companyId())) {
+            // V77: 읽기만 본인 + 직속 자식 확장(부모→자식 단방향). 자식/형제는 selfAndChildren={본인} 이라 자동 차단.
+            if (!companyService.selfAndChildren(actor.companyId()).contains(supplierId)) {
                 throw ApiException.forbidden("FORBIDDEN_OTHER_COMPANY", "본인 회사의 인원만 조회 가능합니다");
             }
             return;

@@ -134,6 +134,7 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
         { label: '월별 작업확인서', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
         { label: '내 회사', to: '/my-company', icon: <IconBriefcase /> },
         ...(isMaster ? [{ label: '직원 관리', to: '/company/users', icon: <IconUserCheck /> }] : []),
+        ...(role === 'EQUIPMENT_SUPPLIER' && isMaster ? [{ label: '하위공급사 관리', to: '/sub-suppliers', icon: <IconBriefcase /> } as NavItem] : []),
         ...(role === 'EQUIPMENT_SUPPLIER' ? [
           { label: '내 장비', to: '/equipment', icon: <IconTruck /> } as NavItem,
           { label: '장비 투입 통계', to: '/equipment-stats', icon: <IconClipboard /> } as NavItem,

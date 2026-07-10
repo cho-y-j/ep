@@ -8,6 +8,8 @@ type Props = {
   companiesById: Map<number, CompanyResponse>;
   showSupplierColumn: boolean;
   onRowClick: (e: EquipmentResponse) => void;
+  /** 로그인 회사 id — 공급사 컬럼이 없을 때 하위공급사 소유 장비에 소속 라벨을 붙이는 용도. */
+  selfCompanyId?: number | null;
 };
 
 function statusOf(e: EquipmentResponse): { label: string; cls: string; rank: number } {
@@ -48,7 +50,7 @@ function compareBy(
   }
 }
 
-export default function EquipmentTable({ equipment, companiesById, showSupplierColumn, onRowClick }: Props) {
+export default function EquipmentTable({ equipment, companiesById, showSupplierColumn, onRowClick, selfCompanyId }: Props) {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -115,6 +117,11 @@ export default function EquipmentTable({ equipment, companiesById, showSupplierC
                         {e.vehicle_no || e.model || EQUIPMENT_CATEGORY_LABEL[e.category]}
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">{e.code ?? '-'}</div>
+                      {!showSupplierColumn && selfCompanyId != null && e.supplier_id !== selfCompanyId && e.supplier_name && (
+                        <span className="inline-flex mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                          소속: {e.supplier_name}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </td>

@@ -34,6 +34,7 @@ import DocxTemplatesPage from './features/workPlan/DocxTemplatesPage';
 import WorkPlanEditPage from './features/workPlan/WorkPlanEditPage';
 import WorkPlanCreatePage from './features/workPlan/create/WorkPlanCreatePage';
 import MyCompanyPage from './features/company/MyCompanyPage';
+import SubSuppliersPage from './features/company/SubSuppliersPage';
 import QuotationListPage from './features/quotation/QuotationListPage';
 import QuotationCreatePage from './features/quotation/QuotationCreatePage';
 import AlimTalkSendPage from './features/alimtalk/AlimTalkSendPage';
@@ -247,6 +248,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['BP', 'EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}>
               <CompanyUsersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sub-suppliers"
+          element={
+            <ProtectedRoute roles={['EQUIPMENT_SUPPLIER']}>
+              <SubSuppliersPage />
             </ProtectedRoute>
           }
         />

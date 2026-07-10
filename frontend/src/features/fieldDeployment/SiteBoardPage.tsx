@@ -538,9 +538,19 @@ function DailyWorkConfirmationModal({ item, wc, onClose }: {
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
   }, [wc?.id]);
 
-  function download() {
+  async function download() {
     if (!wc?.id) return;
-    window.open(`/api/work-confirmations/${wc.id}/pdf?disposition=attachment`, '_blank');
+    try {
+      const res = await api.get(`/api/work-confirmations/${wc.id}/pdf?disposition=attachment`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `일일작업확인서_${today}_${item.resource_label}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('PDF를 불러올 수 없습니다');
+    }
   }
 
   return (

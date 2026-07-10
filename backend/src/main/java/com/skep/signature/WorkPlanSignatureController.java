@@ -3,6 +3,7 @@ package com.skep.signature;
 import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
 import com.skep.signature.dto.SignatureResponse;
+import com.skep.user.Role;
 import com.skep.workplan.WorkPlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -36,21 +37,24 @@ public class WorkPlanSignatureController {
                                          @RequestParam(name = "withPng", defaultValue = "false") boolean withPng,
                                          @CurrentUser AuthenticatedUser actor) {
         // P1: 작업계획서 조회 권한 통과해야 사인 목록도 접근 가능. withPng=true 면 PNG 까지.
-        workPlanService.get(workPlanId, actor);
+        var wp = workPlanService.get(workPlanId, actor);
+        // 사인 PNG(5슬롯 모두 BP/원청 인물)는 ADMIN 또는 해당 작업계획서 BP 본인만 열람. 공급사는 메타만.
+        boolean pngAllowed = withPng && (actor.role() == Role.ADMIN
+                || (actor.companyId() != null && actor.companyId().equals(wp.bpCompanyId())));
         org.slf4j.LoggerFactory.getLogger(WorkPlanSignatureController.class)
-                .info("[SIG-LIST] workPlanId={} withPng={}", workPlanId, withPng);
+                .info("[SIG-LIST] workPlanId={} withPng={} pngAllowed={}", workPlanId, withPng, pngAllowed);
         return signatureService.listForWorkPlan(workPlanId).stream()
                 .map(s -> {
                     byte[] existing = s.getSignaturePng();
                     org.slf4j.LoggerFactory.getLogger(WorkPlanSignatureController.class)
                             .info("[SIG-LIST] role={} status={} entityPngLen={}",
                                     s.getRole(), s.getStatus(), existing == null ? -1 : existing.length);
-                    if (withPng && s.getStatus() == SignatureStatus.SIGNED
+                    if (pngAllowed && s.getStatus() == SignatureStatus.SIGNED
                             && (existing == null || existing.length == 0)) {
                         byte[] png = signatureService.fetchPngById(s.getId());
                         if (png != null && png.length > 0) s.setSignaturePng(png);
                     }
-                    return SignatureResponse.from(s, SignatureService.roleLabel(s.getRole()), withPng);
+                    return SignatureResponse.from(s, SignatureService.roleLabel(s.getRole()), pngAllowed);
                 })
                 .toList();
     }
@@ -66,6 +70,14 @@ public class WorkPlanSignatureController {
         }
         String cleaned = b64.contains(",") ? b64.substring(b64.indexOf(",") + 1) : b64;
         byte[] png = Base64.getDecoder().decode(cleaned);
+        // 공개 제출 경로(SignatureController#submit)와 동일한 크기 cap + PNG 매직바이트 검증.
+        if (png.length < 8 || png.length > 2 * 1024 * 1024) {
+            throw new IllegalArgumentException("PNG 크기가 유효하지 않습니다 (8B~2MB)");
+        }
+        if (!(png[0] == (byte) 0x89 && png[1] == 0x50 && png[2] == 0x4E && png[3] == 0x47
+                && png[4] == 0x0D && png[5] == 0x0A && png[6] == 0x1A && png[7] == 0x0A)) {
+            throw new IllegalArgumentException("PNG 형식이 아닙니다");
+        }
         var sig = signatureService.signAsAuthor(workPlanId, png, actor);
         return SignatureResponse.from(sig, SignatureService.roleLabel(sig.getRole()), false);
     }

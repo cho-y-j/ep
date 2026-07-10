@@ -203,9 +203,14 @@ public class OnlyOfficeService {
      */
     public Map<String, Object> handleCallback(Long planId, String token, Map<String, Object> body) {
         verifyFileAccessToken(planId, token);
-        // 본문이 JWT signed 라면 verify 후 payload 사용.
+        // JWT 시크릿이 설정된 경우 body.token 검증을 강제 — 토큰 누락 시 무조건 거부(위조 콜백 차단).
         Object signedToken = body.get("token");
-        if (signedToken instanceof String s && props.getJwtSecret() != null && !props.getJwtSecret().isBlank()) {
+        boolean jwtEnabled = props.getJwtSecret() != null && !props.getJwtSecret().isBlank();
+        if (jwtEnabled) {
+            if (!(signedToken instanceof String s) || s.isBlank()) {
+                log.warn("OnlyOffice callback rejected — token missing for plan {}", planId);
+                return Map.of("error", 1);
+            }
             try {
                 var claims = Jwts.parser()
                         .verifyWith(hmacKey())

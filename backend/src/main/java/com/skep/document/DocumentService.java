@@ -74,8 +74,9 @@ public class DocumentService {
             if (declaredCt.equals("image/jpeg") || declaredCt.equals("image/jpg")) return b0 == 0xFF && b1 == 0xD8 && b2 == 0xFF;
             // GIF
             if (declaredCt.equals("image/gif")) return b0 == 0x47 && b1 == 0x49 && b2 == 0x46 && b3 == 0x38;
-            // WEBP — RIFF....WEBP
-            if (declaredCt.equals("image/webp")) return b0 == 0x52 && b1 == 0x49 && b2 == 0x46 && b3 == 0x46;
+            // WEBP — RIFF(0-3) + WEBP(8-11)
+            if (declaredCt.equals("image/webp")) return b0 == 0x52 && b1 == 0x49 && b2 == 0x46 && b3 == 0x46
+                    && head[8] == 0x57 && head[9] == 0x45 && head[10] == 0x42 && head[11] == 0x50;
             // HEIC/HEIF — ISO BMFF: bytes 4-7 = "ftyp", bytes 8-11 = brand
             if (declaredCt.equals("image/heic") || declaredCt.equals("image/heif")) {
                 if (head[4] != 0x66 || head[5] != 0x74 || head[6] != 0x79 || head[7] != 0x70) return false;
@@ -103,6 +104,7 @@ public class DocumentService {
     private final EquipmentRepository equipmentRepo;
     private final PersonRepository personRepo;
     private final CompanyRepository companyRepo;
+    private final com.skep.company.CompanyService companyService;
     private final FileStorage storage;
     private final AuditLogService auditLog;
     private final SiteRepository sites;
@@ -117,6 +119,7 @@ public class DocumentService {
     public DocumentService(DocumentRepository docRepo, DocumentTypeRepository typeRepo,
                            EquipmentRepository equipmentRepo, PersonRepository personRepo,
                            CompanyRepository companyRepo,
+                           com.skep.company.CompanyService companyService,
                            FileStorage storage, AuditLogService auditLog,
                            SiteRepository sites, SiteParticipantRepository participants,
                            ApplicationEventPublisher events,
@@ -130,6 +133,7 @@ public class DocumentService {
         this.equipmentRepo = equipmentRepo;
         this.personRepo = personRepo;
         this.companyRepo = companyRepo;
+        this.companyService = companyService;
         this.storage = storage;
         this.auditLog = auditLog;
         this.sites = sites;
@@ -618,7 +622,8 @@ public class DocumentService {
     private void ensureCanAccess(AuthenticatedUser actor, Long ownerSupplierId) {
         if (actor.role() == Role.ADMIN) return;
         if (actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER) {
-            if (!ownerSupplierId.equals(actor.companyId())) {
+            // V77: 읽기만 본인 + 직속 자식 확장(부모→자식 단방향). 쓰기(ensureCanModify)는 본인 회사 고정 유지.
+            if (!companyService.selfAndChildren(actor.companyId()).contains(ownerSupplierId)) {
                 throw ApiException.forbidden("FORBIDDEN_OTHER_COMPANY", "본인 회사의 서류만 접근 가능합니다");
             }
             return;
