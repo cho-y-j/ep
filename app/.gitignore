@@ -1,0 +1,26 @@
+# Gradle / build outputs
+.gradle/
+build/
+**/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local machine config (SDK path 등)
+local.properties
+
+# Signing keys — 절대 커밋 금지
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# Firebase client config (api_key 포함) — 복원 시 Firebase 콘솔에서 재다운로드
+google-services.json
+**/google-services.json
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+Thumbs.db

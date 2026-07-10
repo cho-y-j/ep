@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F1F5F9">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#2563EB"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="18dp">
+
+        <TextView
+            android:id="@+id/tvBpName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="발주사"
+            android:textSize="17sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnLogout"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
+            android:text="로그아웃"
+            android:textSize="11sp"
+            android:textColor="#FFFFFF"
+            android:textAllCaps="false"
+            android:backgroundTint="#1D4ED8"
+            android:paddingHorizontal="12dp"
+            android:minWidth="0dp" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <Button
+                android:id="@+id/btnSites"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="현장 보기 — 투입 현황 · 점검"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#1D4ED8"
+                android:textAllCaps="false"
+                android:backgroundTint="#DBEAFE"
+                android:layout_marginBottom="10dp" />
+
+            <Button
+                android:id="@+id/btnInbox"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="받은 투입요청 — 수락 · 거절"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#1D4ED8"
+                android:textAllCaps="false"
+                android:backgroundTint="#DBEAFE"
+                android:layout_marginBottom="20dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="서명 대기 작업확인서"
+                android:textSize="14sp"
+                android:textColor="#0F172A"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/wcContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/tvWcEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="서명 대기 중인 작업확인서가 없습니다"
+                android:textSize="13sp"
+                android:textColor="#94A3B8"
+                android:gravity="center"
+                android:padding="20dp"
+                android:background="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="받은 알림"
+                android:textSize="14sp"
+                android:textColor="#0F172A"
+                android:textStyle="bold"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/notiContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/tvNotiEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="받은 알림이 없습니다"
+                android:textSize="13sp"
+                android:textColor="#94A3B8"
+                android:gravity="center"
+                android:padding="20dp"
+                android:background="#FFFFFF" />
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

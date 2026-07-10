@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#F8FAFC"
+    android:padding="32dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="SKEP"
+        android:textSize="32sp"
+        android:textColor="#2563EB"
+        android:textStyle="bold"
+        android:letterSpacing="0.1"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="로그인 유형을 선택하세요"
+        android:textSize="14sp"
+        android:textColor="#64748B"
+        android:layout_marginBottom="48dp" />
+
+    <Button
+        android:id="@+id/btnWorker"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:text="현장 작업자"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#2563EB"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/btnBp"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:text="발주사 (BP)"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        android:textColor="#1D4ED8"
+        android:backgroundTint="#DBEAFE" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="· 작업자: 공급사 발급 아이디/비번\n· 발주사: 웹 로그인 아이디/비번"
+        android:textSize="12sp"
+        android:textColor="#94A3B8"
+        android:gravity="center"
+        android:lineSpacingExtra="3dp"
+        android:layout_marginTop="32dp" />
+
+</LinearLayout>

@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F8FAFC"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="발주사(BP) 로그인"
+            android:textSize="22sp"
+            android:textColor="#0F172A"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="웹과 동일한 아이디(이메일)/비밀번호로 로그인하세요."
+            android:textSize="13sp"
+            android:textColor="#64748B"
+            android:layout_marginBottom="36dp" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="아이디 (이메일)" android:textSize="12sp" android:textColor="#2563EB" android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etEmail"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:hint="이메일"
+            android:textSize="16sp"
+            android:textColor="#0F172A"
+            android:textColorHint="#CBD5E1"
+            android:background="#FFFFFF"
+            android:padding="14dp"
+            android:inputType="textEmailAddress"
+            android:autofillHints="emailAddress"
+            android:layout_marginBottom="16dp" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="비밀번호" android:textSize="12sp" android:textColor="#2563EB" android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etPassword"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:hint="비밀번호"
+            android:textSize="16sp"
+            android:textColor="#0F172A"
+            android:textColorHint="#CBD5E1"
+            android:background="#FFFFFF"
+            android:padding="14dp"
+            android:inputType="textPassword"
+            android:autofillHints="password"
+            android:layout_marginBottom="28dp" />
+
+        <Button
+            android:id="@+id/btnLogin"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="로그인"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:backgroundTint="#2563EB" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="13sp"
+            android:textColor="#E53935"
+            android:gravity="center"
+            android:layout_marginTop="16dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#E2E8F0"
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="14dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="테스트 빠른 로그인 (비번 test1234)"
+            android:textSize="11sp"
+            android:textColor="#94A3B8"
+            android:gravity="center"
+            android:layout_marginBottom="10dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnQuickBp"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="BP"
+                android:textSize="13sp"
+                android:textColor="#1D4ED8"
+                android:textAllCaps="false"
+                android:backgroundTint="#DBEAFE"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnQuickEq"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="장비공급사"
+                android:textSize="13sp"
+                android:textColor="#047857"
+                android:textAllCaps="false"
+                android:backgroundTint="#D1FAE5"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnQuickMp"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="인력공급사"
+                android:textSize="13sp"
+                android:textColor="#B45309"
+                android:textAllCaps="false"
+                android:backgroundTint="#FEF3C7" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

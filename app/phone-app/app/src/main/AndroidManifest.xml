@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.SkepField">
+
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
+
+        <!-- 런처: 진입 분기 (현장 작업자 / 발주사 BP) -->
+        <activity
+            android:name=".ui.EntryActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 현장 작업자 로그인 (아이디/비번) -->
+        <activity
+            android:name=".ui.OnboardingActivity"
+            android:exported="false" />
+
+        <!-- 발주사(BP) 로그인 -->
+        <activity
+            android:name=".ui.BpLoginActivity"
+            android:exported="false" />
+
+        <!-- 발주사(BP) 메인 -->
+        <activity
+            android:name=".ui.BpMainActivity"
+            android:exported="false" />
+
+        <!-- 발주사(BP) 작업확인서 서명 -->
+        <activity
+            android:name=".ui.BpWcSignActivity"
+            android:exported="false" />
+
+        <!-- BP 현장 목록 / 현장 상세 보드 -->
+        <activity
+            android:name=".ui.BpSitesActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.BpSiteBoardActivity"
+            android:exported="false" />
+
+        <!-- 장비공급사 메인 / 장비 일상점검 조회 / 받은 요청(점검·이행지시) -->
+        <activity
+            android:name=".ui.SupplierMainActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.SupplierEquipmentInspectionsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.SupplierInboxActivity"
+            android:exported="false" />
+
+        <!-- BP 받은 투입요청 -->
+        <activity
+            android:name=".ui.BpInboxActivity"
+            android:exported="false" />
+
+        <!-- 현장 상황 (지도+출근+안전+날씨+작업진행+투입자원) / 현장 목록 -->
+        <activity
+            android:name=".ui.SiteSituationListActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.SiteSituationActivity"
+            android:exported="false" />
+
+        <!-- 작업확인서 PDF 뷰어 -->
+        <activity
+            android:name=".ui.PdfViewActivity"
+            android:exported="false" />
+
+        <!-- 메인: 출석 -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="false" />
+
+        <!-- 출/퇴근 체크 (지도 + GPS) -->
+        <activity
+            android:name=".ui.CheckInActivity"
+            android:exported="false" />
+
+        <!-- 작업확인서 사인 -->
+        <activity
+            android:name=".ui.WorkConfirmationActivity"
+            android:exported="false" />
+
+        <!-- 현장 문제 신고 (작업자 → BP) -->
+        <activity
+            android:name=".ui.SiteProblemReportActivity"
+            android:exported="false" />
+
+        <!-- NFC 장비 점검 스캔 -->
+        <activity
+            android:name=".ui.NfcScanActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <!-- 장비 일상점검 체크리스트 -->
+        <activity
+            android:name=".ui.EquipmentInspectionActivity"
+            android:exported="false" />
+
+        <!-- 근무내역 -->
+        <activity
+            android:name=".ui.HistoryActivity"
+            android:exported="false" />
+
+        <!-- 워치 → 폰 메시지 수신 (Wearable Data Layer) -->
+        <service
+            android:name=".service.SkepWatchListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/skep" />
+            </intent-filter>
+        </service>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- 공지 풀스크린 (잠금화면 위 + 화면 깨움) -->
+        <activity
+            android:name=".ui.AnnouncementActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.SkepField" />
+
+        <!-- 공지 FCM 수신 -->
+        <service
+            android:name=".service.FieldFcmService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- 워치 안전알림 수신 → 서버 중계 (Wearable Data Layer, path /skep/safety) -->
+        <service
+            android:name=".service.WatchSafetyListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/skep" />
+            </intent-filter>
+        </service>
+
+    </application>
+</manifest>

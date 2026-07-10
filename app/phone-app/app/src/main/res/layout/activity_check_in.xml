@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F1F5F9">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#2563EB"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="22dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="14dp">
+
+            <Button
+                android:id="@+id/btnBack"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:text="‹"
+                android:textSize="20sp"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:background="@null"
+                android:padding="0dp"
+                android:minWidth="0dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="출석체크"
+                android:textSize="18sp"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:gravity="center" />
+
+            <Space
+                android:layout_width="32dp"
+                android:layout_height="32dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="#FFFFFF"
+            android:padding="16dp">
+
+            <View
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="#DBEAFE"
+                android:layout_marginEnd="12dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="현재 현장"
+                    android:textSize="11sp"
+                    android:textColor="#64748B" />
+
+                <TextView
+                    android:id="@+id/tvSiteName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="-"
+                    android:textSize="15sp"
+                    android:textColor="#0F172A"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSiteAddress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="-"
+                    android:textSize="11sp"
+                    android:textColor="#64748B" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- 카카오맵 WebView -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="260dp"
+                android:background="#E2E8F0"
+                android:layout_marginBottom="12dp">
+
+                <WebView
+                    android:id="@+id/mapWebView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <TextView
+                    android:id="@+id/tvRadius"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <!-- 결과 카드 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="#FFFFFF"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:id="@+id/tvResultIcon"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:text="○"
+                    android:textSize="24sp"
+                    android:textColor="#94A3B8"
+                    android:gravity="center"
+                    android:layout_marginEnd="10dp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvResultTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="위치 확인 중..."
+                        android:textSize="14sp"
+                        android:textColor="#0F172A"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvResultDetail"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="현재 위치를 확인하고 있습니다."
+                        android:textSize="11sp"
+                        android:textColor="#64748B" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 현장 사진 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="현장 사진"
+                android:textSize="13sp"
+                android:textColor="#0F172A"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#FFFFFF"
+                android:padding="14dp"
+                android:layout_marginBottom="14dp">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="180dp"
+                    android:background="#F1F5F9"
+                    android:layout_marginBottom="10dp">
+
+                    <ImageView
+                        android:id="@+id/ivPhoto"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:contentDescription="사진" />
+
+                    <TextView
+                        android:id="@+id/tvPhotoEmpty"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="사진을 촬영해주세요"
+                        android:textSize="12sp"
+                        android:textColor="#94A3B8"
+                        android:layout_gravity="center" />
+                </FrameLayout>
+
+                <Button
+                    android:id="@+id/btnTakePhoto"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:text="사진 촬영"
+                    android:textSize="13sp"
+                    android:textColor="#2563EB"
+                    android:backgroundTint="#EFF6FF" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="출근 체크"
+                android:id="@+id/tvActionTitle"
+                android:textSize="13sp"
+                android:textColor="#0F172A"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <Button
+                android:id="@+id/btnAction"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="출근 체크하기"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#2563EB"
+                android:layout_marginBottom="14dp" />
+
+            <!-- 위치 정보 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="위치 정보"
+                android:textSize="13sp"
+                android:textColor="#0F172A"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#FFFFFF"
+                android:padding="14dp">
+
+                <include layout="@layout/item_info_row" android:id="@+id/rowDistance" />
+                <include layout="@layout/item_info_row" android:id="@+id/rowTime" />
+                <include layout="@layout/item_info_row" android:id="@+id/rowAddress" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="출/퇴근 체크 시 현재 위치와 시간이 기록됩니다."
+                android:textSize="11sp"
+                android:textColor="#64748B"
+                android:gravity="center"
+                android:padding="14dp" />
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0A1118"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <!-- 상단 여백 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="작업자 설정"
+            android:textSize="14sp"
+            android:textColor="#E0E6ED"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 작업자 ID -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="작업자 ID"
+            android:textSize="10sp"
+            android:textColor="#7A8FA3"
+            android:layout_marginBottom="2dp" />
+
+        <EditText
+            android:id="@+id/etWorkerId"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:hint="W-001"
+            android:textSize="14sp"
+            android:textColor="#E0E6ED"
+            android:textColorHint="#5A7A96"
+            android:background="#111D29"
+            android:padding="8dp"
+            android:inputType="text"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 서버 주소 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="서버 주소"
+            android:textSize="10sp"
+            android:textColor="#7A8FA3"
+            android:layout_marginBottom="2dp" />
+
+        <EditText
+            android:id="@+id/etServerUrl"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:hint="http://192.168.0.10:4000"
+            android:textSize="11sp"
+            android:textColor="#E0E6ED"
+            android:textColorHint="#5A7A96"
+            android:background="#111D29"
+            android:padding="8dp"
+            android:inputType="textUri"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 작업 유형 선택 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="작업 유형"
+            android:textSize="10sp"
+            android:textColor="#7A8FA3"
+            android:layout_marginBottom="2dp" />
+
+        <RadioGroup
+            android:id="@+id/rgWorkType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp">
+
+            <RadioButton
+                android:id="@+id/rbOffice"
+                android:layout_width="match_parent"
+                android:layout_height="28dp"
+                android:text="사무/관제 (앉아서 근무)"
+                android:textSize="11sp"
+                android:textColor="#E0E6ED"
+                android:buttonTint="#2E75B6" />
+
+            <RadioButton
+                android:id="@+id/rbLight"
+                android:layout_width="match_parent"
+                android:layout_height="28dp"
+                android:text="경량 작업 (수하물, 청소)"
+                android:textSize="11sp"
+                android:textColor="#E0E6ED"
+                android:buttonTint="#2E75B6"
+                android:checked="true" />
+
+            <RadioButton
+                android:id="@+id/rbHeavy"
+                android:layout_width="match_parent"
+                android:layout_height="28dp"
+                android:text="중량 작업 (화물, 정비)"
+                android:textSize="11sp"
+                android:textColor="#E0E6ED"
+                android:buttonTint="#2E75B6" />
+
+            <RadioButton
+                android:id="@+id/rbOutdoor"
+                android:layout_width="match_parent"
+                android:layout_height="28dp"
+                android:text="야외 고강도 (활주로)"
+                android:textSize="11sp"
+                android:textColor="#E0E6ED"
+                android:buttonTint="#2E75B6" />
+        </RadioGroup>
+
+        <!-- 새 착용자 버튼 -->
+        <Button
+            android:id="@+id/btnNewUser"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:text="새 착용자로 시작"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#2E75B6"
+            android:layout_marginBottom="6dp" />
+
+        <!-- 설정 저장 -->
+        <Button
+            android:id="@+id/btnKeepData"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:text="설정 저장"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#43A047"
+            android:layout_marginBottom="6dp" />
+
+        <!-- 소리/진동 설정 -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="2dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="진동" android:textSize="10sp" android:textColor="#7A8FA3" />
+            <Switch android:id="@+id/switchVibration" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="6dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="소리" android:textSize="10sp" android:textColor="#7A8FA3" />
+            <Switch android:id="@+id/switchSound" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" />
+        </LinearLayout>
+
+        <!-- 안내 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="'새 착용자'를 선택하면\n베이스라인이 초기화되고\n새로 학습을 시작합니다."
+            android:textSize="9sp"
+            android:textColor="#5A7A96"
+            android:gravity="center"
+            android:lineSpacingExtra="2dp" />
+
+    </LinearLayout>
+</ScrollView>

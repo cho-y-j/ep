@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#FFFFFF"
+    android:padding="16dp"
+    android:layout_marginBottom="10dp">
+
+    <TextView
+        android:id="@+id/tvWpTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="작업명"
+        android:textSize="15sp"
+        android:textColor="#0F172A"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvWpSite"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="현장"
+        android:textSize="12sp"
+        android:textColor="#64748B"
+        android:layout_marginTop="2dp" />
+
+    <TextView
+        android:id="@+id/tvWpDate"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="작업일"
+        android:textSize="12sp"
+        android:textColor="#64748B" />
+
+    <TextView
+        android:id="@+id/tvWpStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="12sp"
+        android:textColor="#43A047"
+        android:textStyle="bold"
+        android:layout_marginTop="6dp" />
+
+    <Button
+        android:id="@+id/btnWpAction"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="출근하기"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#2563EB"
+        android:layout_marginTop="10dp" />
+
+</LinearLayout>

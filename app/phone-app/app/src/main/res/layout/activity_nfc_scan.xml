@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F1F5F9">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#2563EB"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="16dp">
+
+        <Button
+            android:id="@+id/btnBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:text="‹"
+            android:textSize="20sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:background="@null"
+            android:padding="0dp"
+            android:minWidth="0dp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="NFC 장비 점검"
+            android:textSize="17sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <Space android:layout_width="32dp" android:layout_height="32dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="32dp">
+
+        <View
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:background="#DBEAFE"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="장비의 NFC 태그를\n휴대폰 뒷면에 대주세요"
+            android:textSize="16sp"
+            android:textColor="#0F172A"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="태그가 인식되면 점검 체크리스트가 열립니다."
+            android:textSize="12sp"
+            android:textColor="#64748B"
+            android:gravity="center"
+            android:layout_marginTop="12dp" />
+    </LinearLayout>
+
+</LinearLayout>
