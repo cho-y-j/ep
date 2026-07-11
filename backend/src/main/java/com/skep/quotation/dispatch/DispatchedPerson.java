@@ -45,6 +45,14 @@ public class DispatchedPerson {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    /** 정산용 근무일수 — 투입 관리에서 입력(출역 데이터 미연동). NULL=미입력이면 정산 금액 미산출. */
+    @Column(name = "settlement_work_days")
+    private Integer settlementWorkDays;
+
+    /** 정산용 추가근무(OT) 일수. */
+    @Column(name = "settlement_ot_days")
+    private Integer settlementOtDays;
+
     @Column(name = "sent_at", nullable = false)
     private LocalDateTime sentAt;
 
@@ -81,5 +89,11 @@ public class DispatchedPerson {
     @PreUpdate
     void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    /** 투입 관리에서 정산용 근무일수·OT일수 입력/수정. */
+    public void applySettlementQuantity(Integer workDays, Integer otDays) {
+        this.settlementWorkDays = workDays;
+        this.settlementOtDays = otDays;
     }
 }

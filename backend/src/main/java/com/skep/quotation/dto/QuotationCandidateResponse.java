@@ -20,6 +20,9 @@ public record QuotationCandidateResponse(
             String serialNumber,
             Boolean hasPhoto,
             Long currentSiteId,
-            String currentSiteName
+            String currentSiteName,
+            Boolean previouslyDispatched,
+            Boolean docsReady,
+            Integer expiringDocsCount
     ) {}
 }

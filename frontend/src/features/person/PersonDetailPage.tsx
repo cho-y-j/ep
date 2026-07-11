@@ -7,6 +7,8 @@ import AppShell from '../../components/layout/AppShell';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import DocumentSection from '../document/DocumentSection';
 import DocumentCollectionDialog from '../collection/DocumentCollectionDialog';
+import SupplementRequestDialog from '../document/SupplementRequestDialog';
+import { useSubSuppliers } from '../company/useSubSuppliers';
 import ResourceAssignmentSection from '../assignment/ResourceAssignmentSection';
 import AssignmentBadge from '../assignment/AssignmentBadge';
 import ClientOrgHistory from '../../components/ClientOrgHistory';
@@ -29,8 +31,10 @@ export default function PersonDetailPage() {
   const fromCompanyId = search.get('fromCompany') ? Number(search.get('fromCompany')) : null;
   const [fromCompanyName, setFromCompanyName] = useState<string | null>(null);
 
+  const subSuppliers = useSubSuppliers();
   const [person, setPerson] = useState<PersonResponse | null>(null);
   const [collectOpen, setCollectOpen] = useState(false);
+  const [supplementOpen, setSupplementOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -176,6 +180,8 @@ export default function PersonDetailPage() {
   }
 
   const statusCls = STATUS_BADGE[person.status];
+  // V77: 이 인원 소유사가 내 직속 하위 공급사면 부모로서 서류수집/보완요청 가능.
+  const isParentOfOwner = subSuppliers.some((c) => c.id === person.supplier_id);
 
   return (
     <AppShell
@@ -372,14 +378,31 @@ export default function PersonDetailPage() {
 
         {/* 등록 서류 카드 */}
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          {canEdit && (
-            <button type="button" onClick={() => setCollectOpen(true)}
-              className="mb-4 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
-              서류 수집 요청 (본인에게 링크 보내기)
-            </button>
+          {(canEdit || isParentOfOwner) && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button type="button" onClick={() => setCollectOpen(true)}
+                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
+                서류 수집 요청
+              </button>
+              {isParentOfOwner && (
+                <button type="button" onClick={() => setSupplementOpen(true)}
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100">
+                  보완 요청 (빠꾸)
+                </button>
+              )}
+            </div>
           )}
           {collectOpen && (
             <DocumentCollectionDialog ownerType="PERSON" ownerId={person.id} ownerLabel={person.name} onClose={() => setCollectOpen(false)} />
+          )}
+          {supplementOpen && (
+            <SupplementRequestDialog
+              ownerType="PERSON"
+              ownerId={person.id}
+              ownerLabel={person.name}
+              onClose={() => setSupplementOpen(false)}
+              onSubmitted={() => setSupplementOpen(false)}
+            />
           )}
           <DocumentSection
             ownerType="PERSON"

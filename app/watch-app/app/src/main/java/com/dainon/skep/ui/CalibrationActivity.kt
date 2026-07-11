@@ -51,6 +51,7 @@ class CalibrationActivity : AppCompatActivity(), SensorEventListener {
     private var currentHR = 0
     private var activitySum = 0f
     private var activityCount = 0
+    private var accelSampleCounter = 0  // 가속도 다운샘플링 카운터 (5개당 1개)
 
     private val CALIBRATION_MS = 10 * 60 * 1000L
     private val ACTIVITY_THRESHOLD = 1.5f
@@ -124,7 +125,7 @@ class CalibrationActivity : AppCompatActivity(), SensorEventListener {
             Log.d(TAG, "HR sensor registered")
         }
         sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) // 50Hz — 적용 레이트와 일치
         }
 
         startTime = System.currentTimeMillis()
@@ -149,8 +150,9 @@ class CalibrationActivity : AppCompatActivity(), SensorEventListener {
                 val mag = sqrt(event.values[0] * event.values[0] + event.values[1] * event.values[1] + event.values[2] * event.values[2])
                 activitySum += abs(mag - 9.81f)
                 activityCount++
-                // ★ 가속도 베이스라인 수집 (100개마다 1개 샘플링 — 10분간 ~600개)
-                if (accelSamples.size < 2000) accelSamples.add(mag)
+                // ★ 가속도 베이스라인 수집 (50Hz 중 5개당 1개 = 실효 10Hz, 10분간 최대 6000개)
+                accelSampleCounter++
+                if (accelSampleCounter % 5 == 0 && accelSamples.size < 6000) accelSamples.add(mag)
             }
         }
     }

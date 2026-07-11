@@ -73,7 +73,7 @@ export default function QuotationDetailPage() {
   useEffect(() => { load(); }, [id]);
 
   const finalizeProposal = async (proposalId: number) => {
-    if (!window.confirm('이 제안을 최종 선정하시겠어요? 작업계획서에 자동 반영됩니다.')) return;
+    if (!window.confirm('이 제안을 최종 선정하시겠어요? 작업계획서는 별도로 작성해야 합니다.')) return;
     setBusy(true);
     try {
       await api.post(`/api/quotations/proposals/${proposalId}/finalize`, {});
@@ -133,7 +133,7 @@ export default function QuotationDetailPage() {
   };
 
   const finalize = async (targetId: number) => {
-    if (!window.confirm('이 응답을 최종 채택하시겠어요? 작업계획서에 자동 반영됩니다.')) return;
+    if (!window.confirm('이 응답을 최종 채택하시겠어요? 작업계획서는 별도로 작성해야 합니다.')) return;
     setBusy(true);
     try {
       await api.post(`/api/quotations/${id}/targets/${targetId}/finalize`, {});

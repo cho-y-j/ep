@@ -59,7 +59,7 @@ public class SafetyAlertController {
             rows = alertRepo.findByBpCompanyIdOrderByCreatedAtDesc(bpId);
             if (unresolvedOnly) rows = rows.stream().filter(a -> !a.isResolved()).toList();
         }
-        return rows.stream().limit(100).map(this::alertMap).toList();
+        return toAlertMaps(rows.stream().limit(100).toList());
     }
 
     /** site 단위 조회. */
@@ -71,7 +71,7 @@ public class SafetyAlertController {
         if (actor.role() == Role.BP && actor.companyId() != null) {
             list = list.stream().filter(a -> actor.companyId().equals(a.getBpCompanyId())).toList();
         }
-        return list.stream().limit(100).map(this::alertMap).toList();
+        return toAlertMaps(list.stream().limit(100).toList());
     }
 
     /** 알림 해결 처리 (ADMIN/BP). */
@@ -200,6 +200,8 @@ public class SafetyAlertController {
             workerCount.merge(wp.getSiteId(), 1, Integer::sum);
         }
         List<Map<String, Object>> out = new ArrayList<>();
+        // 같은 좌표는 1회만 외부 호출 — 여러 현장이 동일 좌표면 fetch 중복 제거.
+        Map<String, java.util.Optional<KmaWeatherClient.SiteWeather>> weatherCache = new HashMap<>();
         for (Map.Entry<Long, Integer> e : workerCount.entrySet()) {
             Site site = sites.findById(e.getKey()).orElse(null);
             if (site == null) continue;
@@ -208,7 +210,10 @@ public class SafetyAlertController {
             m.put("site_name", site.getName());
             m.put("worker_count", e.getValue());
             if (site.getLatitude() != null && site.getLongitude() != null) {
-                m.putAll(weatherMap(weatherClient.fetch(site.getLatitude(), site.getLongitude()).orElse(null)));
+                var w = weatherCache.computeIfAbsent(
+                        site.getLatitude() + "," + site.getLongitude(),
+                        k -> weatherClient.fetch(site.getLatitude(), site.getLongitude())).orElse(null);
+                m.putAll(weatherMap(w));
             } else {
                 m.put("available", false);
             }
@@ -233,11 +238,23 @@ public class SafetyAlertController {
         return m;
     }
 
+    /** 목록 직렬화 — personId 를 모아 findAllById 로 배치 조회 (행별 findById N+1 제거). */
+    private List<Map<String, Object>> toAlertMaps(List<FieldSafetyAlert> rows) {
+        List<Long> personIds = rows.stream().map(FieldSafetyAlert::getPersonId)
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, Person> personById = new HashMap<>();
+        for (Person p : persons.findAllById(personIds)) personById.put(p.getId(), p);
+        return rows.stream().map(a -> alertMap(a, personById.get(a.getPersonId()))).toList();
+    }
+
     private Map<String, Object> alertMap(FieldSafetyAlert a) {
+        return alertMap(a, persons.findById(a.getPersonId()).orElse(null));
+    }
+
+    private Map<String, Object> alertMap(FieldSafetyAlert a, Person p) {
         Map<String, Object> m = new HashMap<>();
         m.put("id", a.getId());
         m.put("person_id", a.getPersonId());
-        Person p = persons.findById(a.getPersonId()).orElse(null);
         m.put("person_name", p != null ? p.getName() : null);
         m.put("person_phone", p != null ? p.getPhone() : null);
         m.put("person_has_photo", p != null && p.getPhotoKey() != null);

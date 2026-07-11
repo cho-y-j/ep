@@ -68,6 +68,10 @@ public class Site {
     @Column(name = "geofence_radius_m")
     private Integer geofenceRadiusM;
 
+    /** 현장별 정산 기준일(day-of-month 1~31). NULL=미지정(정산 조회 시 말일 취급). BP/ADMIN 이 지정. */
+    @Column(name = "settlement_day")
+    private Integer settlementDay;
+
     @Builder
     private Site(Long bpCompanyId, String name, String code, String address, String detailAddress,
                  LocalDate startDate, LocalDate endDate, SiteStatus status, Long createdBy) {
@@ -109,5 +113,10 @@ public class Site {
         this.longitude = longitude;
         this.polygonGeojson = polygonGeojson;
         this.mapZoom = mapZoom;
+    }
+
+    /** 현장 정산 기준일 지정/해제(NULL). */
+    public void updateSettlementDay(Integer settlementDay) {
+        this.settlementDay = settlementDay;
     }
 }

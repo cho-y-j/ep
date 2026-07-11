@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
+import { useAuth } from '../auth/AuthContext';
+import { useSubSuppliers } from '../company/useSubSuppliers';
 import EquipmentFields, { EMPTY_EQUIPMENT_FIELDS, type EquipmentFieldValues } from './EquipmentFields';
 import type { CompanyResponse } from '../../types/auth';
 import type { EquipmentResponse } from '../../types/equipment';
@@ -15,6 +17,9 @@ type Props = {
 };
 
 export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplierId, onCreated, onCancel }: Props) {
+  const { company } = useAuth();
+  // V77 대행 등록: 회사 관리자면 직속 자식(EQUIPMENT 협력사) 소유로도 등록 가능. 없으면 기존과 동일.
+  const subSuppliers = useSubSuppliers().filter((c) => c.type === 'EQUIPMENT');
   const [values, setValues] = useState<EquipmentFieldValues>(EMPTY_EQUIPMENT_FIELDS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +72,22 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
   return (
     <form onSubmit={onSubmit} className="card mb-6 space-y-4">
       <h2 className="text-base font-bold">새 장비 등록</h2>
+      {!requireSupplierId && subSuppliers.length > 0 && (
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">소유 공급사</span>
+          <select
+            value={values.supplierId}
+            onChange={(e) => setValues({ ...values, supplierId: e.target.value === '' ? '' : Number(e.target.value) })}
+            className="input mt-1 bg-white"
+          >
+            <option value="">우리 회사{company ? ` — ${company.name}` : ''}</option>
+            {subSuppliers.map((c) => (
+              <option key={c.id} value={c.id}>{c.name} (협력사)</option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-slate-400">협력사(하위공급사)를 선택하면 그 회사 소유로 대신 등록됩니다.</span>
+        </label>
+      )}
       <EquipmentFields
         values={values}
         onChange={setValues}

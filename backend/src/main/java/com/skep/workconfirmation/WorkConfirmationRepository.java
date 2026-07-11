@@ -3,6 +3,7 @@ package com.skep.workconfirmation;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,4 +25,7 @@ public interface WorkConfirmationRepository extends JpaRepository<WorkConfirmati
     List<WorkConfirmation> findByBpCompanyIdAndWorkDateBetween(Long bpCompanyId, LocalDate start, LocalDate end);
 
     List<WorkConfirmation> findByIssuingSupplierCompanyIdAndWorkDateBetween(Long supplierCompanyId, LocalDate start, LocalDate end);
+
+    // 정산 근무일수 자동 파생 — 대상 인원들의 확인서를 기간(min~max)으로 한 번에 조회. 상태 필터는 서비스에서.
+    List<WorkConfirmation> findByPersonIdInAndWorkDateBetween(Collection<Long> personIds, LocalDate from, LocalDate to);
 }

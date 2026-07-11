@@ -1,6 +1,8 @@
 package com.skep.site.dto;
 
 import com.skep.site.SiteStatus;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -17,6 +19,7 @@ public record UpdateSiteRequest(
         Double latitude,
         Double longitude,
         String polygonGeojson,
-        Integer mapZoom
+        Integer mapZoom,
+        @Min(1) @Max(31) Integer settlementDay
 ) {
 }

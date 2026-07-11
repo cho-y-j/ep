@@ -66,6 +66,9 @@ public class QuotationService {
     private final NotificationService notifications;
     private final AuditLogService auditLog;
     private final AlimTalkService alimTalk;
+    /** 후보 "이전 투입" 배지 — 이 BP 견적에 배차된 이력 있는 자원 조회. */
+    private final com.skep.quotation.dispatch.DispatchedEquipmentRepository dispatchedEquipments;
+    private final com.skep.quotation.dispatch.DispatchedPersonRepository dispatchedPersons;
     /** S-12+: 후보 BLOCKED 제외 필터 — 공급사/장비 컴플라이언스 확인. @Lazy 순환 의존 회피. */
     private final com.skep.compliance.ComplianceService compliance;
     private final org.springframework.beans.factory.ObjectProvider<org.springframework.mail.javamail.JavaMailSender> mailSenderProvider;
@@ -83,7 +86,9 @@ public class QuotationService {
                             @org.springframework.context.annotation.Lazy
                             com.skep.compliance.ComplianceService compliance,
                             org.springframework.beans.factory.ObjectProvider<org.springframework.mail.javamail.JavaMailSender> mailSenderProvider,
-                            AlimTalkService alimTalk) {
+                            AlimTalkService alimTalk,
+                            com.skep.quotation.dispatch.DispatchedEquipmentRepository dispatchedEquipments,
+                            com.skep.quotation.dispatch.DispatchedPersonRepository dispatchedPersons) {
         this.requests = requests;
         this.targets = targets;
         this.sites = sites;
@@ -98,6 +103,8 @@ public class QuotationService {
         this.compliance = compliance;
         this.mailSenderProvider = mailSenderProvider;
         this.alimTalk = alimTalk;
+        this.dispatchedEquipments = dispatchedEquipments;
+        this.dispatchedPersons = dispatchedPersons;
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -123,24 +130,42 @@ public class QuotationService {
         if (supplierIds.isEmpty()) return List.of();
 
         List<Equipment> all = equipmentRepo.findBySupplierIdInOrderByIdDesc(supplierIds);
-        Map<Long, List<QuotationCandidateResponse.EquipmentItem>> grouped = new LinkedHashMap<>();
-        for (Long sid : supplierIds) grouped.put(sid, new ArrayList<>());
 
-        Map<Long, String> siteName = new HashMap<>();
+        // pass 1: compliance 통과 장비 수집 + rc 만료 개수 보관 (배지용 — 필터·개수 불변)
+        List<Equipment> eligible = new ArrayList<>();
+        Map<Long, Integer> expiringByEq = new HashMap<>();
         for (Equipment e : all) {
             if (category != null && e.getCategory() != category) continue;
             try {
                 var rc = compliance.forEquipment(e.getId(), actor);
                 if (!rc.readyForWorkPlan()) continue;
+                expiringByEq.put(e.getId(), rc.expiringCount());
             } catch (Exception ignored) { continue; }
+            eligible.add(e);
+        }
+
+        // 이전투입: 이 BP 견적에 배차된 이력 있는 장비 id 1회 조회. BP=actor.companyId(), 없으면(ADMIN) 미표시(null).
+        Long bpCompanyId = actor.companyId();
+        Set<Long> dispatchedIds = (bpCompanyId != null && !eligible.isEmpty())
+                ? dispatchedEquipments.findDispatchedEquipmentIdsForBp(
+                        bpCompanyId, eligible.stream().map(Equipment::getId).toList())
+                : Set.of();
+
+        // pass 2: item 생성
+        Map<Long, List<QuotationCandidateResponse.EquipmentItem>> grouped = new LinkedHashMap<>();
+        for (Long sid : supplierIds) grouped.put(sid, new ArrayList<>());
+        Map<Long, String> siteName = new HashMap<>();
+        for (Equipment e : eligible) {
             Long curSite = e.getCurrentSiteId();
             String curSiteName = curSite != null
                     ? siteName.computeIfAbsent(curSite, id -> sites.findById(id).map(Site::getName).orElse("?"))
                     : null;
+            Boolean previouslyDispatched = bpCompanyId != null ? dispatchedIds.contains(e.getId()) : null;
             grouped.get(e.getSupplierId()).add(new QuotationCandidateResponse.EquipmentItem(
                     e.getId(), e.getVehicleNo(), e.getModel(), e.getManufacturer(),
                     e.getYear(), e.getCategory(), e.getSerialNumber(),
-                    e.getPhotoKey() != null, curSite, curSiteName));
+                    e.getPhotoKey() != null, curSite, curSiteName,
+                    previouslyDispatched, Boolean.TRUE, expiringByEq.getOrDefault(e.getId(), 0)));
         }
 
         return supplierIds.stream()
@@ -170,19 +195,37 @@ public class QuotationService {
         if (supplierIds.isEmpty()) return List.of();
 
         List<Person> allPersons = personRepo.findBySupplierIdInOrderByIdDesc(supplierIds);
-        Map<Long, List<com.skep.quotation.dto.QuotationManpowerCandidateResponse.PersonItem>> grouped = new LinkedHashMap<>();
-        for (Long sid : supplierIds) grouped.put(sid, new ArrayList<>());
 
+        // pass 1: compliance 통과 인원 수집 + rc 만료 개수 보관 (배지용 — 필터·개수 불변)
+        List<Person> eligible = new ArrayList<>();
+        Map<Long, Integer> expiringByPerson = new HashMap<>();
         for (Person p : allPersons) {
             if (role != null && (p.getRoles() == null || !p.getRoles().contains(role))) continue;
             try {
                 var rc = compliance.forPerson(p.getId(), actor);
                 if (!rc.readyForWorkPlan()) continue;
+                expiringByPerson.put(p.getId(), rc.expiringCount());
             } catch (Exception ignored) { continue; }
+            eligible.add(p);
+        }
+
+        // 이전투입: 이 BP 견적에 배차된 이력 있는 인원 id 1회 조회. BP=actor.companyId(), 없으면(ADMIN) 미표시(null).
+        Long bpCompanyId = actor.companyId();
+        Set<Long> dispatchedIds = (bpCompanyId != null && !eligible.isEmpty())
+                ? dispatchedPersons.findDispatchedPersonIdsForBp(
+                        bpCompanyId, eligible.stream().map(Person::getId).toList())
+                : Set.of();
+
+        // pass 2: item 생성
+        Map<Long, List<com.skep.quotation.dto.QuotationManpowerCandidateResponse.PersonItem>> grouped = new LinkedHashMap<>();
+        for (Long sid : supplierIds) grouped.put(sid, new ArrayList<>());
+        for (Person p : eligible) {
+            Boolean previouslyDispatched = bpCompanyId != null ? dispatchedIds.contains(p.getId()) : null;
             grouped.get(p.getSupplierId()).add(
                     new com.skep.quotation.dto.QuotationManpowerCandidateResponse.PersonItem(
                             p.getId(), p.getName(), p.getJobTitle(), p.getPhone(),
-                            p.getEmployeeNo(), p.getRoles(), p.getPhotoKey() != null));
+                            p.getEmployeeNo(), p.getRoles(), p.getPhotoKey() != null,
+                            previouslyDispatched, Boolean.TRUE, expiringByPerson.getOrDefault(p.getId(), 0)));
         }
 
         return supplierIds.stream()
@@ -508,7 +551,8 @@ public class QuotationService {
             all = all.stream().filter(r -> r.getRequestType() == QuotationRequestType.MANPOWER).toList();
         }
         // ADMIN/BP 본인 작성한 견적도 확인하려면 전체.
-        return all.stream().map(this::toResponseSummary).toList();
+        Lookups lk = buildLookups(all, false);
+        return all.stream().map(qr -> toResponse(qr, false, null, lk)).toList();
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -534,7 +578,8 @@ public class QuotationService {
         } else {
             return List.of();
         }
-        return rows.stream().map(this::toResponseSummary).toList();
+        Lookups lk = buildLookups(rows, false);
+        return rows.stream().map(qr -> toResponse(qr, false, null, lk)).toList();
     }
 
     @Transactional(readOnly = true)
@@ -669,8 +714,9 @@ public class QuotationService {
             return java.util.List.of();
         }
         // detail (targets 포함) 변환
+        Lookups lk = buildLookups(rows, true);
         java.util.List<com.skep.quotation.dto.QuotationRequestResponse> all = rows.stream()
-                .map(qr -> toResponseDetail(qr, actor)).toList();
+                .map(qr -> toResponse(qr, true, actor, lk)).toList();
         java.util.Map<String, java.util.List<com.skep.quotation.dto.QuotationRequestResponse>> grouped =
                 new java.util.LinkedHashMap<>();
         for (var qr : all) {
@@ -868,30 +914,26 @@ public class QuotationService {
         throw ApiException.forbidden("VIEW_DENIED", "견적 조회 권한이 없습니다");
     }
 
-    private QuotationRequestResponse toResponseSummary(QuotationRequest qr) {
-        return toResponse(qr, /*withTargets*/ false, null);
-    }
-
     private QuotationRequestResponse toResponseDetail(QuotationRequest qr, AuthenticatedUser actor) {
-        return toResponse(qr, /*withTargets*/ true, actor);
+        return toResponse(qr, /*withTargets*/ true, actor, buildLookups(List.of(qr), true));
     }
 
-    private QuotationRequestResponse toResponse(QuotationRequest qr, boolean withTargets, AuthenticatedUser actor) {
+    private QuotationRequestResponse toResponse(QuotationRequest qr, boolean withTargets, AuthenticatedUser actor,
+                                                Lookups lk) {
         // OPEN_BID 모드는 site 없을 수 있음.
-        Site site = qr.getSiteId() != null ? sites.findById(qr.getSiteId()).orElse(null) : null;
+        Site site = qr.getSiteId() != null ? lk.sites().get(qr.getSiteId()) : null;
         // V35: bp_company_id 직접 컬럼.
         Long bpCompanyId = qr.getBpCompanyId();
-        String bpName = bpCompanyId != null
-                ? companies.findById(bpCompanyId).map(Company::getName).orElse(null)
-                : null;
-        String reqUserName = users.findById(qr.getRequestedByUserId()).map(User::getName).orElse(null);
-        String clientOrgName = qr.getClientOrgId() != null
-                ? clientOrgs.findById(qr.getClientOrgId()).map(ClientOrg::getName).orElse(null)
-                : null;
+        Company bpCompany = bpCompanyId != null ? lk.companies().get(bpCompanyId) : null;
+        String bpName = bpCompany != null ? bpCompany.getName() : null;
+        User reqUser = lk.users().get(qr.getRequestedByUserId());
+        String reqUserName = reqUser != null ? reqUser.getName() : null;
+        ClientOrg clientOrg = qr.getClientOrgId() != null ? lk.clientOrgs().get(qr.getClientOrgId()) : null;
+        String clientOrgName = clientOrg != null ? clientOrg.getName() : null;
 
         List<QuotationRequestResponse.TargetItem> targetItems = List.of();
         if (withTargets) {
-            List<QuotationRequestTarget> rows = targets.findByRequestIdOrderByIdAsc(qr.getId());
+            List<QuotationRequestTarget> rows = lk.targetsByRequestId().getOrDefault(qr.getId(), List.of());
             // P2: 공급사 시점이면 자기 회사 target 만 노출 (EQUIPMENT + MANPOWER 모두)
             if (actor != null && (actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER)) {
                 rows = rows.stream()
@@ -899,11 +941,12 @@ public class QuotationService {
                         .toList();
             }
             targetItems = rows.stream().map(t -> {
-                String supplierName = companies.findById(t.getSupplierCompanyId()).map(Company::getName)
-                        .orElse("회사 #" + t.getSupplierCompanyId());
+                Company supplier = lk.companies().get(t.getSupplierCompanyId());
+                String supplierName = supplier != null && supplier.getName() != null
+                        ? supplier.getName() : ("회사 #" + t.getSupplierCompanyId());
                 String eqLabel = null;
                 if (t.getEquipmentId() != null) {
-                    Equipment eq = equipmentRepo.findById(t.getEquipmentId()).orElse(null);
+                    Equipment eq = lk.equipment().get(t.getEquipmentId());
                     if (eq != null) {
                         eqLabel = eq.getVehicleNo() != null ? eq.getVehicleNo()
                                 : (eq.getModel() != null ? eq.getModel() : "장비 #" + eq.getId());
@@ -911,7 +954,7 @@ public class QuotationService {
                 }
                 String personLabel = null;
                 if (t.getPersonId() != null) {
-                    Person p = personRepo.findById(t.getPersonId()).orElse(null);
+                    Person p = lk.persons().get(t.getPersonId());
                     if (p != null) personLabel = p.getName();
                 }
                 return new QuotationRequestResponse.TargetItem(
@@ -943,6 +986,58 @@ public class QuotationService {
                 qr.getCreatedAt(), qr.getUpdatedAt(),
                 targetItems
         );
+    }
+
+    /** toResponse 가 참조하는 엔티티/타깃을 목록 단위로 미리 담아두는 배치 조회 컨텍스트. */
+    private record Lookups(
+            Map<Long, Site> sites,
+            Map<Long, Company> companies,
+            Map<Long, User> users,
+            Map<Long, ClientOrg> clientOrgs,
+            Map<Long, Equipment> equipment,
+            Map<Long, Person> persons,
+            Map<Long, List<QuotationRequestTarget>> targetsByRequestId) {}
+
+    /** 주어진 견적들이 toResponse 에서 조회할 id 를 모아 findAllById 로 일괄 조회 (행별 findById N+1 제거). */
+    private Lookups buildLookups(List<QuotationRequest> qrs, boolean withTargets) {
+        Set<Long> siteIds = new HashSet<>();
+        Set<Long> companyIds = new HashSet<>();
+        Set<Long> userIds = new HashSet<>();
+        Set<Long> clientOrgIds = new HashSet<>();
+        for (QuotationRequest qr : qrs) {
+            if (qr.getSiteId() != null) siteIds.add(qr.getSiteId());
+            if (qr.getBpCompanyId() != null) companyIds.add(qr.getBpCompanyId());
+            if (qr.getRequestedByUserId() != null) userIds.add(qr.getRequestedByUserId());
+            if (qr.getClientOrgId() != null) clientOrgIds.add(qr.getClientOrgId());
+        }
+
+        Map<Long, List<QuotationRequestTarget>> targetsByReq = new LinkedHashMap<>();
+        Set<Long> equipmentIds = new HashSet<>();
+        Set<Long> personIds = new HashSet<>();
+        if (withTargets && !qrs.isEmpty()) {
+            List<Long> reqIds = qrs.stream().map(QuotationRequest::getId).toList();
+            for (QuotationRequestTarget t : targets.findByRequestIdInOrderByIdAsc(reqIds)) {
+                targetsByReq.computeIfAbsent(t.getRequestId(), k -> new ArrayList<>()).add(t);
+                if (t.getSupplierCompanyId() != null) companyIds.add(t.getSupplierCompanyId());
+                if (t.getEquipmentId() != null) equipmentIds.add(t.getEquipmentId());
+                if (t.getPersonId() != null) personIds.add(t.getPersonId());
+            }
+        }
+
+        return new Lookups(
+                mapById(sites.findAllById(siteIds), Site::getId),
+                mapById(companies.findAllById(companyIds), Company::getId),
+                mapById(users.findAllById(userIds), User::getId),
+                mapById(clientOrgs.findAllById(clientOrgIds), ClientOrg::getId),
+                mapById(equipmentRepo.findAllById(equipmentIds), Equipment::getId),
+                mapById(personRepo.findAllById(personIds), Person::getId),
+                targetsByReq);
+    }
+
+    private static <T> Map<Long, T> mapById(List<T> rows, java.util.function.Function<T, Long> idFn) {
+        Map<Long, T> m = new HashMap<>();
+        for (T row : rows) m.put(idFn.apply(row), row);
+        return m;
     }
 
     // ── 다온톡 알림톡 (장비 투입 요청 SJR_254094) ───────────────────────────

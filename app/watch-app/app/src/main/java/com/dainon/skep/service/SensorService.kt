@@ -102,11 +102,18 @@ class SensorService : Service(), SensorEventListener {
     private val SYNC_INTERVAL_MS = 30 * 60 * 1000L  // 30분마다 서버 동기화
 
     // ──── 낙상 감지 (학습 기반 적응형) ────
-    private var lastAccelMagnitude = 9.81f
-    private var freeFallDetected = false       // 떨어짐(가속도 감소) 감지
-    private var freeFallTime = 0L              // 떨어짐 시작 시각
-    private var impactDetected = false         // 충격 감지
     private val FALL_WINDOW_MS = 1000L         // 떨어짐→충격 1초 이내 (실제 낙상 0.3~0.5초)
+
+    // ──── 낙상 융합 판정 (Phase3) — 자이로/기압/충격후정지 증거 ────
+    // dip/impact 트리거 + 증거 수집은 순수 Kotlin FallDetector가 담당 (SensorService는 배선만).
+    private val FALL_GYRO_TH = 2.5f            // E_rot: 자이로 피크 임계 (rad/s, 튜닝값)
+    private val FALL_PRESS_TH = 0.06f          // E_alt: 기압 상승 임계 (hPa, 튜닝값)
+    private val FALL_STILL_TH = 1.0f           // E_still: 충격후 정지 임계 (|mag-9.81| 평균, 튜닝값)
+    private val FALL_CONFIRM_MS = 2000L        // 충격후 확인창 (T_conf, 튜닝값)
+    private var gyroAvailable = false
+    private var pressureAvailable = false
+    private var fallFusionEnforce = false      // Shadow(기본 false): 발보 무변경, 증거 로그만
+    private lateinit var fallDetector: FallDetector
     // ★ 학습 기반 적응형 임계값 (기기별 센서 차이 자동 보정)
     private var accelBaselineMean = 9.81f      // 평상시 가속도 평균 (학습으로 업데이트)
     private var accelBaselineStd = 2.0f        // 평상시 가속도 표준편차
@@ -134,7 +141,7 @@ class SensorService : Service(), SensorEventListener {
         ACKNOWLEDGED,     // 확인 눌렀지만 추적 감시 중
         SLEEP_SUSPECTED,  // 수면 의심
         WATCH_REMOVED,    // 워치 벗음 (정상 상태에서 심박 0)
-        FALL_DETECTED,    // 낙상 감지 → 5초 확인 대기
+        FALL_DETECTED,    // 낙상 감지 → 45초 확인 대기
         EMERGENCY         // 응급 → P2P + 서버
     }
 
@@ -144,7 +151,8 @@ class SensorService : Service(), SensorEventListener {
     private var lastMovementTime = 0L
     private var noMovementSeconds = 0
 
-    private val ACK_TIMEOUT_SEC = 300       // 자동 응급 에스컬레이션 대기 (5분)
+    private val ACK_TIMEOUT_SEC = 300       // 자동 응급 에스컬레이션 대기 (5분, 비낙상 경로)
+    private val FALL_ACK_TIMEOUT_SEC = 45   // ★ 낙상 전용 — 무의식 시 5분 지연 방지 (안전)
     private val SLEEP_VS_EMERGENCY_SEC = 30
     private val EMERGENCY_ESCALATION_SEC = 90
     private var ackCooldownUntil = 0L       // ACK 후 재에스컬레이션 방지 (30초)
@@ -382,6 +390,45 @@ class SensorService : Service(), SensorEventListener {
     // ════════════════════════════════════════
 
     private fun registerSensors() {
+        // ★ 낙상 융합 판정기 — 리스너 등록 전에 먼저 생성 (조기 센서 이벤트 대비)
+        val gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        val pressureSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
+        gyroAvailable = gyroSensor != null
+        pressureAvailable = pressureSensor != null
+        fallFusionEnforce = applicationContext.getSharedPreferences("skep", MODE_PRIVATE)
+            .getBoolean("fallFusionEnforce", false)
+        fallDetector = FallDetector(
+            fallThreshold = fallThreshold,
+            impactThreshold = impactThreshold,
+            fallWindowMs = FALL_WINDOW_MS,
+            gyroThreshold = FALL_GYRO_TH,
+            pressureThreshold = FALL_PRESS_TH,
+            stillThreshold = FALL_STILL_TH,
+            confirmMs = FALL_CONFIRM_MS,
+            gyroAvailable = gyroAvailable,
+            pressureAvailable = pressureAvailable,
+            enforce = fallFusionEnforce,
+            onFallConfirmed = {
+                // 기존 트리거 로직 그대로 (Shadow: impact 즉시 / Enforce: CONFIRM 시)
+                if (currentState != WorkerState.EMERGENCY && currentState != WorkerState.FALL_DETECTED) {
+                    // 낙상 전 상태 기록 (HR=0 시 벗음 vs 진짜 낙상 판단용)
+                    wasAnomalyBeforeZero = (currentState == WorkerState.MILD_ANOMALY
+                        || currentState == WorkerState.WAITING_ACK
+                        || currentState == WorkerState.ACKNOWLEDGED)
+                    currentState = WorkerState.FALL_DETECTED
+                    ackWaitStartTime = System.currentTimeMillis()
+                    monitorIntervalMs = getIntervalForLevel(MonitorLevel.ALERT_OVER)
+                    Log.w(TAG, "💥 FALL trigger → FALL_DETECTED (fusion, enforce=$fallFusionEnforce)")
+                    notifyWorker("⚠ 넘어지셨나요? 괜찮으시면 45초 내 확인을 눌러주세요!")
+                }
+            },
+            onFallSuppressed = { ev ->
+                Log.w(TAG, "🟢 FALL suppressed by fusion (enforce): evidence=${ev.evidenceCount}")
+            },
+            log = { msg -> Log.w(TAG, msg) },
+        )
+        Log.d(TAG, "📐 Fall fusion: gyro=$gyroAvailable, pressure=$pressureAvailable, enforce=$fallFusionEnforce (기본 Shadow)")
+
         // 심박수
         // 심박수 — 저전력 모드 (3초 간격 수신, OS가 자체 관리)
         val hrSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
@@ -395,8 +442,8 @@ class SensorService : Service(), SensorEventListener {
         // 가속도계 — 움직임만 감지하면 되므로 저전력
         val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         if (accelSensor != null) {
-            sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_UI) // ~60ms
-            Log.d(TAG, "✅ Accelerometer registered (low-power)")
+            sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_GAME) // ~20ms (50Hz) — 낙상 dip/충격 포착
+            Log.d(TAG, "✅ Accelerometer registered (50Hz)")
         } else {
             Log.e(TAG, "❌ Accelerometer NOT FOUND")
         }
@@ -410,6 +457,22 @@ class SensorService : Service(), SensorEventListener {
             Log.d(TAG, "✅ SpO₂ sensor registered: ${spo2Sensor.stringType}")
         } else {
             Log.w(TAG, "⚠ SpO₂ sensor not found (Samsung Health SDK 필요)")
+        }
+
+        // 자이로 — 낙상 회전 증거 (E_rot). 없으면 스킵 → 해당 증거 fail-open
+        if (gyroSensor != null) {
+            sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_UI)
+            Log.d(TAG, "✅ Gyroscope registered (E_rot)")
+        } else {
+            Log.w(TAG, "⚠ Gyroscope not found → E_rot fail-open")
+        }
+
+        // 기압 — 낙상 고도하강 증거 (E_alt). 상시 등록. 없으면 스킵 → 해당 증거 fail-open
+        if (pressureSensor != null) {
+            sensorManager.registerListener(this, pressureSensor, SensorManager.SENSOR_DELAY_NORMAL)
+            Log.d(TAG, "✅ Pressure registered (E_alt)")
+        } else {
+            Log.w(TAG, "⚠ Pressure sensor not found → E_alt fail-open")
         }
 
         // 사용 가능한 전체 센서 목록 로그
@@ -516,65 +579,35 @@ class SensorService : Service(), SensorEventListener {
                     noMovementSeconds = 0
                 }
 
-                // ──── 낙상 감지 (떨어짐 → 충격 패턴) ────
-                // ★ 낙상 감지 불필요한 상태 → 완전 스킵
+                // ──── 낙상 융합 판정 (FallDetector — dip/impact + 증거 3종) ────
+                // 오염/불필요 상태 → 감지기 리셋 + 스킵. FALL_DETECTED는 스킵 제외
+                // (충격후 확인창 수집 위해 계속 공급 — 재트리거는 onFallConfirmed에서 차단)
                 if (currentState == WorkerState.WATCH_REMOVED
                     || currentState == WorkerState.EMERGENCY      // 발신자 진동이 가속도계 오염
-                    || currentState == WorkerState.FALL_DETECTED  // 이미 낙상 감지됨
                     || BleAlertService.isReceivingAlert) {        // 수신자 진동이 가속도계 오염
-                    lastAccelMagnitude = magnitude
+                    fallDetector.reset()
                     return
                 }
 
                 val now = System.currentTimeMillis()
 
                 if (now < stabilizingUntil || now < ackCooldownUntil) {
-                    lastAccelMagnitude = magnitude
+                    fallDetector.reset()
                     return
                 }
 
-                // 1단계: 떨어짐 감지 (magnitude가 학습된 임계값 이하로 떨어짐)
-                // ★ HR>0 (착용 확인) + 이전값이 정상 범위 (진동 노이즈 필터)
-                if (magnitude < fallThreshold && !freeFallDetected
-                    && heartRate > 0 && lastAccelMagnitude > fallThreshold) {
-                    freeFallDetected = true
-                    freeFallTime = now
-                    Log.w(TAG, "⚡ Fall dip! mag=${"%.1f".format(magnitude)} < threshold=${"%.1f".format(fallThreshold)}, lastMag=${"%.1f".format(lastAccelMagnitude)}")
-                }
-
-                // 2단계: 충격 감지 (떨어짐 후 3초 이내 큰 충격)
-                if (freeFallDetected && !impactDetected) {
-                    if (heartRate <= 0 && heartRateZeroCount >= 5) {
-                        freeFallDetected = false
-                        Log.d(TAG, "⌚ Fall ignored — HR=0, likely watch removal")
-                    } else if (now - freeFallTime < 50L) {
-                        // 최소 50ms 경과 필요 (진동 스파이크 필터)
-                    } else if (now - freeFallTime > FALL_WINDOW_MS) {
-                        // 2초 지나면 리셋 (낙상 아님)
-                        freeFallDetected = false
-                    } else if (magnitude > impactThreshold) {
-                        impactDetected = true
-                        Log.w(TAG, "💥 FALL IMPACT! mag=${"%.1f".format(magnitude)} > threshold=${"%.1f".format(impactThreshold)}, time=${now - freeFallTime}ms")
-
-                        // 낙상 감지 → 5초 확인 대기
-                        if (currentState != WorkerState.EMERGENCY) {
-                            // ★ 낙상 전 상태 기록 (HR=0 시 벗음 vs 진짜 낙상 판단용)
-                            wasAnomalyBeforeZero = (currentState == WorkerState.MILD_ANOMALY
-                                || currentState == WorkerState.WAITING_ACK
-                                || currentState == WorkerState.ACKNOWLEDGED)
-                            currentState = WorkerState.FALL_DETECTED
-                            ackWaitStartTime = now
-                            monitorIntervalMs = getIntervalForLevel(MonitorLevel.ALERT_OVER)
-                            notifyWorker("⚠ 넘어지셨나요? 괜찮으시면 5초 내 확인을 눌러주세요!")
-                        }
-
-                        // 리셋
-                        freeFallDetected = false
-                        impactDetected = false
-                    }
-                }
-
-                lastAccelMagnitude = magnitude
+                fallDetector.onAccel(now, magnitude)
+            }
+            Sensor.TYPE_GYROSCOPE -> {
+                // E_rot 증거용 회전 속도 magnitude
+                val gmag = sqrt(event.values[0] * event.values[0]
+                    + event.values[1] * event.values[1]
+                    + event.values[2] * event.values[2])
+                fallDetector.onGyro(System.currentTimeMillis(), gmag)
+            }
+            Sensor.TYPE_PRESSURE -> {
+                // E_alt 증거용 기압(hPa)
+                fallDetector.onPressure(System.currentTimeMillis(), event.values[0])
             }
         }
         // SpO₂
@@ -611,7 +644,14 @@ class SensorService : Service(), SensorEventListener {
                 Log.w(TAG, "⚠ HR=0 during FALL_DETECTED (had prior anomaly) → keeping FALL_DETECTED")
                 return
             } else {
-                Log.d(TAG, "⌚ HR=0 during FALL_DETECTED (was NORMAL) → watch removal, cancelling fall")
+                // Q4 옵션 C: 낙상 증거(자이로/기압/충격후정지)≥1이면 진짜 낙상 → 유지, 0이면 벗는 중 → 취소.
+                // 발보 무변경 위해 enforce에서만 '유지' 적용 (Shadow는 현행대로 취소 + 판단 로그).
+                val hadEvidence = fallDetector.lastFallHadEvidence()
+                if (fallFusionEnforce && hadEvidence) {
+                    Log.w(TAG, "⚠ HR=0 during FALL_DETECTED (was NORMAL) but fall evidence≥1 → keeping (enforce)")
+                    return
+                }
+                Log.d(TAG, "⌚ HR=0 during FALL_DETECTED (was NORMAL, evidence≥1=$hadEvidence, enforce=$fallFusionEnforce) → watch removal, cancelling fall")
                 // 벗는 중 → 낙상 취소 → WATCH_REMOVED로 전환 (아래 코드로 진행)
             }
         }
@@ -991,11 +1031,11 @@ class SensorService : Service(), SensorEventListener {
             }
 
             WorkerState.FALL_DETECTED -> {
-                // 낙상 후 5초 확인 대기
+                // 낙상 후 45초 확인 대기 (낙상 전용 타임아웃)
                 val waitSec = (now - ackWaitStartTime) / 1000
-                if (waitSec >= ACK_TIMEOUT_SEC) {
-                    // 5초 내 확인 안 누름 → 즉시 응급!
-                    Log.w(TAG, "💥 Fall + no ACK → EMERGENCY!")
+                if (waitSec >= FALL_ACK_TIMEOUT_SEC) {
+                    // 45초 내 확인 안 누름 → 즉시 응급!
+                    Log.w(TAG, "💥 Fall + no ACK in ${FALL_ACK_TIMEOUT_SEC}s → EMERGENCY!")
                     currentState = WorkerState.EMERGENCY
                 }
             }

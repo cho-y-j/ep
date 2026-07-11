@@ -37,7 +37,7 @@ export default function FieldDeploymentBpInbox() {
         <header>
           <h1 className="text-2xl font-bold text-slate-950">받은 투입 요청</h1>
           <p className="mt-1 text-sm text-slate-500">
-            공급사가 "현장으로 보낼게요" 요청한 자원. 수락하면 현장에 배치되고 투입 현황으로 이동합니다.
+            공급사가 "현장으로 보낼게요" 요청한 자원입니다. 수락하면 요청이 수락 처리되고 공급사에 알림이 전송됩니다. 실제 투입 현황은 작업계획서(서명 완료) 기준으로 반영됩니다.
           </p>
         </header>
 

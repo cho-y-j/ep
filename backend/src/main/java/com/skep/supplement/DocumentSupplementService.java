@@ -4,6 +4,7 @@ import com.skep.audit.AuditLogService;
 import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
+import com.skep.company.CompanyService;
 import com.skep.document.DocumentType;
 import com.skep.document.DocumentRepository;
 import com.skep.document.DocumentTypeRepository;
@@ -60,6 +61,7 @@ public class DocumentSupplementService {
     private final NotificationService notifications;
     private final AuditLogService auditLog;
     private final DispatchedEquipmentRepository dispatched;
+    private final CompanyService companyService;
 
     public DocumentSupplementService(DocumentSupplementRequestRepository repo,
                                       DocumentTypeRepository typeRepo,
@@ -72,7 +74,8 @@ public class DocumentSupplementService {
                                       UserRepository users,
                                       NotificationService notifications,
                                       AuditLogService auditLog,
-                                      DispatchedEquipmentRepository dispatched) {
+                                      DispatchedEquipmentRepository dispatched,
+                                      CompanyService companyService) {
         this.repo = repo;
         this.typeRepo = typeRepo;
         this.docRepo = docRepo;
@@ -85,6 +88,7 @@ public class DocumentSupplementService {
         this.notifications = notifications;
         this.auditLog = auditLog;
         this.dispatched = dispatched;
+        this.companyService = companyService;
     }
 
     public SupplementResponse create(CreateSupplementRequest req, AuthenticatedUser actor) {
@@ -130,7 +134,8 @@ public class DocumentSupplementService {
 
     /** 검증 + 저장만 (알림 X). create / createBatch 공용. */
     private DocumentSupplementRequest createRow(CreateSupplementRequest req, AuthenticatedUser actor) {
-        if (actor.role() != Role.BP && actor.role() != Role.ADMIN) {
+        boolean isSupplier = actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER;
+        if (actor.role() != Role.BP && actor.role() != Role.ADMIN && !isSupplier) {
             throw ApiException.forbidden("REQUEST_DENIED", "BP/ADMIN 만 보완 요청 가능합니다");
         }
         typeRepo.findById(req.documentTypeId())
@@ -139,6 +144,18 @@ public class DocumentSupplementService {
 
         // target 자원의 supplier 회사 결정
         Long supplierCompanyId = resolveSupplierCompanyId(req.targetOwnerType(), req.targetOwnerId());
+
+        // 공급사(부모)는 직속 하위 공급사(자식) 자원에만 보완 요청 가능. 형제/타사/자기자신은 차단.
+        if (isSupplier) {
+            if (actor.companyId() == null) {
+                throw ApiException.forbidden("NO_COMPANY", "회사가 식별되지 않습니다");
+            }
+            boolean isDirectChild = companyService.listChildren(actor.companyId()).stream()
+                    .anyMatch(c -> c.getId().equals(supplierCompanyId));
+            if (!isDirectChild) {
+                throw ApiException.forbidden("NOT_CHILD_SUPPLIER", "직속 하위 공급사 자원만 보완 요청할 수 있습니다");
+            }
+        }
 
         // BP 권한 경계: contextSiteId 가 본인 회사 소유 사이트인지 + target 공급사가 그 사이트 참여자인지 검증.
         // ADMIN 은 전체 권한이라 검증 skip.
@@ -207,7 +224,13 @@ public class DocumentSupplementService {
             rows = repo.findByRequesterCompanyIdOrderByIdDesc(actor.companyId());
         } else if (actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER) {
             if (actor.companyId() == null) return List.of();
-            rows = repo.findByTargetSupplierCompanyIdOrderByIdDesc(actor.companyId());
+            // 받은 요청(target) + 부모로서 자식에게 보낸 요청(requester 회사) 합집합, id 로 dedupe.
+            Map<Long, DocumentSupplementRequest> byId = new java.util.LinkedHashMap<>();
+            for (DocumentSupplementRequest r : repo.findByTargetSupplierCompanyIdOrderByIdDesc(actor.companyId())) byId.put(r.getId(), r);
+            for (DocumentSupplementRequest r : repo.findByRequesterCompanyIdOrderByIdDesc(actor.companyId())) byId.put(r.getId(), r);
+            rows = byId.values().stream()
+                    .sorted(Comparator.comparing(DocumentSupplementRequest::getId).reversed())
+                    .toList();
         } else {
             return List.of();
         }
@@ -227,8 +250,8 @@ public class DocumentSupplementService {
         DocumentSupplementRequest r = repo.findById(id)
                 .orElseThrow(() -> ApiException.notFound("SUPPLEMENT_NOT_FOUND",
                         "보완 요청 " + id + " 없음"));
-        if (actor.role() != Role.ADMIN
-                && !(actor.role() == Role.BP && isSameBpCompanyRequester(actor, r))) {
+        // 요청자와 같은 회사(BP 또는 부모 공급사) 또는 ADMIN 만 취소.
+        if (actor.role() != Role.ADMIN && !isSameBpCompanyRequester(actor, r)) {
             throw ApiException.forbidden("CANCEL_DENIED", "취소 권한 없음");
         }
         if (r.getStatus() != DocumentSupplementStatus.OPEN) {
@@ -292,6 +315,9 @@ public class DocumentSupplementService {
         if (actor.role() == Role.BP && isSameBpCompanyRequester(actor, r)) return;
         if ((actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER)
                 && r.getTargetSupplierCompanyId().equals(actor.companyId())) return;
+        // 부모 공급사: 자식에게 보낸(요청자=본인 회사) 요청 열람 허용.
+        if ((actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER)
+                && isSameBpCompanyRequester(actor, r)) return;
         throw ApiException.forbidden("VIEW_DENIED", "조회 권한 없음");
     }
 

@@ -7,6 +7,7 @@ import AuditLogWidget from './AuditLogWidget';
 import WorkPlanListWidget, { type DashboardWorkPlan } from './WorkPlanListWidget';
 import { EmptyState, SectionCard, StatCard } from './widgets';
 import DocumentRiskWidget, { type DocumentRisk } from './DocumentRiskWidget';
+import BpPendingQueueWidget from './BpPendingQueueWidget';
 
 type BpSummary = {
   counts: Record<string, number>;
@@ -43,6 +44,8 @@ export default function BpDashboardPage() {
             {user?.name}님, 현장 운영과 배치 현황을 확인하세요.
           </p>
         </div>
+
+        <BpPendingQueueWidget />
 
         {loading ? (
           <p className="text-slate-400">불러오는 중...</p>

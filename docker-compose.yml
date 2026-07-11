@@ -121,7 +121,8 @@ services:
       - "${FRONTEND_PORT:-8082}:80"
     healthcheck:
       # nginx:alpine 의 busybox wget — `--spider` 로 본문 없이 HEAD 비슷한 확인. 가벼움.
-      test: ["CMD-SHELL", "wget -q --spider http://localhost/ || exit 1"]
+      # 127.0.0.1 명시 — `localhost` 는 컨테이너 안에서 IPv6(::1) 로 먼저 풀리는데 nginx 는 IPv4 만 리슨해 refused.
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -156,7 +157,8 @@ services:
       # JVM heap 명시 — base64 인코딩 시 OOM 방지 (mem_limit 의 60% 정도)
       JAVA_TOOL_OPTIONS: "-Xmx320m -Xms128m"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- --tries=1 --timeout=3 http://localhost:8081/ 2>&1 | grep -qE '401|200|500' || exit 1"]
+      # 인증 제외 health 엔드포인트 직접 조회 (/health → 200). 기존엔 `/` 응답 본문에서 상태코드를 grep 해 오탐이었음.
+      test: ["CMD-SHELL", "wget -q -O /dev/null --tries=1 --timeout=3 http://127.0.0.1:8081/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -178,7 +180,8 @@ services:
     depends_on:
       - verify-api
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || wget -qO- http://localhost:8080/ || exit 1"]
+      # HealthController /health → 200. actuator 미탑재라 기존 /actuator/health 조회는 항상 실패했음.
+      test: ["CMD-SHELL", "wget -q -O /dev/null --tries=1 --timeout=3 http://127.0.0.1:8080/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5

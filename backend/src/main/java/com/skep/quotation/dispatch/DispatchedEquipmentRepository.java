@@ -25,6 +25,12 @@ public interface DispatchedEquipmentRepository extends JpaRepository<DispatchedE
     /** V77: 이 공급사에 귀속(sub_supplier)된 배차 행이 이 견적에 존재하는가 (자식 열람 인가용). */
     boolean existsByQuotationRequestIdAndSubSupplierCompanyId(Long quotationRequestId, Long subSupplierCompanyId);
 
+    /** 정산: 본인+직속자식 명의(supplier) 행 + 자기 귀속(sub==본인) 행 전체(견적 무관). */
+    @Query("select d from DispatchedEquipment d where d.supplierCompanyId in :supplierIds "
+            + "or d.subSupplierCompanyId = :selfId")
+    List<DispatchedEquipment> findAllVisibleForSupplier(@Param("supplierIds") java.util.Collection<Long> supplierIds,
+                                                        @Param("selfId") Long selfId);
+
     Optional<DispatchedEquipment> findByQuotationRequestIdAndEquipmentId(Long quotationRequestId, Long equipmentId);
 
     boolean existsByQuotationRequestIdAndSupplierCompanyId(Long quotationRequestId, Long supplierCompanyId);
@@ -40,4 +46,12 @@ public interface DispatchedEquipmentRepository extends JpaRepository<DispatchedE
             + "and (q.bpCompanyId = :bpCompanyId or q.onBehalfOfBpCompanyId = :bpCompanyId)")
     boolean existsSupplierDispatchedToBp(@Param("supplierCompanyId") Long supplierCompanyId,
                                          @Param("bpCompanyId") Long bpCompanyId);
+
+    /** 견적 후보 "이전 투입" 배지용: 이 BP(bp_company_id 또는 대행 onBehalfOf) 견적에 배차된 적 있는 장비 id 집합. */
+    @Query("select distinct d.equipmentId from DispatchedEquipment d, QuotationRequest q "
+            + "where d.quotationRequestId = q.id "
+            + "and (q.bpCompanyId = :bp or q.onBehalfOfBpCompanyId = :bp) "
+            + "and d.equipmentId in :ids")
+    java.util.Set<Long> findDispatchedEquipmentIdsForBp(@Param("bp") Long bp,
+                                                        @Param("ids") java.util.Collection<Long> ids);
 }

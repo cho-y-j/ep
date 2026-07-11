@@ -75,6 +75,32 @@ const newManpowerItem = (): ManpowerItem => ({
   selected: new Map(),
 });
 
+/** 후보 배지 — 이전투입/신규 + 만료임박/서류완비. previouslyDispatched=null(ADMIN)이면 투입 배지 생략. */
+function CandidateBadges({
+  previouslyDispatched,
+  expiringDocsCount,
+}: {
+  previouslyDispatched?: boolean | null;
+  expiringDocsCount?: number | null;
+}) {
+  const expiring = (expiringDocsCount ?? 0) > 0;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {previouslyDispatched === true && (
+        <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-brand-50 text-brand-700">이전 투입</span>
+      )}
+      {previouslyDispatched === false && (
+        <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-500">신규</span>
+      )}
+      {expiring ? (
+        <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700">만료임박</span>
+      ) : (
+        <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-700">서류완비</span>
+      )}
+    </div>
+  );
+}
+
 export default function QuotationCreatePage() {
   const { user, company } = useAuth();
   const navigate = useNavigate();
@@ -123,35 +149,30 @@ export default function QuotationCreatePage() {
       .catch(() => {});
   }, [isAdmin]);
 
-  const fetchEqCandidates = async () => {
-    if (!category) { setError('장비 카테고리를 선택하세요.'); return; }
+  // 카테고리 선택 시 장비 후보 자동 조회 (버튼 없이).
+  useEffect(() => {
+    if (!category) { setEqGroups([]); setEqSelected(new Map()); return; }
+    let cancelled = false;
     setError(null);
     setLoadingEq(true);
-    try {
-      const res = await api.get<QuotationCandidateGroup[]>('/api/quotations/equipment-candidates', {
-        params: { category },
-      });
-      setEqGroups(res.data);
-      setEqSelected(new Map());
-    } catch (err) {
-      if (err instanceof AxiosError) setError(err.response?.data?.message ?? '장비 후보 조회 실패');
-    } finally {
-      setLoadingEq(false);
-    }
-  };
+    api.get<QuotationCandidateGroup[]>('/api/quotations/equipment-candidates', { params: { category } })
+      .then((res) => { if (!cancelled) { setEqGroups(res.data); setEqSelected(new Map()); } })
+      .catch((err) => { if (!cancelled && err instanceof AxiosError) setError(err.response?.data?.message ?? '장비 후보 조회 실패'); })
+      .finally(() => { if (!cancelled) setLoadingEq(false); });
+    return () => { cancelled = true; };
+  }, [category]);
 
   const updateMp = (uid: string, patch: Partial<ManpowerItem>) => {
     setMpItems((items) => items.map((it) => (it.uid === uid ? { ...it, ...patch } : it)));
   };
 
-  const fetchMpCandidates = async (uid: string) => {
-    const it = mpItems.find((x) => x.uid === uid);
-    if (!it?.role) { setError('인력 역할을 선택하세요.'); return; }
+  // 역할 선택 시 인력 후보 자동 조회 (버튼 없이). 행별 최신 role 을 인자로 받는다.
+  const fetchMpCandidates = async (uid: string, role: PersonRole) => {
     setError(null);
     updateMp(uid, { loading: true });
     try {
       const res = await api.get<QuotationManpowerCandidateGroup[]>('/api/quotations/manpower-candidates', {
-        params: { role: it.role },
+        params: { role },
       });
       updateMp(uid, { groups: res.data, selected: new Map(), loading: false });
     } catch (err) {
@@ -381,18 +402,11 @@ export default function QuotationCreatePage() {
             </div>
             <div className="flex items-center justify-between pt-1">
               <p className="text-xs text-slate-500">카테고리 매칭되는 전체 장비공급사의 장비를 표시합니다.</p>
-              <button
-                type="button"
-                onClick={fetchEqCandidates}
-                disabled={!category || loadingEq}
-                className="text-sm px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
-              >
-                {loadingEq ? '조회 중...' : '장비 후보 조회'}
-              </button>
+              {loadingEq && <span className="text-sm text-slate-500">조회 중...</span>}
             </div>
             {eqGroups.length === 0 ? (
               <div className="text-center text-xs text-slate-400 py-4 border border-dashed border-slate-300 rounded-lg">
-                "장비 후보 조회"를 눌러 검색하세요.
+                {loadingEq ? '장비 후보를 불러오는 중...' : category ? '해당 카테고리의 장비 후보가 없습니다.' : '카테고리를 선택하면 장비 후보가 표시됩니다.'}
               </div>
             ) : (
               <div className="space-y-3">
@@ -431,6 +445,10 @@ export default function QuotationCreatePage() {
                                     {EQUIPMENT_CATEGORY_LABEL[e.category]}
                                     {e.serial_number ? ` · S/N ${e.serial_number}` : ''}
                                   </div>
+                                  <CandidateBadges
+                                    previouslyDispatched={e.previously_dispatched}
+                                    expiringDocsCount={e.expiring_docs_count}
+                                  />
                                 </div>
                               </label>
                             </li>
@@ -481,7 +499,11 @@ export default function QuotationCreatePage() {
                     <span className="text-xs font-semibold text-slate-500">인력 역할</span>
                     <select
                       value={it.role}
-                      onChange={(e) => updateMp(it.uid, { role: e.target.value as PersonRole | '', groups: [], selected: new Map() })}
+                      onChange={(e) => {
+                        const role = e.target.value as PersonRole | '';
+                        updateMp(it.uid, { role, groups: [], selected: new Map() });
+                        if (role) void fetchMpCandidates(it.uid, role);
+                      }}
                       className="input mt-1 bg-white"
                       required
                     >
@@ -532,18 +554,11 @@ export default function QuotationCreatePage() {
                 </div>
                 <div className="flex items-center justify-between pt-1">
                   <p className="text-xs text-slate-500">역할 가능한 전체 인력공급사의 인원을 표시합니다.</p>
-                  <button
-                    type="button"
-                    onClick={() => fetchMpCandidates(it.uid)}
-                    disabled={!it.role || it.loading}
-                    className="text-sm px-3 py-1.5 rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
-                  >
-                    {it.loading ? '조회 중...' : '인력 후보 조회'}
-                  </button>
+                  {it.loading && <span className="text-sm text-slate-500">조회 중...</span>}
                 </div>
                 {it.groups.length === 0 ? (
                   <div className="text-center text-xs text-slate-400 py-4 border border-dashed border-slate-300 rounded-lg">
-                    역할 선택 후 "인력 후보 조회"를 누르세요.
+                    {it.loading ? '인력 후보를 불러오는 중...' : it.role ? '해당 역할의 인력 후보가 없습니다.' : '역할을 선택하면 인력 후보가 표시됩니다.'}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -588,6 +603,10 @@ export default function QuotationCreatePage() {
                                         {p.roles.map((r) => PERSON_ROLE_LABEL[r]).join(', ')}
                                         {p.phone ? ` · ${p.phone}` : ''}
                                       </div>
+                                      <CandidateBadges
+                                        previouslyDispatched={p.previously_dispatched}
+                                        expiringDocsCount={p.expiring_docs_count}
+                                      />
                                     </div>
                                   </label>
                                 </li>

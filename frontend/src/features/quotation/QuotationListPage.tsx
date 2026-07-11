@@ -43,6 +43,8 @@ export default function QuotationListPage() {
   const canCreate = user?.role === 'ADMIN' || user?.role === 'BP';
   const canManage = canCreate;
   const isSupplier = user?.role === 'EQUIPMENT_SUPPLIER' || user?.role === 'MANPOWER_SUPPLIER';
+  // 사이드바 라벨과 일치: ADMIN '견적 관리' / BP '장비 견적 공개 입찰' / 공급사 '받은 견적'
+  const pageTitle = user?.role === 'ADMIN' ? '견적 관리' : isSupplier ? '받은 견적' : '장비 견적 공개 입찰';
 
   const load = () => {
     setLoading(true);
@@ -116,12 +118,12 @@ export default function QuotationListPage() {
   };
 
   return (
-    <AppShell breadcrumb={[{ label: isSupplier ? '받은 견적' : '장비 견적 공개 입찰' }]}>
+    <AppShell breadcrumb={[{ label: pageTitle }]}>
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-slate-950">
-              {user?.role === 'ADMIN' ? '견적 관리' : isSupplier ? '받은 견적' : '장비 견적 공개 입찰'}
+              {pageTitle}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               {isSupplier

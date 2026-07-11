@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
+import { useAuth } from '../auth/AuthContext';
+import { useSubSuppliers } from '../company/useSubSuppliers';
 import PersonFields, { EMPTY_PERSON_FIELDS, type PersonFieldValues } from './PersonFields';
 import type { CompanyResponse, CompanyType } from '../../types/auth';
 import type { PersonResponse } from '../../types/person';
@@ -16,6 +18,9 @@ type Props = {
 };
 
 export default function PersonCreateForm({ suppliers, selfSupplierType, requireSupplierId, onCreated, onCancel }: Props) {
+  const { company } = useAuth();
+  // V77 대행 등록: 회사 관리자면 직속 자식(협력사) 소속으로도 등록 가능. 없으면 기존과 동일.
+  const subSuppliers = useSubSuppliers();
   const [values, setValues] = useState<PersonFieldValues>(EMPTY_PERSON_FIELDS);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -62,6 +67,22 @@ export default function PersonCreateForm({ suppliers, selfSupplierType, requireS
         <h2 className="text-base font-bold">새 인원 등록</h2>
         <p className="text-xs text-slate-500 mt-0.5">이름·전화만 입력하면 됩니다. 역할·생년월일·서류는 등록 후 상세에서 추가하세요.</p>
       </div>
+      {!requireSupplierId && subSuppliers.length > 0 && (
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">소속 공급사</span>
+          <select
+            value={values.supplierId}
+            onChange={(e) => setValues({ ...values, supplierId: e.target.value === '' ? '' : Number(e.target.value) })}
+            className="input mt-1 bg-white"
+          >
+            <option value="">우리 회사{company ? ` — ${company.name}` : ''}</option>
+            {subSuppliers.map((c) => (
+              <option key={c.id} value={c.id}>{c.name} (협력사)</option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-slate-400">협력사(하위공급사)를 선택하면 그 회사 소속으로 대신 등록됩니다.</span>
+        </label>
+      )}
       <PersonFields
         values={values}
         onChange={setValues}

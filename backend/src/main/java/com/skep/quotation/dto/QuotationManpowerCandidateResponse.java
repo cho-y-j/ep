@@ -18,6 +18,9 @@ public record QuotationManpowerCandidateResponse(
             String phone,
             String employeeNo,
             Set<PersonRole> roles,
-            Boolean hasPhoto
+            Boolean hasPhoto,
+            Boolean previouslyDispatched,
+            Boolean docsReady,
+            Integer expiringDocsCount
     ) {}
 }

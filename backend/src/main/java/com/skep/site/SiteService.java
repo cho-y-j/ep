@@ -114,6 +114,7 @@ public class SiteService {
                 req.status()
         );
         site.updateMap(req.latitude(), req.longitude(), blankToNull(req.polygonGeojson()), req.mapZoom());
+        site.updateSettlementDay(req.settlementDay());
         auditLog.record(actor, AuditAction.SITE_UPDATED, AuditTargetType.SITE,
                 site.getId(), site.getBpCompanyId(), site.getId(),
                 beforeJson,

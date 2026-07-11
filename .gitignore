@@ -25,3 +25,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# 로컬 개발 헬퍼 (커밋/푸시 금지)
+/dev-local/
+frontend/vite.dev-local.config.ts
+
+# Firebase 서비스계정 키 (비밀값 — 절대 커밋 금지)
+backend/firebase-admin-key.json

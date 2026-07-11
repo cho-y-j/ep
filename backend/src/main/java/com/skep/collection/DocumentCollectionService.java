@@ -244,8 +244,10 @@ public class DocumentCollectionService {
         } else {
             throw ApiException.badRequest("BAD_OWNER_TYPE", "지원하지 않는 대상 유형입니다");
         }
-        if (supplierId == null || actor.companyId() == null || !supplierId.equals(actor.companyId())) {
-            throw ApiException.forbidden("FORBIDDEN", "본인 회사 자원만 서류수집을 생성할 수 있습니다");
+        // V77: 본인 + 직속 자식(부모→자식 단방향) 자원까지 허용. 생성 명의(supplierCompanyId)는 부모 유지.
+        if (supplierId == null || actor.companyId() == null
+                || !companyService.selfAndChildren(actor.companyId()).contains(supplierId)) {
+            throw ApiException.forbidden("FORBIDDEN", "본인/하위 공급사 자원만 서류수집을 생성할 수 있습니다");
         }
     }
 

@@ -32,6 +32,10 @@ type Props = {
   requestedManpowerRole?: string | null;
   onClose: () => void;
   onSent: () => void;
+  /** V80 차량 변경: 초안의 장비를 미리 선택. */
+  initialEquipmentId?: number | null;
+  /** V80 차량 변경: 초안 단가로 프리필(문자열). */
+  initialPrices?: { dailyPrice: string; otDailyPrice: string; monthlyPrice: string; otMonthlyPrice: string } | null;
 };
 
 const emptyEq = (id: number, selected: boolean): EqRow => ({
@@ -42,7 +46,7 @@ const emptyEq = (id: number, selected: boolean): EqRow => ({
 
 type Defaults = Pick<EqRow, 'dailyPrice'|'otDailyPrice'|'monthlyPrice'|'otMonthlyPrice'|'dailyNote'|'otDailyNote'|'monthlyNote'|'otMonthlyNote'>;
 
-export default function DispatchSendDialog({ open, quotationRequestId, requestedCategory, requestedManpowerRole, onClose, onSent }: Props) {
+export default function DispatchSendDialog({ open, quotationRequestId, requestedCategory, requestedManpowerRole, onClose, onSent, initialEquipmentId, initialPrices }: Props) {
   const { user } = useAuth();
   const selfCompanyId = user?.company_id ?? null;
   const [allEquipment, setAllEquipment] = useState<EquipmentResponse[]>([]);
@@ -86,12 +90,26 @@ export default function DispatchSendDialog({ open, quotationRequestId, requested
         } else {
           setProposalDefaults(null);
         }
+        // V80 차량 변경: 초안 장비 preselect + 단가 프리필. 프리필 없으면 선택 초기화(깨끗한 상태로 열기).
+        if (initialEquipmentId != null) {
+          const base = emptyEq(initialEquipmentId, true);
+          if (initialPrices) {
+            base.dailyPrice = initialPrices.dailyPrice;
+            base.otDailyPrice = initialPrices.otDailyPrice;
+            base.monthlyPrice = initialPrices.monthlyPrice;
+            base.otMonthlyPrice = initialPrices.otMonthlyPrice;
+          }
+          setEqRows({ [initialEquipmentId]: base });
+        } else {
+          setEqRows({});
+        }
+        setPRows({});
       })
       .catch((err) => {
         setError(err instanceof AxiosError ? (err.response?.data?.message ?? '목록 조회 실패') : '목록 조회 실패');
       })
       .finally(() => setLoading(false));
-  }, [open, quotationRequestId]);
+  }, [open, quotationRequestId, initialEquipmentId]);
 
   const equipment = useMemo(() => {
     if (!requestedCategory) return allEquipment;

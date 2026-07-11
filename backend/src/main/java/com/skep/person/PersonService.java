@@ -310,10 +310,12 @@ public class PersonService {
         }
         if (actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER || actor.role() == Role.BP) {
             requireCompany(actor);
-            if (supplierIdParam != null && !supplierIdParam.equals(actor.companyId())) {
+            if (supplierIdParam == null) return actor.companyId();
+            // V77: 본인 또는 직속 자식(협력사) 소유로 대행 등록 허용. 그 외 회사는 차단.
+            if (!companyService.selfAndChildren(actor.companyId()).contains(supplierIdParam)) {
                 throw ApiException.forbidden("FORBIDDEN_OTHER_COMPANY", "다른 회사의 인원을 등록할 수 없습니다");
             }
-            return actor.companyId();
+            return supplierIdParam;
         }
         throw ApiException.forbidden("ROLE_NOT_ALLOWED", "인원 등록 권한이 없는 역할입니다");
     }

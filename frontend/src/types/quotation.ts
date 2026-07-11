@@ -33,6 +33,9 @@ export type QuotationCandidateEquipment = {
   has_photo: boolean;
   current_site_id?: number | null;
   current_site_name?: string | null;
+  previously_dispatched?: boolean | null;
+  docs_ready?: boolean | null;
+  expiring_docs_count?: number | null;
 };
 
 export type QuotationCandidateGroup = {
@@ -49,6 +52,9 @@ export type QuotationManpowerPerson = {
   employee_no?: string | null;
   roles: PersonRole[];
   has_photo: boolean;
+  previously_dispatched?: boolean | null;
+  docs_ready?: boolean | null;
+  expiring_docs_count?: number | null;
 };
 
 export type QuotationManpowerCandidateGroup = {

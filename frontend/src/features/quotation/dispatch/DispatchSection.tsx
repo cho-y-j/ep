@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import DispatchSendDialog from './DispatchSendDialog';
-import type { DispatchedEquipmentResponse, DispatchedPersonResponse } from '../../../types/dispatch';
+import type { DispatchedEquipmentResponse, DispatchedPersonResponse, DispatchDraftResponse } from '../../../types/dispatch';
 
 type Props = {
   quotationRequestId: number;
@@ -19,24 +19,57 @@ type Props = {
 export default function DispatchSection({ quotationRequestId, requestedCategory, requestedManpowerRole, canSend, canViewPdf, canCompare }: Props) {
   const [sent, setSent] = useState<DispatchedEquipmentResponse[]>([]);
   const [sentPersons, setSentPersons] = useState<DispatchedPersonResponse[]>([]);
+  const [drafts, setDrafts] = useState<DispatchDraftResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [dialogInitial, setDialogInitial] = useState<
+    { equipmentId: number | null; prices: { dailyPrice: string; otDailyPrice: string; monthlyPrice: string; otMonthlyPrice: string } } | null
+  >(null);
 
   async function load() {
     setLoading(true);
     try {
-      const [eqRes, pRes] = await Promise.all([
+      const [eqRes, pRes, dRes] = await Promise.all([
         api.get<DispatchedEquipmentResponse[]>(`/api/quotations/${quotationRequestId}/dispatched`),
         api.get<DispatchedPersonResponse[]>(`/api/quotations/${quotationRequestId}/dispatched-persons`).catch(() => ({ data: [] })),
+        api.get<DispatchDraftResponse[]>(`/api/quotations/${quotationRequestId}/dispatch-drafts`).catch(() => ({ data: [] })),
       ]);
       setSent(eqRes.data);
       setSentPersons(pRes.data);
+      setDrafts(dRes.data);
     } catch {
       setSent([]);
       setSentPersons([]);
+      setDrafts([]);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function confirmDraft(draftId: number) {
+    setConfirming(true);
+    try {
+      await api.post(`/api/quotations/dispatch-drafts/${draftId}/confirm`);
+      await load();
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? '발송 실패');
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  function editDraft(d: DispatchDraftResponse) {
+    setDialogInitial({
+      equipmentId: d.equipment_id ?? null,
+      prices: {
+        dailyPrice: d.daily_price != null ? String(d.daily_price) : '',
+        otDailyPrice: d.ot_daily_price != null ? String(d.ot_daily_price) : '',
+        monthlyPrice: d.monthly_price != null ? String(d.monthly_price) : '',
+        otMonthlyPrice: d.ot_monthly_price != null ? String(d.ot_monthly_price) : '',
+      },
+    });
+    setDialogOpen(true);
   }
 
   useEffect(() => { void load(); }, [quotationRequestId]);
@@ -110,10 +143,56 @@ export default function DispatchSection({ quotationRequestId, requestedCategory,
               : (canSend ? '선정 완료. 보낼 차량·인원을 선택해주세요.' : '아직 발송되지 않았습니다.')}
           </p>
         </div>
-        {canSend && !isSent && (
-          <button onClick={() => setDialogOpen(true)} className="btn-primary">차량·인원 선택 후 보내기</button>
+        {canSend && !isSent && drafts.length === 0 && (
+          <button onClick={() => { setDialogInitial(null); setDialogOpen(true); }} className="btn-primary">차량·인원 선택 후 보내기</button>
         )}
       </div>
+
+      {canSend && !isSent && drafts.length > 0 && (
+        <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3 space-y-2">
+          <div className="text-sm font-semibold text-brand-900">선정 완료 — 배차 초안</div>
+          <p className="text-xs text-slate-500">선정된 자원·단가로 초안이 준비됐습니다. 확인 후 발송하거나 차량을 변경하세요.</p>
+          <div className="rounded-lg border border-slate-200 overflow-x-auto bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200 text-left text-slate-500">
+                <tr>
+                  <th className="px-3 py-2 font-medium">#</th>
+                  <th className="px-3 py-2 font-medium">자원</th>
+                  <th className="px-3 py-2 font-medium">구분</th>
+                  <th className="px-3 py-2 font-medium text-right">일대(원)</th>
+                  <th className="px-3 py-2 font-medium text-right">월대(원)</th>
+                  <th className="px-3 py-2 font-medium">비고</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {drafts.map((d, i) => (
+                  <tr key={d.id}>
+                    <td className="px-3 py-2 text-slate-500">{i + 1}</td>
+                    <td className="px-3 py-2 font-medium text-slate-900">
+                      {d.resource_type === 'EQUIPMENT' ? (d.equipment_label ?? '단가 응답') : (d.person_label ?? `#${d.person_id}`)}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">
+                      {d.resource_type === 'EQUIPMENT' ? (d.equipment_category ?? '-') : (d.job_title ?? '인원')}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">{d.daily_price != null ? d.daily_price.toLocaleString() : '-'}</td>
+                    <td className="px-3 py-2 text-right font-mono">{d.monthly_price != null ? d.monthly_price.toLocaleString() : '-'}</td>
+                    <td className="px-3 py-2 text-slate-600">{d.notes ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => confirmDraft(drafts[0].id)} disabled={confirming} className="btn-primary disabled:opacity-50">
+              {confirming ? '발송 중...' : '확인 후 발송'}
+            </button>
+            <button onClick={() => editDraft(drafts[0])} disabled={confirming}
+                    className="px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm disabled:opacity-50">
+              차량 변경
+            </button>
+          </div>
+        </div>
+      )}
 
       {isSent && (
         <>
@@ -229,7 +308,9 @@ export default function DispatchSection({ quotationRequestId, requestedCategory,
         quotationRequestId={quotationRequestId}
         requestedCategory={requestedCategory}
         requestedManpowerRole={requestedManpowerRole}
-        onClose={() => setDialogOpen(false)}
+        initialEquipmentId={dialogInitial?.equipmentId ?? null}
+        initialPrices={dialogInitial?.prices ?? null}
+        onClose={() => { setDialogOpen(false); setDialogInitial(null); }}
         onSent={() => { void load(); }}
       />
     </section>

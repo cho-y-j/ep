@@ -49,6 +49,7 @@ import WorksheetEditorPage from './features/workPlan/edit/WorksheetEditorPage';
 import SignaturePage from './features/signature/SignaturePage';
 import CollectPublicPage from './features/collection/CollectPublicPage';
 import DocumentCollectionPage from './features/collection/DocumentCollectionPage';
+import SettlementPage from './features/settlement/SettlementPage';
 import DashboardRedirect from './features/dashboard/DashboardRedirect';
 import AdminDashboardPage from './features/dashboard/AdminDashboardPage';
 import BpDashboardPage from './features/dashboard/BpDashboardPage';
@@ -278,6 +279,8 @@ export default function App() {
         <Route path="/work-plans/:id/print" element={<ProtectedRoute><WorkPlanPrintPage /></ProtectedRoute>} />
         <Route path="/work-confirmations/monthly"
                element={<ProtectedRoute roles={['ADMIN', 'BP', 'EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><MonthlyWorkConfirmationPage /></ProtectedRoute>} />
+        <Route path="/settlements"
+               element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'ADMIN']}><SettlementPage /></ProtectedRoute>} />
         <Route
           path="/admin/docx-templates"
           element={<ProtectedRoute roles={['ADMIN', 'BP']}><DocxTemplatesPage /></ProtectedRoute>}

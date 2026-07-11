@@ -37,6 +37,9 @@ public class QuotationProposalService {
     private final NotificationService notifications;
     private final SiteRepository sites;
     private final com.skep.quotation.snapshot.ComparisonSnapshotService snapshotService;
+    private final com.skep.quotation.dispatch.draft.DispatchDraftService dispatchDrafts;
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(QuotationProposalService.class);
 
     public QuotationProposalService(QuotationProposalRepository proposals,
                                      QuotationRequestRepository requests,
@@ -46,7 +49,8 @@ public class QuotationProposalService {
                                      UserRepository users,
                                      NotificationService notifications,
                                      SiteRepository sites,
-                                     com.skep.quotation.snapshot.ComparisonSnapshotService snapshotService) {
+                                     com.skep.quotation.snapshot.ComparisonSnapshotService snapshotService,
+                                     com.skep.quotation.dispatch.draft.DispatchDraftService dispatchDrafts) {
         this.proposals = proposals;
         this.requests = requests;
         this.equipmentRepo = equipmentRepo;
@@ -56,6 +60,7 @@ public class QuotationProposalService {
         this.notifications = notifications;
         this.sites = sites;
         this.snapshotService = snapshotService;
+        this.dispatchDrafts = dispatchDrafts;
     }
 
     /** qr 의 시각 친화 라벨 — "굴삭기 · 7/10~7/15 · 강남현장" */
@@ -237,6 +242,14 @@ public class QuotationProposalService {
 
         // Site-A: 선정은 제안만 FINAL_ACCEPTED. 작업계획서/자원 첨부는 별도 단계(Site-D)에서.
         p.markFinalAccepted(actor.id(), null, null, null);
+
+        // V80: 선정 직후 배차 초안 자동생성(OPEN_BID 제안 한정 — 제안은 OPEN_BID 에만 존재).
+        //      별도 테이블이라 기존 dispatched 흐름과 격리. 실패해도 finalize 는 반드시 성공해야 하므로 예외를 삼킨다.
+        try {
+            dispatchDrafts.createFromFinalizedProposal(p, qr);
+        } catch (Exception ex) {
+            log.warn("배차 초안 생성 실패 (finalize 계속) proposalId={} requestId={}", p.getId(), qr.getId(), ex);
+        }
 
         notifications.sendToCompany(p.getSupplierCompanyId(),
                 NotificationType.QUOTATION_FINALIZED,

@@ -66,4 +66,7 @@ dependencies {
     // Firebase FCM
     implementation(platform("com.google.firebase:firebase-bom:32.7.2"))
     implementation("com.google.firebase:firebase-messaging-ktx")
+
+    // 유닛테스트 (FallDetector 합성 트레이스)
+    testImplementation("junit:junit:4.13.2")
 }

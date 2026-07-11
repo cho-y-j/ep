@@ -30,6 +30,7 @@ export type SiteResponse = {
   longitude?: number | null;
   polygon_geojson?: string | null;
   map_zoom?: number | null;
+  settlement_day?: number | null;
   participant_count: number;
   created_at: string;
   updated_at: string;
@@ -48,6 +49,7 @@ export type CreateSitePayload = {
   longitude?: number | null;
   polygon_geojson?: string | null;
   map_zoom?: number | null;
+  settlement_day?: number | null;
 };
 
 export type UpdateSitePayload = CreateSitePayload & {

@@ -24,7 +24,7 @@ public class DocumentSupplementRequest {
     private Long requesterUserId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "requester_role", nullable = false, length = 16)
+    @Column(name = "requester_role", nullable = false, length = 32)
     private Role requesterRole;
 
     @Column(name = "target_supplier_company_id", nullable = false)

@@ -7,6 +7,8 @@ import AppShell from '../../components/layout/AppShell';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import DocumentSection from '../document/DocumentSection';
 import DocumentCollectionDialog from '../collection/DocumentCollectionDialog';
+import SupplementRequestDialog from '../document/SupplementRequestDialog';
+import { useSubSuppliers } from '../company/useSubSuppliers';
 import EquipmentPhotoGallery from './EquipmentPhotoGallery';
 import DonutChart from './DonutChart';
 import ResourceAssignmentSection from '../assignment/ResourceAssignmentSection';
@@ -34,8 +36,10 @@ export default function EquipmentDetailPage() {
   const fromCompanyId = search.get('fromCompany') ? Number(search.get('fromCompany')) : null;
   const [fromCompanyName, setFromCompanyName] = useState<string | null>(null);
 
+  const subSuppliers = useSubSuppliers();
   const [equipment, setEquipment] = useState<EquipmentResponse | null>(null);
   const [collectOpen, setCollectOpen] = useState(false);
+  const [supplementOpen, setSupplementOpen] = useState(false);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -124,6 +128,8 @@ export default function EquipmentDetailPage() {
   }
 
   const title = equipment.vehicle_no || equipment.model || EQUIPMENT_CATEGORY_LABEL[equipment.category];
+  // V77: 이 장비 소유사가 내 직속 하위 공급사면 부모로서 서류수집/보완요청 가능.
+  const isParentOfOwner = subSuppliers.some((c) => c.id === equipment.supplier_id);
   const status = equipment.expiring_count > 0
     ? '점검 필요'
     : (equipment.utilization_pct ?? 0) === 0 ? '미사용' : '가동 중';
@@ -272,6 +278,29 @@ export default function EquipmentDetailPage() {
 
         {/* 등록 서류 카드 — 가장 중요한 영역이라 탭 위에 별도 노출 */}
         <div className="rounded-xl border border-slate-200 bg-white p-6">
+          {(canEdit || isParentOfOwner) && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button type="button" onClick={() => setCollectOpen(true)}
+                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
+                서류 수집 요청
+              </button>
+              {isParentOfOwner && (
+                <button type="button" onClick={() => setSupplementOpen(true)}
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100">
+                  보완 요청 (빠꾸)
+                </button>
+              )}
+            </div>
+          )}
+          {supplementOpen && (
+            <SupplementRequestDialog
+              ownerType="EQUIPMENT"
+              ownerId={equipment.id}
+              ownerLabel={title}
+              onClose={() => setSupplementOpen(false)}
+              onSubmitted={() => setSupplementOpen(false)}
+            />
+          )}
           <DocumentSection
             ownerType="EQUIPMENT"
             ownerId={equipment.id}

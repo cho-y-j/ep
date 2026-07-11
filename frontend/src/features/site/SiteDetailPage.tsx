@@ -229,6 +229,16 @@ export default function SiteDetailPage() {
               <TextInput label="상세주소" value={form.detail_address ?? ''} onChange={(detail_address) => setForm((prev) => prev && ({ ...prev, detail_address }))} />
               <DateInput label="시작일" value={form.start_date ?? ''} onChange={(start_date) => setForm((prev) => prev && ({ ...prev, start_date }))} />
               <DateInput label="종료일" value={form.end_date ?? ''} onChange={(end_date) => setForm((prev) => prev && ({ ...prev, end_date }))} />
+              <label className="block text-sm">
+                <span className="text-slate-600">정산 기준일 (매월 1~31, 비우면 미지정)</span>
+                <input
+                  type="number" min={1} max={31}
+                  value={form.settlement_day ?? ''}
+                  onChange={(e) => setForm((prev) => prev && ({ ...prev, settlement_day: e.target.value === '' ? null : Number(e.target.value) }))}
+                  placeholder="미지정"
+                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </label>
               <label className="block">
                 <span className="text-xs font-semibold text-slate-500">상태</span>
                 <select
@@ -421,6 +431,7 @@ function toForm(site: SiteResponse): UpdateSitePayload {
     longitude: site.longitude ?? null,
     polygon_geojson: site.polygon_geojson ?? null,
     map_zoom: site.map_zoom ?? null,
+    settlement_day: site.settlement_day ?? null,
   };
 }
 

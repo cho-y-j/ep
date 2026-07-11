@@ -131,6 +131,7 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
           badge: (supplierCounts.supplements + supplierCounts.checks + supplierCounts.compliance) || undefined },
       ]},
       { label: '더보기', collapsible: true, defaultOpen: false, items: [
+        { label: '투입 정산', to: '/settlements', icon: <IconClipboard /> },
         { label: '월별 작업확인서', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
         { label: '내 회사', to: '/my-company', icon: <IconBriefcase /> },
         ...(isMaster ? [{ label: '직원 관리', to: '/company/users', icon: <IconUserCheck /> }] : []),

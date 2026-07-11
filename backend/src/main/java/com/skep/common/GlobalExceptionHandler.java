@@ -3,11 +3,13 @@ package com.skep.common;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -52,8 +54,9 @@ public class GlobalExceptionHandler {
                 .body(error(HttpStatus.FORBIDDEN, "ACCESS_DENIED", ex.getMessage()));
     }
 
-    /** 필수 쿼리 파라미터 누락 / 타입 불일치 → 400 (이전엔 generic 500). */
-    @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+    /** 필수 쿼리 파라미터/헤더 누락 · 타입 불일치 · 본문 파싱 실패 → 400 (이전엔 generic 500). */
+    @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class,
+            MissingRequestHeaderException.class, HttpMessageNotReadableException.class})
     public ResponseEntity<Map<String, Object>> handleBadRequest(Exception ex) {
         return ResponseEntity.badRequest().body(error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage()));
     }

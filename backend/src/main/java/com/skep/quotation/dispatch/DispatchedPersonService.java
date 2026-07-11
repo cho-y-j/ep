@@ -37,6 +37,7 @@ public class DispatchedPersonService {
     private final CompanyRepository companies;
     private final com.skep.company.CompanyService companyService;
     private final NotificationService notifications;
+    private final com.skep.quotation.dispatch.draft.DispatchDraftRepository drafts;
 
     @Transactional
     public List<DispatchedPersonResponse> send(Long requestId, DispatchPersonRequest req, AuthenticatedUser actor) {
@@ -107,6 +108,11 @@ public class DispatchedPersonService {
                     supplierName + " — 인원 " + entities.size() + "명 (견적 #" + requestId + ")",
                     "QUOTATION_REQUEST", requestId, qr.getSiteId());
         }
+
+        // V80: 이 (요청,공급사)로 발송 완료 → 잔존 DRAFT 초안 폐기. confirm 경로면 이후 CONFIRMED 로 덮어씀.
+        drafts.findByQuotationRequestIdAndSupplierCompanyIdAndStatus(
+                        requestId, finalSupplier, com.skep.quotation.dispatch.draft.DispatchDraftStatus.DRAFT)
+                .forEach(com.skep.quotation.dispatch.draft.DispatchDraft::markDiscarded);
 
         return entities.stream()
                 .map(d -> toResponse(d, personMap.get(d.getPersonId())))

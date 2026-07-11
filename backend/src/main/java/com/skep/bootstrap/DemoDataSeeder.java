@@ -16,6 +16,7 @@ import com.skep.equipment.EquipmentCategory;
 import com.skep.equipment.EquipmentRepository;
 import com.skep.outgoing.OutgoingQuotation;
 import com.skep.outgoing.OutgoingQuotationRepository;
+import com.skep.person.AttendanceCodeGenerator;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
 import com.skep.person.PersonRole;
@@ -324,7 +325,17 @@ public class DemoDataSeeder {
 
         private Person savePerson(Long supplierId, String name, String phone, Set<PersonRole> roles) {
             return persons.save(Person.builder()
-                    .supplierId(supplierId).name(name).phone(phone).roles(roles).build());
+                    .supplierId(supplierId).name(name).phone(phone).roles(roles)
+                    .attendanceCode(nextUniqueAttendanceCode()).build());
+        }
+
+        /** persons.attendance_code 는 NOT NULL·UNIQUE — 데모 person 에도 유니크 코드 부여 (PersonService 와 동일 방식). */
+        private String nextUniqueAttendanceCode() {
+            for (int i = 0; i < 20; i++) {
+                String code = AttendanceCodeGenerator.next();
+                if (persons.findByAttendanceCode(code).isEmpty()) return code;
+            }
+            throw new IllegalStateException("demo seeder: attendance_code 충돌이 반복됩니다");
         }
 
         private Equipment saveEquipment(Long supplierId, String vehicleNo, EquipmentCategory cat,

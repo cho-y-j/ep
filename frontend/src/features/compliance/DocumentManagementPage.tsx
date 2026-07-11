@@ -12,6 +12,7 @@ import DocFilePreviewDialog from './DocFilePreviewDialog';
 import OcrUploadDialog from '../document/OcrUploadDialog';
 import type { DocumentTypeResponse } from '../../types/document';
 import { formatOwnerSubLabel } from '../../lib/format';
+import { useSubSuppliers } from '../company/useSubSuppliers';
 
 /**
  * S-11: 작업계획서 작성 직전 단계의 "서류관리" 통합 dashboard.
@@ -27,6 +28,7 @@ export default function DocumentManagementPage() {
   const isAdmin = user?.role === 'ADMIN';
   const isBP = user?.role === 'BP';
   const isSupplier = user?.role === 'EQUIPMENT_SUPPLIER' || user?.role === 'MANPOWER_SUPPLIER';
+  const subSuppliers = useSubSuppliers();
 
   const [tab, setTab] = useState<'board' | 'sent' | 'received' | 'myDocs'>(isSupplier ? 'myDocs' : 'board');
   const [sites, setSites] = useState<SiteResponse[]>([]);
@@ -60,8 +62,12 @@ export default function DocumentManagementPage() {
   }, [siteId, reloadKey]);
 
   const sentSupplements = useMemo(
-    () => supplements.filter((s) => isAdmin || s.requester_user_id === user?.id),
-    [supplements, isAdmin, user?.id]
+    // 공급사(부모): 자식에게 보낸 것 = target 이 본인 회사가 아닌 행. BP/ADMIN 은 기존 필터 유지.
+    () => supplements.filter((s) =>
+      isSupplier
+        ? s.target_supplier_company_id !== user?.company_id
+        : isAdmin || s.requester_user_id === user?.id),
+    [supplements, isAdmin, isSupplier, user?.id, user?.company_id]
   );
   const receivedSupplements = useMemo(
     () => supplements.filter((s) => s.target_supplier_company_id === user?.company_id),
@@ -85,7 +91,7 @@ export default function DocumentManagementPage() {
               현장별 보드
             </TabButton>
           )}
-          {!isSupplier && (
+          {(!isSupplier || subSuppliers.length > 0) && (
             <TabButton active={tab === 'sent'} onClick={() => setTab('sent')}>
               보낸 보완 요청 ({sentSupplements.length})
             </TabButton>
