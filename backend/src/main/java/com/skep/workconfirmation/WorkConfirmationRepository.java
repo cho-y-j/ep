@@ -28,4 +28,7 @@ public interface WorkConfirmationRepository extends JpaRepository<WorkConfirmati
 
     // 정산 근무일수 자동 파생 — 대상 인원들의 확인서를 기간(min~max)으로 한 번에 조회. 상태 필터는 서비스에서.
     List<WorkConfirmation> findByPersonIdInAndWorkDateBetween(Collection<Long> personIds, LocalDate from, LocalDate to);
+
+    // 자원 파이프라인 — 인력들의 확인서 일괄 조회(최근 workDate 집계용, N+1 회피).
+    List<WorkConfirmation> findByPersonIdIn(Collection<Long> personIds);
 }

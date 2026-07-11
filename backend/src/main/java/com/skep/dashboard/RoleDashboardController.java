@@ -15,6 +15,8 @@ import com.skep.equipment.EquipmentRepository;
 import com.skep.person.PersonRepository;
 import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
+import com.skep.signature.SignatureStatus;
+import com.skep.signature.WorksheetSignatureRepository;
 import com.skep.site.Site;
 import com.skep.site.SiteParticipant;
 import com.skep.site.SiteParticipantRepository;
@@ -28,6 +30,7 @@ import com.skep.workplan.WorkPlanEquipmentRepository;
 import com.skep.workplan.WorkPlanPerson;
 import com.skep.workplan.WorkPlanPersonRepository;
 import com.skep.workplan.WorkPlanRepository;
+import com.skep.workplan.WorkPlanStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -65,6 +68,7 @@ public class RoleDashboardController {
     private final WorkPlanRepository workPlans;
     private final WorkPlanEquipmentRepository wpe;
     private final WorkPlanPersonRepository wpp;
+    private final WorksheetSignatureRepository signatures;
 
     public RoleDashboardController(UserRepository users, CompanyRepository companies,
                                    SiteRepository sites, SiteParticipantRepository participants,
@@ -75,7 +79,8 @@ public class RoleDashboardController {
                                    AuditLogService auditLog,
                                    WorkPlanRepository workPlans,
                                    WorkPlanEquipmentRepository wpe,
-                                   WorkPlanPersonRepository wpp) {
+                                   WorkPlanPersonRepository wpp,
+                                   WorksheetSignatureRepository signatures) {
         this.users = users;
         this.companies = companies;
         this.sites = sites;
@@ -90,6 +95,7 @@ public class RoleDashboardController {
         this.workPlans = workPlans;
         this.wpe = wpe;
         this.wpp = wpp;
+        this.signatures = signatures;
     }
 
     @GetMapping("/admin/summary")
@@ -185,6 +191,55 @@ public class RoleDashboardController {
         all.addAll(documentRisks(OwnerType.EQUIPMENT, equipIds));
         all.addAll(documentRisks(OwnerType.PERSON, personIds));
         return all.stream().limit(20).toList();
+    }
+
+    /**
+     * BP 서명대기 위젯 — 자기 회사 DRAFT 작업계획서 중 5인 사인 미완(미서명/부분서명) 건수 + 목록.
+     *
+     * 근거: 사인은 DRAFT 단계에서 수집되고 제출은 5인 사인 완료가 게이트(WorkPlanService.allSigned).
+     * 따라서 "서명 대기" = DRAFT 이면서 SIGNED < 5. batch group count 로 N+1 회피(PNG 미로드).
+     */
+    @GetMapping("/bp/pending-signatures")
+    public Map<String, Object> bpPendingSignatures(@CurrentUser AuthenticatedUser actor) {
+        if (actor.role() != Role.BP) throw ApiException.forbidden("BP_ONLY", "BP 전용");
+        if (actor.companyId() == null) throw ApiException.forbidden("NO_COMPANY", "소속 회사가 없습니다");
+
+        List<WorkPlan> drafts = workPlans.findByBpCompanyIdAndStatusInOrderByIdDesc(
+                actor.companyId(), List.of(WorkPlanStatus.DRAFT));
+        Map<String, Object> body = new HashMap<>();
+        if (drafts.isEmpty()) {
+            body.put("count", 0L);
+            body.put("items", List.of());
+            return body;
+        }
+        List<Long> ids = drafts.stream().map(WorkPlan::getId).toList();
+        Map<Long, Long> signedCount = new HashMap<>();
+        for (Object[] row : signatures.countByStatusGroupedByWorkPlan(ids, SignatureStatus.SIGNED)) {
+            signedCount.put((Long) row[0], (Long) row[1]);
+        }
+        List<WorkPlan> pending = drafts.stream()
+                .filter(wp -> signedCount.getOrDefault(wp.getId(), 0L) < 5)
+                .toList();
+
+        List<Long> siteIds = pending.stream().map(WorkPlan::getSiteId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        Map<Long, String> siteNameMap = sites.findAllById(siteIds).stream()
+                .collect(Collectors.toMap(Site::getId, Site::getName));
+
+        body.put("count", (long) pending.size());
+        body.put("items", pending.stream().limit(20).map(wp -> {
+            Map<String, Object> r = new HashMap<>();
+            r.put("id", wp.getId());
+            r.put("title", wp.getTitle());
+            r.put("site_id", wp.getSiteId());
+            r.put("site_name", wp.getSiteId() != null ? siteNameMap.get(wp.getSiteId()) : null);
+            r.put("work_date", wp.getWorkDate());
+            r.put("status", wp.getStatus().name());
+            r.put("signed_count", signedCount.getOrDefault(wp.getId(), 0L));
+            r.put("required", 5);
+            return r;
+        }).toList());
+        return body;
     }
 
     @GetMapping("/equipment-supplier/summary")

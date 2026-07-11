@@ -16,7 +16,9 @@ public record DispatchPersonRequest(
     public record Item(
             @NotNull Long personId,
             Long dailyPrice,
+            Long otDailyPrice,
             Long monthlyPrice,
+            Long otMonthlyPrice,
             String notes
     ) {}
 }

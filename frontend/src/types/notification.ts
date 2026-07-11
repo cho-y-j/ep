@@ -20,6 +20,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<string, string> = {
   DOCUMENT_EXPIRED: '서류 만료',
   DOCUMENT_REVIEW: '서류 심사',
   ASSIGNMENT_OVERRIDDEN: '강제 배치',
+  SUB_SUPPLIER_SIGNUP: '하위 공급사 가입 신청',
 };
 
 export type ReviewItemResponse = {

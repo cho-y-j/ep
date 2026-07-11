@@ -52,8 +52,10 @@ export default function EquipmentDetailPage() {
     if (user.role === 'ADMIN') return true;
     // 장비 소유 회사 (#5: BP 직속 장비 케이스 포함 — Person.supplier_id 와 동일 패턴)
     if (equipment.supplier_id === user.company_id) return true;
+    // V77: 소유사가 내 직속 하위 공급사(협력사)면 부모로서 대행 수정/삭제.
+    if (subSuppliers.some((c) => c.id === equipment.supplier_id)) return true;
     return false;
-  }, [equipment, user]);
+  }, [equipment, user, subSuppliers]);
 
   // BP 가 자기 직속 운전수를 다른 회사 장비에 매칭하는 케이스를 위해 기본 조종원 편집은 더 관대.
   // 백엔드 ensureCanModifyDefaultOperators 와 동일 정책 — 장비 소유 회사 + BP (사이트 ACTIVE 참여 공급사 장비).

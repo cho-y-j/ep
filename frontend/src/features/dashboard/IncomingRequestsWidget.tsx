@@ -23,12 +23,28 @@ type CheckGroup = {
   items: ResourceCheckResponse[];
 };
 
-/** 공급사 대시보드 상단 — 받은 보완요청(OPEN) + 받은 점검요청(REQUESTED).
+// 이행지시(compliance-order) — 사이드바 배지(useSupplierIncomingCounts)와 동일 소스/필터로 합산.
+type ComplianceOrderLite = {
+  id: number;
+  target_label: string;
+  order_type: 'SAFETY_INSPECTION' | 'HEALTH_CHECK' | 'OTHER';
+  due_date: string;
+  status: string;
+  overdue: boolean;
+};
+const ORDER_TYPE_LABEL: Record<ComplianceOrderLite['order_type'], string> = {
+  SAFETY_INSPECTION: '안전점검',
+  HEALTH_CHECK: '건강검진',
+  OTHER: '기타',
+};
+
+/** 공급사 대시보드 상단 — 받은 보완요청(OPEN) + 받은 점검요청(REQUESTED) + 받은 이행지시(REQUESTED/OVERDUE).
  *  같은 owner(차량/인원/회사)에 걸린 여러 요청은 한 카드로 묶어 표시. */
 export default function IncomingRequestsWidget() {
   const { user } = useAuth();
   const [supps, setSupps] = useState<SupplementResponse[]>([]);
   const [checks, setChecks] = useState<ResourceCheckResponse[]>([]);
+  const [compliance, setCompliance] = useState<ComplianceOrderLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [openKeys, setOpenKeys] = useState<Set<OwnerKey>>(new Set());
 
@@ -46,10 +62,12 @@ export default function IncomingRequestsWidget() {
     Promise.all([
       api.get<SupplementResponse[]>('/api/document-supplements').then((r) => r.data).catch(() => []),
       api.get<ResourceCheckResponse[]>('/api/resource-checks/supplier-list').then((r) => r.data).catch(() => []),
-    ]).then(([s, c]) => {
+      api.get<ComplianceOrderLite[]>('/api/compliance-orders', { params: { scope: 'supplier' } }).then((r) => r.data).catch(() => []),
+    ]).then(([s, c, o]) => {
       if (cancelled) return;
       setSupps(s.filter((x) => x.target_supplier_company_id === user?.company_id && x.status === 'OPEN'));
       setChecks(c.filter((x) => x.status === 'REQUESTED'));
+      setCompliance(o.filter((x) => x.status === 'REQUESTED' || x.status === 'OVERDUE'));
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [user?.company_id]);
@@ -88,7 +106,7 @@ export default function IncomingRequestsWidget() {
     return Array.from(map.values());
   }, [checks]);
 
-  const total = supps.length + checks.length;
+  const total = supps.length + checks.length + compliance.length;
 
   if (loading) {
     return <div className="card p-4 text-sm text-slate-400">받은 요청 불러오는 중…</div>;
@@ -110,6 +128,7 @@ export default function IncomingRequestsWidget() {
         <div className="flex gap-2 text-[11px] text-slate-500">
           <Link to="/document-management" className="hover:text-slate-900">보완요청 전체 ›</Link>
           <Link to="/resource-checks/supplier" className="hover:text-slate-900">점검요청 전체 ›</Link>
+          <Link to="/compliance-orders" className="hover:text-slate-900">이행지시 전체 ›</Link>
         </div>
       </div>
 
@@ -201,6 +220,27 @@ export default function IncomingRequestsWidget() {
                 </li>
               );
             })}
+          </ul>
+        </div>
+      )}
+
+      {compliance.length > 0 && (
+        <div className={suppGroups.length > 0 || checkGroups.length > 0 ? 'mt-3' : ''}>
+          <div className="text-xs font-semibold text-slate-500 mb-1">받은 이행지시 ({compliance.length})</div>
+          <ul className="space-y-1.5">
+            {compliance.map((o) => (
+              <li key={o.id} className="flex items-center gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-sm">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 text-slate-700">{ORDER_TYPE_LABEL[o.order_type]}</span>
+                <span className="font-semibold text-slate-900 truncate">{o.target_label}</span>
+                <span className={`text-xs ${o.overdue ? 'text-rose-700' : 'text-slate-500'}`}>마감 {o.due_date}</span>
+                <Link
+                  to="/compliance-orders"
+                  className="ml-auto shrink-0 px-2 py-1 rounded bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 whitespace-nowrap"
+                >
+                  이행하러 가기
+                </Link>
+              </li>
+            ))}
           </ul>
         </div>
       )}

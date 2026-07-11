@@ -23,11 +23,16 @@ public class CompanyUserService {
     private final UserRepository users;
     private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder encoder;
+    private final com.skep.company.CompanyService companyService;
+    private final UserService userService;
 
-    public CompanyUserService(UserRepository users, RefreshTokenRepository refreshTokens, PasswordEncoder encoder) {
+    public CompanyUserService(UserRepository users, RefreshTokenRepository refreshTokens, PasswordEncoder encoder,
+                              com.skep.company.CompanyService companyService, UserService userService) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.encoder = encoder;
+        this.companyService = companyService;
+        this.userService = userService;
     }
 
     @Transactional(readOnly = true)
@@ -59,6 +64,41 @@ public class CompanyUserService {
         User u = getInSameCompany(targetId, actor);
         u.enable();
         return u;
+    }
+
+    /**
+     * V77: 직속 자식(협력사) 공급사의 가입 유저 목록. 부모 master 전용.
+     * childId 는 actor 회사의 직속 자식이어야 하며, 그 외(형제/타사)는 403.
+     */
+    @Transactional(readOnly = true)
+    public List<User> listChildUsers(Long childId, AuthenticatedUser actor) {
+        ensureMaster(actor);
+        ensureDirectChild(childId, actor);
+        return users.findByCompanyIdOrderByIdAsc(childId);
+    }
+
+    /**
+     * V77: 부모 master 가 직속 자식 공급사 가입 유저를 승인.
+     * 승인 정책 = 기존 UserService.enable 재사용(활성화 + 자식회사 master 0명이면 첫 유저 master 승격, 이미 있으면 유지 — 멱등).
+     */
+    public User approveChildUser(Long userId, AuthenticatedUser actor) {
+        ensureMaster(actor);
+        User u = users.findById(userId)
+                .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "사용자를 찾을 수 없습니다"));
+        if (u.getCompanyId() == null) {
+            throw ApiException.forbidden("CROSS_COMPANY", "회사 정보가 없는 사용자입니다");
+        }
+        ensureDirectChild(u.getCompanyId(), actor);
+        return userService.enable(userId);
+    }
+
+    /** childId 가 actor 회사의 직속 자식(1단계)인지 검증. 아니면 403 (형제/타사/본인 차단). */
+    private void ensureDirectChild(Long childId, AuthenticatedUser actor) {
+        boolean isChild = companyService.listChildren(actor.companyId()).stream()
+                .anyMatch(c -> c.getId().equals(childId));
+        if (!isChild) {
+            throw ApiException.forbidden("NOT_DIRECT_CHILD", "직속 하위 공급사가 아닙니다");
+        }
     }
 
     public User update(Long targetId, UpdateCompanyUserRequest req, AuthenticatedUser actor) {

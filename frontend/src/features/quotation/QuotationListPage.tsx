@@ -11,6 +11,9 @@ import {
 import { EQUIPMENT_CATEGORY_LABEL } from '../../types/equipment';
 import { PERSON_ROLE_LABEL } from '../../types/person';
 
+/** 견적 목록 chip 용 단계 집계 (GET /api/quotations/stage-summary). id = 견적(quotation request) id. */
+type StageSummary = { id: number; selected: boolean; dispatched: boolean; bundle: boolean };
+
 /** "방금", "n분/시간/일 전" 형태로 상대시간 표시. */
 function formatRelative(iso: string | undefined): string {
   if (!iso) return '';
@@ -35,6 +38,7 @@ export default function QuotationListPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [bundles, setBundles] = useState<QuotationBundleResponse[]>([]);
+  const [stageMap, setStageMap] = useState<Map<number, StageSummary>>(new Map());
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<QuotationStatus | ''>('');
   const [modeTab, setModeTab] = useState<'OPEN_BID' | 'TARGETED'>('OPEN_BID');
@@ -52,6 +56,10 @@ export default function QuotationListPage() {
       .then((res) => setBundles(res.data))
       .catch((err) => setError(err?.response?.data?.message ?? '견적 목록 로드 실패'))
       .finally(() => setLoading(false));
+    // 단계 chip — 목록 1회 조회로 전체 견적 매핑. 실패해도 목록엔 영향 없음(칩만 숨김).
+    api.get<StageSummary[]>('/api/quotations/stage-summary')
+      .then((res) => setStageMap(new Map(res.data.map((s) => [s.id, s]))))
+      .catch(() => setStageMap(new Map()));
   };
   useEffect(() => { load(); }, []);
 
@@ -115,6 +123,17 @@ export default function QuotationListPage() {
   const navigateToBundle = (b: QuotationBundleResponse) => {
     if (b.bundle_id) navigate(`/quotations/bundles/${b.bundle_id}`);
     else if (b.items[0]) navigate(`/quotations/${b.items[0].id}`); // 호환성 (구버전 묶음 없는 견적)
+  };
+
+  /** 번들의 3단계 완료 여부 — 집계에 존재하는 번들 내 모든 견적이 완료해야 그 단계 완료. 없으면 null(칩 숨김). */
+  const stageFor = (b: QuotationBundleResponse) => {
+    const sums = b.items.map((i) => stageMap.get(i.id)).filter((s): s is StageSummary => !!s);
+    if (sums.length === 0) return null;
+    return {
+      selected: sums.every((s) => s.selected),
+      dispatched: sums.every((s) => s.dispatched),
+      bundle: sums.every((s) => s.bundle),
+    };
   };
 
   return (
@@ -195,6 +214,7 @@ export default function QuotationListPage() {
               const key = b.bundle_id ?? `solo-${b.items[0]?.id}`;
               const progressPct = b.total_targets > 0
                 ? Math.round((b.responded_count / b.total_targets) * 100) : 0;
+              const st = stageFor(b);
               return (
                 <div
                   key={key}
@@ -244,6 +264,9 @@ export default function QuotationListPage() {
                           </button>
                         )}
                       </div>
+                      {st && (
+                        <StageChips selected={st.selected} dispatched={st.dispatched} bundle={st.bundle} />
+                      )}
                       {b.items[0]?.mode !== 'OPEN_BID' && (
                         <div className="mt-2 h-1.5 w-full max-w-md rounded bg-slate-100 overflow-hidden">
                           <div className="h-full bg-emerald-500" style={{ width: `${progressPct}%` }} />
@@ -298,6 +321,32 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: 'blu
     <div className={`rounded-lg border px-4 py-3 ${map[tone]}`}>
       <div className="text-xs font-semibold opacity-80">{label}</div>
       <div className="text-2xl font-bold mt-0.5">{value}</div>
+    </div>
+  );
+}
+
+/** 3단계 진행 chip — 선정 → 배차 → 서류. 완료 emerald, 미완 회색. (상세 NextStepCard 시각 참고.) */
+function StageChips({ selected, dispatched, bundle }: { selected: boolean; dispatched: boolean; bundle: boolean }) {
+  const steps: Array<{ done: boolean; label: string }> = [
+    { done: selected, label: '선정' },
+    { done: dispatched, label: '배차' },
+    { done: bundle, label: '서류' },
+  ];
+  return (
+    <div className="mt-2 flex items-center gap-1">
+      {steps.map((s, i) => (
+        <div key={s.label} className="flex items-center gap-1">
+          <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+            s.done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'
+          }`}>
+            <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[8px] leading-none ${
+              s.done ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-white'
+            }`}>{s.done ? '✓' : i + 1}</span>
+            {s.label}
+          </span>
+          {i < steps.length - 1 && <span className="text-slate-300 text-[10px]">→</span>}
+        </div>
+      ))}
     </div>
   );
 }

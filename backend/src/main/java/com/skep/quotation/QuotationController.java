@@ -84,6 +84,12 @@ public class QuotationController {
         return service.list(actor);
     }
 
+    /** 목록 chip 용 단계 집계 — 보이는 견적 각각의 선정/배차/서류묶음 완료 여부(배치). */
+    @GetMapping("/stage-summary")
+    public List<QuotationStageSummaryResponse> stageSummary(@CurrentUser AuthenticatedUser actor) {
+        return service.stageSummary(actor);
+    }
+
     /** 상세. */
     @GetMapping("/{id}")
     public QuotationRequestResponse get(@PathVariable Long id, @CurrentUser AuthenticatedUser actor) {

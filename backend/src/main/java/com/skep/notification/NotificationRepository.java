@@ -29,6 +29,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     /** ADMIN 전체 미읽음 수. */
     long countByReadAtIsNull();
 
+    /** 만료 임박 스케줄러 중복 생성 가드 — 같은 날 같은 (회사, type, 링크대상) 알림이 이미 있는지. */
+    boolean existsByTargetCompanyIdAndTypeAndLinkTypeAndLinkIdAndCreatedAtGreaterThanEqual(
+            Long targetCompanyId, String type, String linkType, Long linkId,
+            java.time.LocalDateTime createdAtFrom);
+
     /**
      * 사용자 가시성 알림 조회.
      *

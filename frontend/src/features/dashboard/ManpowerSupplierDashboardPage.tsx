@@ -8,6 +8,7 @@ import WorkPlanListWidget, { type DashboardWorkPlan } from './WorkPlanListWidget
 import { EmptyState, SectionCard, StatCard } from './widgets';
 import DocumentRiskWidget, { type DocumentRisk } from './DocumentRiskWidget';
 import IncomingRequestsWidget from './IncomingRequestsWidget';
+import ReadinessWidget from './ReadinessWidget';
 
 type Summary = {
   counts: Record<string, number>;
@@ -69,6 +70,8 @@ export default function ManpowerSupplierDashboardPage() {
             )}
 
             <IncomingRequestsWidget />
+
+            <ReadinessWidget />
 
             <SectionCard title="참여 현장" action={
               <Link to="/sites" className="text-xs text-slate-500 hover:text-slate-900">전체 보기 ›</Link>

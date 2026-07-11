@@ -98,10 +98,12 @@ export default function PersonDetailPage() {
     // #87: BP 직속 운전수도 Person.supplier_id 에 BP 회사 id 가 저장됨.
     // 즉 인원의 소속 회사가 자기 회사면 BP/EQUIPMENT_SUPPLIER/MANPOWER_SUPPLIER 모두 편집 가능.
     if (user.role === 'BP' || user.role === 'EQUIPMENT_SUPPLIER' || user.role === 'MANPOWER_SUPPLIER') {
-      return person.supplier_id === user.company_id;
+      // V77: 본인 회사 인원 + 내 직속 하위 공급사(협력사) 소유 인원 대행 수정/삭제.
+      return person.supplier_id === user.company_id
+        || subSuppliers.some((c) => c.id === person.supplier_id);
     }
     return false;
-  }, [person, user]);
+  }, [person, user, subSuppliers]);
 
   const load = useCallback(async () => {
     if (!id) return;

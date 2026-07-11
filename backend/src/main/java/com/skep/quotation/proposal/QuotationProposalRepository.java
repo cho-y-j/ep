@@ -25,6 +25,10 @@ public interface QuotationProposalRepository extends JpaRepository<QuotationProp
 
     long countByRequestIdAndStatus(Long requestId, QuotationProposalStatus status);
 
+    /** 견적 목록 단계 집계용 — 여러 견적의 특정 상태 제안을 한 번에 배치 조회. */
+    List<QuotationProposal> findByRequestIdInAndStatus(
+            java.util.Collection<Long> requestIds, QuotationProposalStatus status);
+
     long countByRequestId(Long requestId);
 
     /** 같은 공급사가 같은 견적에 이미 활성(SUBMITTED/PENDING_REVIEW) 제안 보유 여부. */

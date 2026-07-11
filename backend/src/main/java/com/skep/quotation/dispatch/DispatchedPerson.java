@@ -39,8 +39,14 @@ public class DispatchedPerson {
     @Column(name = "daily_price")
     private Long dailyPrice;
 
+    @Column(name = "ot_daily_price")
+    private Long otDailyPrice;
+
     @Column(name = "monthly_price")
     private Long monthlyPrice;
+
+    @Column(name = "ot_monthly_price")
+    private Long otMonthlyPrice;
 
     @Column(columnDefinition = "TEXT")
     private String notes;
@@ -67,13 +73,15 @@ public class DispatchedPerson {
 
     @Builder
     private DispatchedPerson(Long quotationRequestId, Long supplierCompanyId, Long subSupplierCompanyId, Long personId,
-                             Long dailyPrice, Long monthlyPrice, String notes, Long sentBy) {
+                             Long dailyPrice, Long otDailyPrice, Long monthlyPrice, Long otMonthlyPrice, String notes, Long sentBy) {
         this.quotationRequestId = quotationRequestId;
         this.supplierCompanyId = supplierCompanyId;
         this.subSupplierCompanyId = subSupplierCompanyId;
         this.personId = personId;
         this.dailyPrice = dailyPrice;
+        this.otDailyPrice = otDailyPrice;
         this.monthlyPrice = monthlyPrice;
+        this.otMonthlyPrice = otMonthlyPrice;
         this.notes = notes;
         this.sentBy = sentBy;
     }

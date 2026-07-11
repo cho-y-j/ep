@@ -95,7 +95,9 @@ public class BpDispatchedController {
             m.put("bp_company_name", bpId != null ? bpNames.get(bpId) : null);
             m.put("quotation_request_id", d.getQuotationRequestId());
             m.put("daily_price", d.getDailyPrice());
+            m.put("ot_daily_price", d.getOtDailyPrice());
             m.put("monthly_price", d.getMonthlyPrice());
+            m.put("ot_monthly_price", d.getOtMonthlyPrice());
             m.put("sent_at", d.getSentAt());
             return m;
         }).toList();

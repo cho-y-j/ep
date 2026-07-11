@@ -211,9 +211,9 @@ public class SettlementService {
         Integer effOtDays = manual ? d.getSettlementOtDays() : derivedOtDays;
         String source = manual ? "MANUAL" : (derivedWorkDays != null ? "DERIVED" : null);
 
-        // 인력 배차엔 OT 단가 컬럼이 없어 OT 단가 null(파생 OT는 금액 미반영, 표시용).
+        // 인력 배차행의 OT 단가로 OT 금액 산출. OT 단가 NULL(기존 행)이면 calc 가 OT=0 → 정산 불변.
         SettlementCalculator.Result pr = SettlementCalculator.calc(
-                d.getMonthlyPrice(), d.getDailyPrice(), null, null,
+                d.getMonthlyPrice(), d.getDailyPrice(), d.getOtMonthlyPrice(), d.getOtDailyPrice(),
                 effWorkDays, effOtDays);
         Long bp = qr != null ? bpOf(qr) : null;
         Integer siteDay = qr != null && qr.getSiteId() != null ? siteSettlementDays.get(qr.getSiteId()) : null;
@@ -226,7 +226,7 @@ public class SettlementService {
                 qr != null ? qr.getWorkPeriodStart() : null,
                 qr != null ? qr.getWorkPeriodEnd() : null,
                 periodDays,
-                d.getDailyPrice(), null, d.getMonthlyPrice(), null,
+                d.getDailyPrice(), d.getOtDailyPrice(), d.getMonthlyPrice(), d.getOtMonthlyPrice(),
                 pr.basis(), pr.amount(),
                 d.getSupplierCompanyId(),
                 d.getSubSupplierCompanyId() != null && d.getSubSupplierCompanyId().equals(selfId),

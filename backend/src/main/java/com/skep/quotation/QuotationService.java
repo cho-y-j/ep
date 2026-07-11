@@ -69,6 +69,8 @@ public class QuotationService {
     /** 후보 "이전 투입" 배지 — 이 BP 견적에 배차된 이력 있는 자원 조회. */
     private final com.skep.quotation.dispatch.DispatchedEquipmentRepository dispatchedEquipments;
     private final com.skep.quotation.dispatch.DispatchedPersonRepository dispatchedPersons;
+    /** 견적 목록 단계 집계(stageSummary) — 서류 묶음 수신 여부 배치 조회. */
+    private final com.skep.quotation.bundle.DocumentBundleRepository documentBundles;
     /** S-12+: 후보 BLOCKED 제외 필터 — 공급사/장비 컴플라이언스 확인. @Lazy 순환 의존 회피. */
     private final com.skep.compliance.ComplianceService compliance;
     private final org.springframework.beans.factory.ObjectProvider<org.springframework.mail.javamail.JavaMailSender> mailSenderProvider;
@@ -88,7 +90,8 @@ public class QuotationService {
                             org.springframework.beans.factory.ObjectProvider<org.springframework.mail.javamail.JavaMailSender> mailSenderProvider,
                             AlimTalkService alimTalk,
                             com.skep.quotation.dispatch.DispatchedEquipmentRepository dispatchedEquipments,
-                            com.skep.quotation.dispatch.DispatchedPersonRepository dispatchedPersons) {
+                            com.skep.quotation.dispatch.DispatchedPersonRepository dispatchedPersons,
+                            com.skep.quotation.bundle.DocumentBundleRepository documentBundles) {
         this.requests = requests;
         this.targets = targets;
         this.sites = sites;
@@ -105,6 +108,7 @@ public class QuotationService {
         this.alimTalk = alimTalk;
         this.dispatchedEquipments = dispatchedEquipments;
         this.dispatchedPersons = dispatchedPersons;
+        this.documentBundles = documentBundles;
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -580,6 +584,61 @@ public class QuotationService {
         }
         Lookups lk = buildLookups(rows, false);
         return rows.stream().map(qr -> toResponse(qr, false, null, lk)).toList();
+    }
+
+    /**
+     * 견적 목록 chip 용 단계 집계 — list() 와 동일한 가시성으로 보이는 견적 각각에 대해
+     * 선정/배차/서류묶음 3단계 완료 여부를 서버에서 배치로 계산 (상세 NextStepCard 의 3콜 대체, N+1 회피).
+     * 상세 로직/엔드포인트는 불변 — 목록용 read-only 신설.
+     */
+    @Transactional(readOnly = true)
+    public List<QuotationStageSummaryResponse> stageSummary(AuthenticatedUser actor) {
+        // list() 와 동일한 역할별 가시성 (working 코드 보존 위해 여기서 재적용).
+        List<QuotationRequest> rows;
+        if (actor.role() == Role.ADMIN) {
+            rows = requests.findAllByOrderByIdDesc();
+        } else if (actor.role() == Role.BP) {
+            requireCompany(actor);
+            rows = requests.findByBpCompanyIdOrderByIdDesc(actor.companyId());
+        } else if (actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER) {
+            requireCompany(actor);
+            List<Long> myTargetReqIds = targets.findBySupplierCompanyIdOrderByIdDesc(actor.companyId()).stream()
+                    .map(QuotationRequestTarget::getRequestId).distinct().toList();
+            rows = myTargetReqIds.isEmpty() ? List.of() : requests.findAllById(myTargetReqIds);
+        } else {
+            return List.of();
+        }
+        if (rows.isEmpty()) return List.of();
+        List<Long> ids = rows.stream().map(QuotationRequest::getId).toList();
+
+        // 1) 선정: target FINAL_ACCEPTED 또는 proposal FINAL_ACCEPTED (프론트 hasSelectedSupplier 와 동일).
+        Set<Long> selected = new HashSet<>();
+        for (var t : targets.findByRequestIdInOrderByIdAsc(ids)) {
+            if (t.getStatus() == QuotationTargetStatus.FINAL_ACCEPTED) selected.add(t.getRequestId());
+        }
+        for (var p : proposals.findByRequestIdInAndStatus(ids, QuotationProposalStatus.FINAL_ACCEPTED)) {
+            selected.add(p.getRequestId());
+        }
+        // 2) 배차: 배차 장비 또는 인원 존재 (프론트 hasDispatch 와 동일).
+        Set<Long> dispatched = new HashSet<>();
+        for (var d : dispatchedEquipments.findByQuotationRequestIdInOrderBySentAtDesc(ids)) {
+            dispatched.add(d.getQuotationRequestId());
+        }
+        for (var d : dispatchedPersons.findByQuotationRequestIdInOrderByIdDesc(ids)) {
+            dispatched.add(d.getQuotationRequestId());
+        }
+        // 3) 서류 묶음 수신 존재 (프론트 hasBundle 와 동일).
+        Set<Long> bundled = new HashSet<>();
+        for (var b : documentBundles.findByQuotationRequestIdIn(ids)) {
+            bundled.add(b.getQuotationRequestId());
+        }
+
+        return rows.stream().map(qr -> new QuotationStageSummaryResponse(
+                qr.getId(),
+                selected.contains(qr.getId()),
+                dispatched.contains(qr.getId()),
+                bundled.contains(qr.getId())
+        )).toList();
     }
 
     @Transactional(readOnly = true)

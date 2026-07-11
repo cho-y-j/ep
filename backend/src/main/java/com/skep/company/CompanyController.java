@@ -20,9 +20,11 @@ import java.util.List;
 public class CompanyController {
 
     private final CompanyService service;
+    private final com.skep.user.CompanyUserService companyUsers;
 
-    public CompanyController(CompanyService service) {
+    public CompanyController(CompanyService service, com.skep.user.CompanyUserService companyUsers) {
         this.service = service;
+        this.companyUsers = companyUsers;
     }
 
     @GetMapping
@@ -105,14 +107,32 @@ public class CompanyController {
         return service.listChildren(pid).stream().map(CompanyResponse::from).toList();
     }
 
+    /** V77: 직속 자식 공급사의 가입 유저 목록 — 부모 master 가 가입 대기 승인 대상 확인. */
+    @GetMapping("/children/{childId}/users")
+    @PreAuthorize("hasRole('EQUIPMENT_SUPPLIER')")
+    public List<com.skep.auth.dto.UserResponse> childUsers(@PathVariable Long childId,
+                                                           @CurrentUser AuthenticatedUser actor) {
+        return companyUsers.listChildUsers(childId, actor).stream()
+                .map(com.skep.auth.dto.UserResponse::from).toList();
+    }
+
+    /** V77: 부모 master 가 직속 자식 공급사 가입 유저를 승인(활성화 + 자식회사 첫 유저 master 승격). */
+    @PostMapping("/children/users/{id}/approve")
+    @PreAuthorize("hasRole('EQUIPMENT_SUPPLIER')")
+    public com.skep.auth.dto.UserResponse approveChildUser(@PathVariable Long id,
+                                                           @CurrentUser AuthenticatedUser actor) {
+        return com.skep.auth.dto.UserResponse.from(companyUsers.approveChildUser(id, actor));
+    }
+
     /**
      * S-Audit P1-D: ADMIN 전체, 그 외 역할은 자기 회사만.
      */
     @GetMapping("/{id}")
     public CompanyResponse get(@PathVariable Long id, @CurrentUser AuthenticatedUser actor) {
-        if (actor.role() != Role.ADMIN
-                && (actor.companyId() == null || !actor.companyId().equals(id))) {
-            throw ApiException.forbidden("COMPANY_VIEW_DENIED", "본인 회사만 조회할 수 있습니다");
+        boolean isOwn = actor.companyId() != null && actor.companyId().equals(id);
+        // V77: 부모(장비공급사 master)는 직속 자식(협력사) 회사정보도 조회 가능.
+        if (actor.role() != Role.ADMIN && !isOwn && !isParentMasterOf(actor, id)) {
+            throw ApiException.forbidden("COMPANY_VIEW_DENIED", "본인 회사 또는 하위 공급사만 조회할 수 있습니다");
         }
         return CompanyResponse.from(service.get(id));
     }
@@ -124,9 +144,13 @@ public class CompanyController {
         return CompanyResponse.from(service.create(req.name(), req.businessNumber(), req.type()));
     }
 
+    /** 회사명 변경. ADMIN 또는 상위(부모) 공급사 master 가 직속 자식 회사명 대행 변경. 사업자번호는 변경 대상 아님. */
     @PatchMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public CompanyResponse update(@PathVariable Long id, @Valid @RequestBody UpdateCompanyRequest req) {
+    public CompanyResponse update(@PathVariable Long id, @Valid @RequestBody UpdateCompanyRequest req,
+                                  @CurrentUser AuthenticatedUser actor) {
+        if (actor.role() != Role.ADMIN && !isParentMasterOf(actor, id)) {
+            throw ApiException.forbidden("RENAME_DENIED", "관리자 또는 상위 공급사 마스터만 회사명을 변경할 수 있습니다");
+        }
         return CompanyResponse.from(service.rename(id, req.name()));
     }
 
@@ -138,12 +162,20 @@ public class CompanyController {
         boolean isAdmin = actor.role() == Role.ADMIN;
         boolean isOwnCompanyAdmin = actor.isCompanyAdmin()
                 && actor.companyId() != null && actor.companyId().equals(id);
-        if (!isAdmin && !isOwnCompanyAdmin) {
-            throw ApiException.forbidden("PROFILE_EDIT_DENIED", "본인 회사의 마스터만 편집할 수 있습니다");
+        // V77: 부모(장비공급사 master)는 직속 자식(협력사) 프로필도 대행 편집 가능.
+        if (!isAdmin && !isOwnCompanyAdmin && !isParentMasterOf(actor, id)) {
+            throw ApiException.forbidden("PROFILE_EDIT_DENIED", "본인 회사 또는 하위 공급사의 마스터만 편집할 수 있습니다");
         }
         return CompanyResponse.from(service.updateProfile(id,
                 req.businessAddress(), req.businessCategory(), req.businessSubcategory(),
                 req.ceoName(), req.phone(), req.fax()));
+    }
+
+    /** V77: actor 가 회사 childId 의 부모(직속 상위) master 인지. 부모 master 만 자식 회사정보 대행. */
+    private boolean isParentMasterOf(AuthenticatedUser actor, Long childId) {
+        if (!actor.isCompanyAdmin() || actor.companyId() == null) return false;
+        return service.listChildren(actor.companyId()).stream()
+                .anyMatch(c -> c.getId().equals(childId));
     }
 
     /** V33+: 회사에 가입된 사용자(직원) 목록. ADMIN 전용. */

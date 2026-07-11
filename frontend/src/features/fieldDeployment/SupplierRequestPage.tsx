@@ -25,6 +25,8 @@ type DispatchedRow = {
   quotation_request_id: number;
   daily_price?: number | null;
   monthly_price?: number | null;
+  ot_daily_price?: number | null;
+  ot_monthly_price?: number | null;
   sent_at?: string | null;
 };
 
@@ -59,7 +61,9 @@ export default function FieldDeploymentSupplierPage() {
             resource_id: d.equipment_id, resource_label: d.equipment_label ?? '#' + d.equipment_id,
             bp_company_name: d.bp_company_name, bp_company_id: d.bp_company_id,
             quotation_request_id: d.quotation_request_id,
-            daily_price: d.daily_price, monthly_price: d.monthly_price, sent_at: d.sent_at,
+            daily_price: d.daily_price, monthly_price: d.monthly_price,
+            ot_daily_price: d.ot_daily_price, ot_monthly_price: d.ot_monthly_price,
+            sent_at: d.sent_at,
           }))
         : ppRes.map((d) => ({
             id: d.id, resource_type: 'PERSON',
@@ -275,7 +279,10 @@ function BatchRequestDialog({ rows, onClose, onSaved }:
       init[r.id] = {
         daily: r.daily_price != null ? String(r.daily_price) : '',
         monthly: r.monthly_price != null ? String(r.monthly_price) : '',
-        ot: '', night: '',
+        // OT 단가는 원천(배차 장비)에 일대 OT·월대 OT 둘 다 있으나 폼은 OT 단일 필드 → 일대 OT 우선, 없으면 월대 OT.
+        ot: r.ot_daily_price != null ? String(r.ot_daily_price)
+          : r.ot_monthly_price != null ? String(r.ot_monthly_price) : '',
+        night: '',
       };
     }
     return init;

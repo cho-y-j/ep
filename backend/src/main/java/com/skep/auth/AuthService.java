@@ -8,6 +8,8 @@ import com.skep.company.Company;
 import com.skep.company.CompanyService;
 import com.skep.company.CompanyType;
 import com.skep.config.JwtProperties;
+import com.skep.notification.NotificationService;
+import com.skep.notification.NotificationType;
 import com.skep.security.JwtService;
 import com.skep.security.RefreshToken;
 import com.skep.security.RefreshTokenRepository;
@@ -33,6 +35,7 @@ public class AuthService {
     private final PasswordEncoder encoder;
     private final JwtService jwt;
     private final JwtProperties jwtProps;
+    private final NotificationService notifications;
 
     public AuthService(UserRepository users,
                        RefreshTokenRepository refreshTokens,
@@ -40,7 +43,8 @@ public class AuthService {
                        CompanyService companies,
                        PasswordEncoder encoder,
                        JwtService jwt,
-                       JwtProperties jwtProps) {
+                       JwtProperties jwtProps,
+                       NotificationService notifications) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.refreshSecurity = refreshSecurity;
@@ -48,6 +52,7 @@ public class AuthService {
         this.encoder = encoder;
         this.jwt = jwt;
         this.jwtProps = jwtProps;
+        this.notifications = notifications;
     }
 
     public User signup(SignupRequest req) {
@@ -60,6 +65,7 @@ public class AuthService {
         }
 
         Long companyId = null;
+        Company company = null;
         if (req.role().requiresCompany()) {
             if (isBlank(req.companyName()) || isBlank(req.businessNumber())) {
                 throw ApiException.badRequest("COMPANY_INFO_REQUIRED", "회사명과 사업자번호가 필요합니다");
@@ -67,7 +73,8 @@ public class AuthService {
             CompanyType type = CompanyType.fromRole(req.role());
             CompanyService.CompanyResolution resolution = companies.resolveOrCreate(
                     req.companyName(), req.businessNumber(), type);
-            companyId = resolution.company().getId();
+            company = resolution.company();
+            companyId = company.getId();
         }
 
         // master(isCompanyAdmin) 권한은 자동 부여하지 않는다.
@@ -83,7 +90,18 @@ public class AuthService {
                 .isCompanyAdmin(false)
                 .enabled(false)
                 .build();
-        return users.save(user);
+        User saved = users.save(user);
+
+        // V77: 자가가입한 회사가 상위(부모) 공급사를 가지면, 부모 회사에 승인 대기 인앱 알림 1건.
+        // 부모 링크 없는 독립 회사는 알림 없음 → 기존 ADMIN 승인 게이트 그대로. (계정 생성 동작은 위와 동일 — 불변.)
+        if (company != null && company.getParentCompanyId() != null) {
+            notifications.sendToCompany(company.getParentCompanyId(),
+                    NotificationType.SUB_SUPPLIER_SIGNUP,
+                    "하위 공급사 가입 신청",
+                    company.getName() + " — " + saved.getName() + " 님이 가입을 신청했습니다. 승인이 필요합니다.",
+                    "SUB_SUPPLIER", company.getId(), null);
+        }
+        return saved;
     }
 
     private static String normalizeEmail(String email) {

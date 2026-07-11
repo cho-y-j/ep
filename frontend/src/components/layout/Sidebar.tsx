@@ -80,37 +80,43 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
   } else if (role === 'BP') {
     primaryLabel = '현장 운영';
     primarySections = [
-      // 핵심: 견적 → 작업계획서 → 투입 대기 → 받은 요청 → 투입 현황
-      { label: '주요', items: [
+      // 흐름별 4그룹: 견적·선정 → 계획서·서명 → 투입·현장 → 서류·검사 (+ 기타)
+      { label: '견적·선정', collapsible: true, defaultOpen: true, items: [
         { label: '장비 견적 공개 입찰', to: '/quotations', icon: <IconClipboard />, end: true },
+        { label: '수신함', to: '/inbox', icon: <IconClipboard /> },
+      ]},
+      { label: '계획서·서명', collapsible: true, defaultOpen: true, items: [
         { label: '작업 계획서', to: '/work-plans', icon: <IconClipboard />, end: true },
+        { label: '월별 작업확인서', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
+        { label: 'DOCX 템플릿', to: '/admin/docx-templates', icon: <IconDoc /> },
+      ]},
+      { label: '투입·현장', collapsible: true, defaultOpen: true, items: [
         { label: '투입 대기', to: '/work-plans/pending', icon: <IconClipboard /> },
         { label: '받은 투입 요청', to: '/field-deployments/bp', icon: <IconClipboard /> },
-        { label: '받은 서류 심사', to: '/document-reviews/received', icon: <IconShield />,
-          badge: bpReviewCount || undefined },
         { label: '투입 현황', to: '/work-plans/active', icon: <IconClipboard /> },
-        { label: '알림톡 발송', to: '/alimtalk', icon: <IconBell /> },
-        { label: '공지사항 발송', to: '/admin/announcements', icon: <IconBell /> },
-      ]},
-      { label: '더보기', collapsible: true, defaultOpen: false, items: [
         { label: '투입 장비', to: '/dispatched-equipment', icon: <IconTruck /> },
         { label: '투입 인원', to: '/dispatched-persons', icon: <IconUsers /> },
-        { label: '작업자 안전알림', to: '/safety-alerts', icon: <IconBell /> },
-        { label: '월별 작업확인서', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
-        { label: '내 회사', to: '/my-company', icon: <IconBriefcase /> },
-        ...(isMaster ? [{ label: '직원 관리', to: '/company/users', icon: <IconUserCheck /> }] : []),
-        { label: '수신함', to: '/inbox', icon: <IconClipboard /> },
+        { label: '현장 관리', to: '/sites', icon: <IconBuilding /> },
         { label: '내 장비', to: '/equipment?scope=own', icon: <IconTruck /> },
         { label: '공급사 장비', to: '/equipment?scope=external', icon: <IconTruck /> },
         { label: '내 인원', to: '/persons?scope=own', icon: <IconUsers /> },
         { label: '공급사 인원', to: '/persons?scope=external', icon: <IconUsers /> },
-        { label: '현장 관리', to: '/sites', icon: <IconBuilding /> },
-        { label: '안전점검', to: '/safety-inspections', icon: <IconShield /> },
+      ]},
+      { label: '서류·검사', collapsible: true, defaultOpen: true, items: [
+        { label: '받은 서류 심사', to: '/document-reviews/received', icon: <IconShield />,
+          badge: bpReviewCount || undefined },
         { label: '서류관리', to: '/document-management', icon: <IconShield /> },
-        { label: '이행지시', to: '/compliance-orders', icon: <IconShield /> },
         { label: '서류 수집 요청', to: '/document-collections', icon: <IconDoc /> },
+        { label: '이행지시', to: '/compliance-orders', icon: <IconShield /> },
         { label: '보낸 점검 요청', to: '/resource-checks/bp', icon: <IconShield /> },
-        { label: 'DOCX 템플릿', to: '/admin/docx-templates', icon: <IconDoc /> },
+        { label: '안전점검', to: '/safety-inspections', icon: <IconShield /> },
+        { label: '작업자 안전알림', to: '/safety-alerts', icon: <IconBell /> },
+      ]},
+      { label: '기타', collapsible: true, defaultOpen: false, items: [
+        { label: '알림톡 발송', to: '/alimtalk', icon: <IconBell /> },
+        { label: '공지사항 발송', to: '/admin/announcements', icon: <IconBell /> },
+        { label: '내 회사', to: '/my-company', icon: <IconBriefcase /> },
+        ...(isMaster ? [{ label: '직원 관리', to: '/company/users', icon: <IconUserCheck /> }] : []),
       ]},
     ];
   } else if (role === 'EQUIPMENT_SUPPLIER' || role === 'MANPOWER_SUPPLIER') {
@@ -126,11 +132,15 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
         { label: '현장 투입 요청', to: '/field-deployments/supplier', icon: <IconClipboard /> },
       ]},
       { label: '받은', items: [
+        // 보완요청/자원점검/이행지시/서류수집/서류심사 5채널을 한 화면 탭으로 통합
+        { label: '서류 허브', to: '/supplier/document-hub', icon: <IconDoc />,
+          badge: (supplierCounts.supplements + supplierCounts.checks + supplierCounts.compliance) || undefined },
         // 점검요청/이행지시/보완요청을 한 화면 탭으로 통합 (기능 동일, 기존 메뉴 3개 → 1개)
         { label: '받은 요청', to: '/supplier/received', icon: <IconShield />,
           badge: (supplierCounts.supplements + supplierCounts.checks + supplierCounts.compliance) || undefined },
       ]},
       { label: '더보기', collapsible: true, defaultOpen: false, items: [
+        { label: '자원 파이프라인', to: '/resource-pipeline', icon: <IconClipboard /> },
         { label: '투입 정산', to: '/settlements', icon: <IconClipboard /> },
         { label: '월별 작업확인서', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
         { label: '내 회사', to: '/my-company', icon: <IconBriefcase /> },

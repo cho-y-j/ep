@@ -7,6 +7,7 @@ import { api } from '../../lib/api';
 export default function BpPendingQueueWidget() {
   const [deployCount, setDeployCount] = useState<number | null>(null);
   const [reviewCount, setReviewCount] = useState<number | null>(null);
+  const [signCount, setSignCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -14,10 +15,12 @@ export default function BpPendingQueueWidget() {
     Promise.all([
       api.get<Array<{ status: string }>>('/api/field-deployments/bp').then((r) => r.data).catch(() => []),
       api.get<Array<{ read_at: string | null }>>('/api/document-reviews/received').then((r) => r.data).catch(() => []),
-    ]).then(([d, r]) => {
+      api.get<{ count: number }>('/api/dashboards/bp/pending-signatures').then((r) => r.data.count).catch(() => 0),
+    ]).then(([d, r, sc]) => {
       if (cancelled) return;
       setDeployCount(d.filter((x) => x.status === 'REQUESTED').length);
       setReviewCount(r.filter((x) => !x.read_at).length);
+      setSignCount(sc);
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
@@ -29,6 +32,7 @@ export default function BpPendingQueueWidget() {
   const items = [
     { label: '받은 투입 요청', count: deployCount ?? 0, to: '/field-deployments/bp' },
     { label: '받은 서류 심사', count: reviewCount ?? 0, to: '/document-reviews/received' },
+    { label: '서명 대기', count: signCount ?? 0, to: '/work-plans' },
   ].filter((it) => it.count > 0);
 
   const total = items.reduce((s, it) => s + it.count, 0);
@@ -36,7 +40,7 @@ export default function BpPendingQueueWidget() {
   if (total === 0) {
     return (
       <div className="card p-4 text-sm text-emerald-700">
-        처리 대기 항목이 없습니다 — 받은 투입 요청·서류 심사가 모두 처리되었습니다.
+        처리 대기 항목이 없습니다 — 받은 투입 요청·서류 심사·서명 대기가 모두 처리되었습니다.
       </div>
     );
   }

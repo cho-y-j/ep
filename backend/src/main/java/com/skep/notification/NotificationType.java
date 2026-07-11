@@ -32,4 +32,7 @@ public final class NotificationType {
 
     /** V70: 차량 정기검사/오일교체/등록 만료 임박. */
     public static final String EQUIPMENT_DUE = "EQUIPMENT_DUE";
+
+    /** V77: 하위 공급사(협력사) 자가가입 → 부모 회사 승인 대기. */
+    public static final String SUB_SUPPLIER_SIGNUP = "SUB_SUPPLIER_SIGNUP";
 }

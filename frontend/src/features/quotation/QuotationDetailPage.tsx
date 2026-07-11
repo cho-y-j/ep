@@ -13,6 +13,7 @@ import { EQUIPMENT_CATEGORY_LABEL } from '../../types/equipment';
 import { PERSON_ROLE_LABEL } from '../../types/person';
 import DispatchSection from './dispatch/DispatchSection';
 import DocumentBundleSection from './bundle/DocumentBundleSection';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 interface Proposal {
   id: number;
@@ -41,6 +42,11 @@ export default function QuotationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // #8: window.confirm/prompt → ConfirmDialog + 사유 입력 다이얼로그.
+  const [confirmState, setConfirmState] = useState<{
+    title: string; message: string; confirmLabel: string; variant: 'danger' | 'primary'; run: () => Promise<void>;
+  } | null>(null);
+  const [respondFor, setRespondFor] = useState<{ targetId: number; accept: boolean } | null>(null);
   const [proposalStatusFilter, setProposalStatusFilter] = useState<'ALL' | 'SUBMITTED' | 'PENDING_REVIEW' | 'FINAL_ACCEPTED' | 'REJECTED' | 'WITHDRAWN'>('ALL');
   const [proposalSort, setProposalSort] = useState<'LATEST' | 'DAILY_ASC' | 'DAILY_DESC' | 'MONTHLY_ASC' | 'MONTHLY_DESC'>('LATEST');
 
@@ -73,7 +79,6 @@ export default function QuotationDetailPage() {
   useEffect(() => { load(); }, [id]);
 
   const finalizeProposal = async (proposalId: number) => {
-    if (!window.confirm('이 제안을 최종 선정하시겠어요? 작업계획서는 별도로 작성해야 합니다.')) return;
     setBusy(true);
     try {
       await api.post(`/api/quotations/proposals/${proposalId}/finalize`, {});
@@ -103,7 +108,6 @@ export default function QuotationDetailPage() {
   };
 
   const closeOpenBid = async () => {
-    if (!window.confirm('견적을 종료(close)하시겠어요? 미선정 제안은 자동 거절됩니다.')) return;
     setBusy(true);
     try {
       await api.post(`/api/quotations/${id}/close`, {});
@@ -115,15 +119,15 @@ export default function QuotationDetailPage() {
     }
   };
 
-  const respond = async (targetId: number, accept: boolean) => {
-    const note = window.prompt(accept ? '수락 메모 (선택):' : '거부 사유 (선택):');
-    if (note === null) return; // cancel
+  const submitRespond = async (note: string) => {
+    if (!respondFor) return;
     setBusy(true);
     try {
-      await api.post(`/api/quotations/${id}/targets/${targetId}/respond`, {
-        accept,
+      await api.post(`/api/quotations/${id}/targets/${respondFor.targetId}/respond`, {
+        accept: respondFor.accept,
         note: note || undefined,
       });
+      setRespondFor(null);
       await load();
     } catch (err) {
       if (err instanceof AxiosError) alert(err.response?.data?.message ?? '응답 실패');
@@ -133,7 +137,6 @@ export default function QuotationDetailPage() {
   };
 
   const finalize = async (targetId: number) => {
-    if (!window.confirm('이 응답을 최종 채택하시겠어요? 작업계획서는 별도로 작성해야 합니다.')) return;
     setBusy(true);
     try {
       await api.post(`/api/quotations/${id}/targets/${targetId}/finalize`, {});
@@ -146,7 +149,6 @@ export default function QuotationDetailPage() {
   };
 
   const cancelRequest = async () => {
-    if (!window.confirm('이 견적 요청을 취소하시겠어요?')) return;
     setBusy(true);
     try {
       await api.post(`/api/quotations/${id}/cancel`, {});
@@ -194,7 +196,10 @@ export default function QuotationDetailPage() {
             {canCancel && isOpen && (
               <button
                 type="button"
-                onClick={cancelRequest}
+                onClick={() => setConfirmState({
+                  title: '견적 취소', message: '이 견적 요청을 취소하시겠어요?',
+                  confirmLabel: '견적 취소', variant: 'danger', run: cancelRequest,
+                })}
                 disabled={busy}
                 className="text-xs px-2 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-50"
               >
@@ -304,7 +309,7 @@ export default function QuotationDetailPage() {
                         <>
                           <button
                             type="button"
-                            onClick={() => respond(t.id, true)}
+                            onClick={() => setRespondFor({ targetId: t.id, accept: true })}
                             disabled={busy}
                             className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
                           >
@@ -312,7 +317,7 @@ export default function QuotationDetailPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => respond(t.id, false)}
+                            onClick={() => setRespondFor({ targetId: t.id, accept: false })}
                             disabled={busy}
                             className="text-xs px-2 py-1 rounded bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
                           >
@@ -324,7 +329,10 @@ export default function QuotationDetailPage() {
                       {canFinalize && t.status === 'ACCEPTED' && isOpen && (
                         <button
                           type="button"
-                          onClick={() => finalize(t.id)}
+                          onClick={() => setConfirmState({
+                            title: '최종 채택', message: '이 응답을 최종 채택하시겠어요? 작업계획서는 별도로 작성해야 합니다.',
+                            confirmLabel: '최종 채택', variant: 'primary', run: () => finalize(t.id),
+                          })}
                           disabled={busy}
                           className="text-xs px-2 py-1 rounded bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
                         >
@@ -400,7 +408,10 @@ export default function QuotationDetailPage() {
                   <option value="MONTHLY_DESC">월대 높은순</option>
                 </select>
                 {canFinalize && isOpen && proposals.length > 0 && (
-                  <button onClick={closeOpenBid} disabled={busy}
+                  <button onClick={() => setConfirmState({
+                            title: '견적 종료', message: '견적을 종료(close)하시겠어요? 미선정 제안은 자동 거절됩니다.',
+                            confirmLabel: '견적 종료', variant: 'primary', run: closeOpenBid,
+                          })} disabled={busy}
                           className="text-xs px-2 py-1 rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-50">
                     견적 종료
                   </button>
@@ -473,7 +484,10 @@ export default function QuotationDetailPage() {
                           엑셀
                         </button>
                         {canFinalize && (p.status === 'SUBMITTED' || p.status === 'PENDING_REVIEW') && isOpen && (
-                          <button onClick={() => finalizeProposal(p.id)} disabled={busy}
+                          <button onClick={() => setConfirmState({
+                                    title: '제안 선정', message: '이 제안을 최종 선정하시겠어요? 작업계획서는 별도로 작성해야 합니다.',
+                                    confirmLabel: '선정', variant: 'primary', run: () => finalizeProposal(p.id),
+                                  })} disabled={busy}
                                   className="text-xs px-2 py-1 rounded bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50">
                             선정
                           </button>
@@ -492,7 +506,66 @@ export default function QuotationDetailPage() {
           );
         })()}
       </div>
+
+      <ConfirmDialog
+        open={!!confirmState}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        confirmLabel={confirmState?.confirmLabel}
+        variant={confirmState?.variant}
+        busy={busy}
+        onConfirm={async () => {
+          const s = confirmState;
+          if (!s) return;
+          await s.run();
+          setConfirmState(null);
+        }}
+        onCancel={() => setConfirmState(null)}
+      />
+      {respondFor && (
+        <RespondNoteDialog
+          accept={respondFor.accept}
+          busy={busy}
+          onClose={() => setRespondFor(null)}
+          onConfirm={submitRespond}
+        />
+      )}
     </AppShell>
+  );
+}
+
+/** 견적 target 수락/거부 시 메모·사유를 받는 다이얼로그 (BpInboxPage RejectDialog 패턴). */
+function RespondNoteDialog({ accept, busy, onClose, onConfirm }: {
+  accept: boolean;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: (note: string) => void;
+}) {
+  const [note, setNote] = useState('');
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div className="px-5 py-3 border-b">
+          <h3 className="font-bold text-slate-900">{accept ? '견적 수락' : '견적 거부'}</h3>
+        </div>
+        <div className="px-5 py-4 space-y-3 text-sm">
+          <div>
+            <label className="text-xs font-semibold text-slate-500">{accept ? '수락 메모 (선택)' : '거부 사유 (선택)'}</label>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+                      className="input mt-1 w-full" />
+          </div>
+        </div>
+        <div className="px-5 py-3 border-t flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm hover:bg-slate-100 rounded">취소</button>
+          <button onClick={() => onConfirm(note)} disabled={busy}
+                  className={`px-3 py-1.5 text-sm rounded text-white disabled:opacity-50 ${
+                    accept ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
+                  }`}>
+            {busy ? '처리 중…' : accept ? '수락' : '거부'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -45,11 +45,13 @@ import ComplianceOrdersPage from './features/compliance/ComplianceOrdersPage';
 import ResourceCheckBpList from './features/resourceCheck/BpListPage';
 import ResourceCheckSupplierInbox from './features/resourceCheck/SupplierInboxPage';
 import SupplierReceivedPage from './features/supplier/SupplierReceivedPage';
+import SupplierDocumentHubPage from './features/document/SupplierDocumentHubPage';
 import WorksheetEditorPage from './features/workPlan/edit/WorksheetEditorPage';
 import SignaturePage from './features/signature/SignaturePage';
 import CollectPublicPage from './features/collection/CollectPublicPage';
 import DocumentCollectionPage from './features/collection/DocumentCollectionPage';
 import SettlementPage from './features/settlement/SettlementPage';
+import ResourcePipelinePage from './features/pipeline/ResourcePipelinePage';
 import DashboardRedirect from './features/dashboard/DashboardRedirect';
 import AdminDashboardPage from './features/dashboard/AdminDashboardPage';
 import BpDashboardPage from './features/dashboard/BpDashboardPage';
@@ -281,6 +283,8 @@ export default function App() {
                element={<ProtectedRoute roles={['ADMIN', 'BP', 'EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><MonthlyWorkConfirmationPage /></ProtectedRoute>} />
         <Route path="/settlements"
                element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'ADMIN']}><SettlementPage /></ProtectedRoute>} />
+        <Route path="/resource-pipeline"
+               element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><ResourcePipelinePage /></ProtectedRoute>} />
         <Route
           path="/admin/docx-templates"
           element={<ProtectedRoute roles={['ADMIN', 'BP']}><DocxTemplatesPage /></ProtectedRoute>}
@@ -326,6 +330,11 @@ export default function App() {
         <Route
           path="/supplier/received"
           element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><SupplierReceivedPage /></ProtectedRoute>}
+        />
+        {/* 공급사 "서류 허브" 통합 탭 (보완요청/자원점검/이행지시/서류수집/서류심사) — 기존 개별 라우트도 유지 */}
+        <Route
+          path="/supplier/document-hub"
+          element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><SupplierDocumentHubPage /></ProtectedRoute>}
         />
 
         {/* S-12: 작업계획서 생성 중 OnlyOffice 새 탭 편집기 (wp.id 없이 임시 세션) */}

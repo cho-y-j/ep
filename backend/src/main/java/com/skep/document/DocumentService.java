@@ -622,7 +622,7 @@ public class DocumentService {
     private void ensureCanAccess(AuthenticatedUser actor, Long ownerSupplierId) {
         if (actor.role() == Role.ADMIN) return;
         if (actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER) {
-            // V77: 읽기만 본인 + 직속 자식 확장(부모→자식 단방향). 쓰기(ensureCanModify)는 본인 회사 고정 유지.
+            // V77: 읽기 본인 + 직속 자식 확장(부모→자식 단방향). 쓰기(ensureCanModify)도 공급사는 동일 확장(대행 전체 CRUD).
             if (!companyService.selfAndChildren(actor.companyId()).contains(ownerSupplierId)) {
                 throw ApiException.forbidden("FORBIDDEN_OTHER_COMPANY", "본인 회사의 서류만 접근 가능합니다");
             }
@@ -652,10 +652,13 @@ public class DocumentService {
 
     private void ensureCanModify(AuthenticatedUser actor, Long ownerSupplierId) {
         if (actor.role() == Role.ADMIN) return;
-        // S-9-G: 모든 회사 사용자 (BP/EQUIPMENT_SUPPLIER/MANPOWER_SUPPLIER) 가 본인 회사 서류 (COMPANY ownerType) 는 업로드/수정 가능.
-        // EQUIPMENT_SUPPLIER/MANPOWER_SUPPLIER 는 자기 자원(EQUIPMENT/PERSON) 서류도 가능.
-        if ((actor.role() == Role.BP || actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER)
-                && ownerSupplierId.equals(actor.companyId())) return;
+        // V77: 공급사 쓰기도 본인 + 직속 자식(협력사) 확장. selfAndChildren 단방향이라 자식→부모/형제/타사는 자동 403.
+        // COMPANY ownerType 은 ownerSupplierId=ownerId 이므로 부모가 자식 회사서류(사업자정보 등)도 대행 업로드/삭제 가능 = 스펙 "전체 CRUD 대행" 의도.
+        // EQUIPMENT/PERSON ownerType 은 자식 소유 자원 서류까지 확장.
+        if ((actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER)
+                && companyService.selfAndChildren(actor.companyId()).contains(ownerSupplierId)) return;
+        // S-9-G: BP 는 본인 회사 서류 (COMPANY ownerType) 만 업로드/수정 — 본인 회사 고정 유지(자식 개념 없음).
+        if (actor.role() == Role.BP && ownerSupplierId.equals(actor.companyId())) return;
         throw ApiException.forbidden("FORBIDDEN", "수정 권한이 없습니다");
     }
 }

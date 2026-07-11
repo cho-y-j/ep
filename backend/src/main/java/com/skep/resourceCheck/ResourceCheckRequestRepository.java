@@ -3,6 +3,7 @@ package com.skep.resourceCheck;
 import com.skep.document.OwnerType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface ResourceCheckRequestRepository extends JpaRepository<ResourceCheckRequest, Long> {
@@ -18,4 +19,7 @@ public interface ResourceCheckRequestRepository extends JpaRepository<ResourceCh
 
     /** 특정 자원에 발행된 요청 — 자원 상태 매핑용. */
     List<ResourceCheckRequest> findByOwnerTypeAndOwnerIdOrderByIdDesc(OwnerType ownerType, Long ownerId);
+
+    /** 투입 준비 가시성 — 여러 자원의 점검 요청 일괄 조회(N+1 회피). */
+    List<ResourceCheckRequest> findByOwnerTypeAndOwnerIdIn(OwnerType ownerType, Collection<Long> ownerIds);
 }

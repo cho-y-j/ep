@@ -345,11 +345,12 @@ public class PersonService {
 
     private void ensureCanModify(AuthenticatedUser actor, Long supplierId) {
         if (actor.role() == Role.ADMIN) return;
-        // #5: BP 본인 회사 직속 인원도 수정 가능 (운전수/지휘자 등).
-        if ((actor.role() == Role.EQUIPMENT_SUPPLIER
-                || actor.role() == Role.MANPOWER_SUPPLIER
-                || actor.role() == Role.BP)
-                && supplierId.equals(actor.companyId())) return;
+        // V77: 공급사 쓰기(수정/삭제)도 본인 + 직속 자식(협력사) 확장 — 부모가 자식 인원 대행 수정/삭제.
+        // selfAndChildren 은 부모→자식 단방향(자식이면 {본인})이라 자식→부모/형제/타사는 자동 403.
+        if ((actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER)
+                && companyService.selfAndChildren(actor.companyId()).contains(supplierId)) return;
+        // #5: BP 본인 회사 직속 인원도 수정 가능 (운전수/지휘자 등) — 본인 회사 고정 유지(자식 개념 없음).
+        if (actor.role() == Role.BP && supplierId.equals(actor.companyId())) return;
         throw ApiException.forbidden("FORBIDDEN", "수정 권한이 없습니다");
     }
 

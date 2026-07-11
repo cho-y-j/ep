@@ -75,6 +75,24 @@ export default function SettlementPage() {
     await load(from, to);
   };
 
+  const downloadStatement = async (fmt: 'pdf' | 'xlsx') => {
+    const params: Record<string, string> = { format: fmt };
+    if (from) params.from = from;
+    if (to) params.to = to;
+    try {
+      const res = await api.get('/api/settlements/statement', { params, responseType: 'blob' });
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const period = from || to ? `${from || ''}~${to || ''}` : '전체';
+      a.download = `거래내역서_${period}.${fmt}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('거래내역서 다운로드에 실패했습니다');
+    }
+  };
+
   return (
     <AppShell breadcrumb={[{ label: '투입 정산' }]}>
       <div className="space-y-5">
@@ -102,6 +120,10 @@ export default function SettlementPage() {
             <button onClick={() => { setFrom(''); setTo(''); void load('', ''); }}
               className="text-xs text-slate-500 underline">전체</button>
           )}
+          <div className="ml-auto flex gap-2">
+            <button onClick={() => void downloadStatement('pdf')} className="btn-ghost text-sm">거래내역서 PDF</button>
+            <button onClick={() => void downloadStatement('xlsx')} className="btn-ghost text-sm">Excel</button>
+          </div>
         </div>
 
         {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}

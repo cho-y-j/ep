@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
 import { PageHeader, DataTable, StatusBadge, type Column } from '../../components/ui';
 import BusinessNumberInput from '../../components/forms/BusinessNumberInput';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import { COMPANY_TYPE_LABEL, type CompanyResponse } from '../../types/auth';
+import { COMPANY_TYPE_LABEL, type CompanyResponse, type UserResponse } from '../../types/auth';
 
 type SubType = 'EQUIPMENT' | 'MANPOWER';
 
@@ -95,6 +95,8 @@ export default function SubSuppliersPage() {
           empty={loading ? '로딩…' : '등록된 하위공급사가 없습니다'}
         />
 
+        {items.length > 0 && <PendingApprovals childCompanies={items} />}
+
         {addOpen && (
           <AddSubSupplierModal
             onClose={() => setAddOpen(false)}
@@ -103,6 +105,86 @@ export default function SubSuppliersPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * V77 자가로그인+부모 승인: 하위 공급사가 스스로 가입하면 enabled=false 로 대기.
+ * 부모(장비공급사 master)가 여기서 승인하면 활성화(첫 유저는 자식회사 master 로 승격).
+ */
+function PendingApprovals({ childCompanies }: { childCompanies: CompanyResponse[] }) {
+  const [rows, setRows] = useState<Array<{ user: UserResponse; companyName: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const perChild = await Promise.all(
+        childCompanies.map((c) =>
+          api.get<UserResponse[]>(`/api/companies/children/${c.id}/users`)
+            .then((res) => (res.data ?? []).filter((u) => !u.enabled).map((u) => ({ user: u, companyName: c.name })))
+            .catch(() => [] as Array<{ user: UserResponse; companyName: string }>),
+        ),
+      );
+      setRows(perChild.flat());
+    } finally {
+      setLoading(false);
+    }
+  }, [childCompanies]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const approve = async (id: number) => {
+    setBusyId(id);
+    setErr(null);
+    try {
+      await api.post(`/api/companies/children/users/${id}/approve`);
+      await load();
+    } catch (e: any) {
+      setErr(e?.response?.data?.message || e?.response?.data?.error || '승인 실패');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+      <div>
+        <h3 className="text-sm font-bold text-slate-900">가입 대기 승인</h3>
+        <p className="text-xs text-slate-500 mt-0.5">하위 공급사가 스스로 가입하면 여기서 승인해 로그인을 활성화합니다.</p>
+      </div>
+      {err && <div className="rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">{err}</div>}
+      {loading ? (
+        <p className="text-sm text-slate-400">로딩…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-slate-400">가입 대기 중인 인원이 없습니다.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {rows.map(({ user, companyName }) => (
+            <li key={user.id} className="py-2.5 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <StatusBadge tone="warning">{companyName}</StatusBadge>
+                  <span className="font-medium text-slate-900">{user.name}</span>
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">{user.email}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void approve(user.id)}
+                disabled={busyId === user.id}
+                className="btn-primary shrink-0"
+              >
+                {busyId === user.id ? '승인 중…' : '승인'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
