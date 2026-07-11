@@ -82,6 +82,7 @@ export default function NotificationsPage() {
                   : n.link_type === 'WORK_CONFIRMATION' && n.link_id ? `/work-plans/${n.link_id}`
                   : n.link_type === 'DOCUMENT_REVIEW' ? `/document-reviews/received`
                   : n.link_type === 'SUB_SUPPLIER' ? `/sub-suppliers`
+                  : n.link_type === 'SETTLEMENT_STATEMENT' ? `/settlements`
                   : null;
                 return (
                   <li key={n.id} className={`p-4 flex items-start gap-3 ${unread ? 'bg-blue-50/30' : ''}`}>

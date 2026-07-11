@@ -61,7 +61,16 @@ public class ResourceReadinessService {
         if (actor.companyId() == null) return List.of();
 
         // 스코프 = 본인 + 직속 자식(협력사) — V77 selfAndChildren(부모→자식 단방향; 자식이면 {본인}).
-        List<Long> scope = companyService.selfAndChildren(actor.companyId());
+        return listForScope(companyService.selfAndChildren(actor.companyId()));
+    }
+
+    /**
+     * 주어진 회사 스코프가 소유한 자원(장비·인원)의 투입 준비 상태. 스코프 격리는 호출자 책임.
+     * (B4 자식별 롤업이 자식 1건 스코프로 재사용.)
+     */
+    @Transactional(readOnly = true)
+    public List<ResourceReadinessResponse> listForScope(List<Long> scope) {
+        if (scope == null || scope.isEmpty()) return List.of();
         List<Equipment> equipment = equipmentRepo.findBySupplierIdInOrderByIdDesc(scope);
         List<Person> persons = personRepo.findBySupplierIdInOrderByIdDesc(scope);
 

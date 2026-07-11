@@ -9,6 +9,9 @@ public interface SafetyInspectionRepository extends JpaRepository<SafetyInspecti
 
     List<SafetyInspection> findBySiteIdOrderByScheduledAtAsc(Long siteId);
 
+    /** B3: BP 현장별 파이프라인 — 여러 현장의 검사 일괄 조회(N+1 회피). */
+    List<SafetyInspection> findBySiteIdIn(Collection<Long> siteIds);
+
     List<SafetyInspection> findBySupplierCompanyIdOrderByScheduledAtAsc(Long supplierCompanyId);
 
     List<SafetyInspection> findBySiteIdAndTargetTypeAndTargetId(Long siteId, InspectionTarget targetType, Long targetId);

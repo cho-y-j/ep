@@ -8,6 +8,7 @@ import WorkPlanListWidget, { type DashboardWorkPlan } from './WorkPlanListWidget
 import { EmptyState, SectionCard, StatCard } from './widgets';
 import DocumentRiskWidget, { type DocumentRisk } from './DocumentRiskWidget';
 import BpPendingQueueWidget from './BpPendingQueueWidget';
+import BpSitePipelineWidget from './BpSitePipelineWidget';
 
 type BpSummary = {
   counts: Record<string, number>;
@@ -46,6 +47,8 @@ export default function BpDashboardPage() {
         </div>
 
         <BpPendingQueueWidget />
+
+        <BpSitePipelineWidget />
 
         {loading ? (
           <p className="text-slate-400">불러오는 중...</p>

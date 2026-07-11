@@ -21,10 +21,13 @@ public class CompanyController {
 
     private final CompanyService service;
     private final com.skep.user.CompanyUserService companyUsers;
+    private final ChildRollupService childRollup;
 
-    public CompanyController(CompanyService service, com.skep.user.CompanyUserService companyUsers) {
+    public CompanyController(CompanyService service, com.skep.user.CompanyUserService companyUsers,
+                             ChildRollupService childRollup) {
         this.service = service;
         this.companyUsers = companyUsers;
+        this.childRollup = childRollup;
     }
 
     @GetMapping
@@ -114,6 +117,13 @@ public class CompanyController {
                                                            @CurrentUser AuthenticatedUser actor) {
         return companyUsers.listChildUsers(childId, actor).stream()
                 .map(com.skep.auth.dto.UserResponse::from).toList();
+    }
+
+    /** B4: 부모 master 기준 직속 자식 공급사별 롤업 요약(투입준비 ready/pending·서류 만료임박·가입대기 유저). */
+    @GetMapping("/children/rollup")
+    @PreAuthorize("hasRole('EQUIPMENT_SUPPLIER')")
+    public List<com.skep.company.dto.ChildRollupResponse> childrenRollup(@CurrentUser AuthenticatedUser actor) {
+        return childRollup.rollupForParent(actor);
     }
 
     /** V77: 부모 master 가 직속 자식 공급사 가입 유저를 승인(활성화 + 자식회사 첫 유저 master 승격). */

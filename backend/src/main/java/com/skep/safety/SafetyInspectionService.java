@@ -172,6 +172,27 @@ public class SafetyInspectionService {
                 .anyMatch(s -> s.getStatus() == InspectionStatus.COMPLETED);
     }
 
+    /**
+     * B5: target(장비/인원) 기준 검사 상태 조회 — BP 본인 현장 대상만. (A2 연결뷰에서 점검목록에 상태 병기용)
+     * BP 는 자기 현장의 검사만, ADMIN 은 전체. 공급사는 /mine 사용.
+     */
+    @Transactional(readOnly = true)
+    public List<InspectionResponse> listByTargetForBp(InspectionTarget targetType, Long targetId, AuthenticatedUser actor) {
+        if (actor.role() != Role.ADMIN && actor.role() != Role.BP) {
+            throw ApiException.forbidden("NOT_PERMITTED", "BP/ADMIN 전용");
+        }
+        List<SafetyInspection> found = repo.findByTargetTypeAndTargetIdIn(targetType, List.of(targetId));
+        if (actor.role() == Role.ADMIN) {
+            return found.stream().map(this::toResponse).toList();
+        }
+        if (actor.companyId() == null) return List.of();
+        java.util.Set<Long> mySiteIds = sites.findByBpCompanyIdOrderByIdDesc(actor.companyId()).stream()
+                .map(Site::getId).collect(Collectors.toSet());
+        return found.stream()
+                .filter(s -> mySiteIds.contains(s.getSiteId()))
+                .map(this::toResponse).toList();
+    }
+
     private void ensureCanManage(SafetyInspection s, AuthenticatedUser actor) {
         if (actor.role() == Role.ADMIN) return;
         Site site = sites.findById(s.getSiteId()).orElseThrow(() -> ApiException.notFound("SITE_NOT_FOUND", "현장 없음"));

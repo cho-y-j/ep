@@ -63,6 +63,7 @@ export default function WorkConfirmationSection({ workPlanId, bpCompanyId, assig
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
   const [invalidateConfirm, setInvalidateConfirm] = useState<{ id: number; pendingPatch: any } | null>(null);
+  const [suggestedOt, setSuggestedOt] = useState<number | null>(null);
 
   const role = user?.role;
   const myCompany = user?.company_id ?? null;
@@ -108,8 +109,9 @@ export default function WorkConfirmationSection({ workPlanId, bpCompanyId, assig
     }
   };
 
-  const openEdit = (wc: WorkConfirmation) => {
+  const openEdit = async (wc: WorkConfirmation) => {
     setEditingId(wc.id);
+    setSuggestedOt(null);
     setEditForm({
       workContent: wc.work_content ?? '',
       remarks: wc.remarks ?? '',
@@ -118,6 +120,20 @@ export default function WorkConfirmationSection({ workPlanId, bpCompanyId, assig
       overtimeTime: wc.overtime_time ?? '', overtimeHours: wc.overtime_hours ?? '',
       nightTime: wc.night_time ?? '',       nightHours: wc.night_hours ?? '',
     });
+    // A: OT 제안값 프리필(비어있을 때만). suggested_overtime_hours 는 상세(GET /{id})에서만 값이 온다.
+    // 프리필만 — 자동 저장/자동 반영 없음. 저장은 기존대로 [저장] 으로 사람이 확정.
+    if (wc.overtime_hours == null) {
+      try {
+        const res = await api.get<{ suggested_overtime_hours?: number | null }>(`/api/work-confirmations/${wc.id}`);
+        const s = res.data?.suggested_overtime_hours;
+        if (s != null) {
+          setSuggestedOt(s);
+          setEditForm((p) => (p.overtimeHours === '' || p.overtimeHours == null ? { ...p, overtimeHours: s } : p));
+        }
+      } catch {
+        // 신규 엔드포인트 미배포(404) 등 — 프리필 생략
+      }
+    }
   };
 
   const saveEdit = async (invalidate: boolean) => {
@@ -277,7 +293,12 @@ export default function WorkConfirmationSection({ workPlanId, bpCompanyId, assig
                     <div className="grid grid-cols-4 gap-2">
                       {[['오전', 'morning'], ['오후', 'afternoon'], ['연장', 'overtime'], ['철야', 'night']].map(([label, key]) => (
                         <div key={key as string}>
-                          <label className="text-[10px] text-slate-600">{label}</label>
+                          <label className="text-[10px] text-slate-600">
+                            {label}
+                            {key === 'overtime' && suggestedOt != null && (
+                              <span className="ml-1 text-[9px] text-blue-600">제안값 (수정 가능)</span>
+                            )}
+                          </label>
                           <input
                             type="text"
                             value={editForm[`${key}Time`] ?? ''}

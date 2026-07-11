@@ -35,6 +35,7 @@ import WorkPlanEditPage from './features/workPlan/WorkPlanEditPage';
 import WorkPlanCreatePage from './features/workPlan/create/WorkPlanCreatePage';
 import MyCompanyPage from './features/company/MyCompanyPage';
 import SubSuppliersPage from './features/company/SubSuppliersPage';
+import OnboardingWizardPage from './features/onboarding/OnboardingWizardPage';
 import QuotationListPage from './features/quotation/QuotationListPage';
 import QuotationCreatePage from './features/quotation/QuotationCreatePage';
 import AlimTalkSendPage from './features/alimtalk/AlimTalkSendPage';
@@ -259,6 +260,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['EQUIPMENT_SUPPLIER']}>
               <SubSuppliersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/onboarding/sub-suppliers"
+          element={
+            <ProtectedRoute roles={['EQUIPMENT_SUPPLIER']}>
+              <OnboardingWizardPage />
             </ProtectedRoute>
           }
         />

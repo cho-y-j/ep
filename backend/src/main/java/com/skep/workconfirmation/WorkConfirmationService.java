@@ -336,6 +336,23 @@ public class WorkConfirmationService {
         return wc;
     }
 
+    /**
+     * A1-sug: 비저장 OT 제안값 — 실근무(totalHours)가 예정 근무시간(작업계획서 start~end, 없으면 8h)을 초과한 분.
+     * 오직 응답 계산 전용 — 저장/정산에 반영하지 않는다(SettlementService·자동생성 판정 무관).
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal suggestedOvertimeHours(WorkConfirmation wc) {
+        if (wc.getTotalHours() == null) return null;
+        WorkPlan wp = workPlanRepo.findById(wc.getWorkPlanId()).orElse(null);
+        double scheduledHours = 8.0;
+        if (wp != null && wp.getStartTime() != null && wp.getEndTime() != null) {
+            long mins = java.time.Duration.between(wp.getStartTime(), wp.getEndTime()).toMinutes();
+            if (mins > 0) scheduledHours = mins / 60.0;
+        }
+        BigDecimal ot = wc.getTotalHours().subtract(BigDecimal.valueOf(scheduledHours));
+        return ot.signum() > 0 ? ot.setScale(2, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO;
+    }
+
     /** 인원(Person) 단위 작업확인서 발급. 동일 (workPlan, person) 1건만 존재. */
     @Transactional
     public WorkConfirmation request(Long workPlanId, Long personId, AuthenticatedUser actor) {

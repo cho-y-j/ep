@@ -45,7 +45,8 @@ public class WorkConfirmationController {
     public WorkConfirmationResponse get(@PathVariable Long id,
                                          @RequestParam(name = "withPng", defaultValue = "false") boolean withPng,
                                          @CurrentUser AuthenticatedUser actor) {
-        return WorkConfirmationResponse.from(service.get(id, actor), withPng);
+        var wc = service.get(id, actor);
+        return WorkConfirmationResponse.from(wc, withPng, service.suggestedOvertimeHours(wc));
     }
 
     /** 작업내용 / 시간 등 수정. query param invalidate=true 면 기존 사인 모두 무효화. */

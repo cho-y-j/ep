@@ -35,4 +35,7 @@ public final class NotificationType {
 
     /** V77: 하위 공급사(협력사) 자가가입 → 부모 회사 승인 대기. */
     public static final String SUB_SUPPLIER_SIGNUP = "SUB_SUPPLIER_SIGNUP";
+
+    /** B1: 매월 1일 배차행 보유 공급사에게 전월 거래내역서 준비 통지(월마감). */
+    public static final String MONTHLY_STATEMENT_READY = "MONTHLY_STATEMENT_READY";
 }

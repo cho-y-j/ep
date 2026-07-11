@@ -42,9 +42,16 @@ public record WorkConfirmationResponse(
         WorkConfirmationStatus status,
         Long attendancePhotoDocId,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        // A1-sug: 비저장 OT 제안값 — 상세 조회에서만 채워지고(그 외 null), 사인 화면 프리필용. 저장·정산 미반영.
+        BigDecimal suggestedOvertimeHours
 ) {
     public static WorkConfirmationResponse from(WorkConfirmation wc, boolean includePng) {
+        return from(wc, includePng, null);
+    }
+
+    public static WorkConfirmationResponse from(WorkConfirmation wc, boolean includePng,
+                                                BigDecimal suggestedOvertimeHours) {
         String sup = (includePng && wc.getSupplierSignaturePng() != null)
                 ? Base64.getEncoder().encodeToString(wc.getSupplierSignaturePng()) : null;
         String bp = (includePng && wc.getBpSignaturePng() != null)
@@ -63,7 +70,8 @@ public record WorkConfirmationResponse(
                 wc.getBpSignerName(), wc.getBpSignerUserId(),
                 wc.getBpSignedAt() != null, wc.getBpSignedAt(), bp,
                 wc.getStatus(), wc.getAttendancePhotoDocId(),
-                wc.getCreatedAt(), wc.getUpdatedAt()
+                wc.getCreatedAt(), wc.getUpdatedAt(),
+                suggestedOvertimeHours
         );
     }
 }

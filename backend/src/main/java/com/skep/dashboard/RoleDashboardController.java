@@ -69,6 +69,7 @@ public class RoleDashboardController {
     private final WorkPlanEquipmentRepository wpe;
     private final WorkPlanPersonRepository wpp;
     private final WorksheetSignatureRepository signatures;
+    private final BpSitePipelineService bpSitePipeline;
 
     public RoleDashboardController(UserRepository users, CompanyRepository companies,
                                    SiteRepository sites, SiteParticipantRepository participants,
@@ -80,7 +81,8 @@ public class RoleDashboardController {
                                    WorkPlanRepository workPlans,
                                    WorkPlanEquipmentRepository wpe,
                                    WorkPlanPersonRepository wpp,
-                                   WorksheetSignatureRepository signatures) {
+                                   WorksheetSignatureRepository signatures,
+                                   BpSitePipelineService bpSitePipeline) {
         this.users = users;
         this.companies = companies;
         this.sites = sites;
@@ -96,6 +98,7 @@ public class RoleDashboardController {
         this.wpe = wpe;
         this.wpp = wpp;
         this.signatures = signatures;
+        this.bpSitePipeline = bpSitePipeline;
     }
 
     @GetMapping("/admin/summary")
@@ -240,6 +243,12 @@ public class RoleDashboardController {
             return r;
         }).toList());
         return body;
+    }
+
+    /** B3: BP 현장별 파이프라인 — 현장 단위 점검/검사/투입/서명대기/서류 요약(읽기전용). */
+    @GetMapping("/bp/site-pipeline")
+    public Map<String, Object> bpSitePipeline(@CurrentUser AuthenticatedUser actor) {
+        return bpSitePipeline.sitePipeline(actor);
     }
 
     @GetMapping("/equipment-supplier/summary")

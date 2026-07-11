@@ -9,6 +9,16 @@ import { COMPANY_TYPE_LABEL, type CompanyResponse, type UserResponse } from '../
 
 type SubType = 'EQUIPMENT' | 'MANPOWER';
 
+/** B4: 자식 공급사별 롤업 요약 (GET /api/companies/children/rollup). */
+type ChildRollup = {
+  child_company_id: number;
+  child_company_name: string;
+  readiness_ready: number;
+  readiness_pending: number;
+  documents_expiring_soon: number;
+  pending_users: number;
+};
+
 /**
  * 장비공급사(company_admin) 가 하위 공급사(EQUIPMENT/MANPOWER) 를 등록/조회.
  * 부모는 자식 자원을 읽기로 보고, 배차 시 자기 명의로 발송한다.
@@ -20,6 +30,7 @@ export default function SubSuppliersPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [rollup, setRollup] = useState<Map<number, ChildRollup>>(new Map());
 
   useEffect(() => {
     if (!isMaster) return;
@@ -36,6 +47,15 @@ export default function SubSuppliersPage() {
       setErr(e?.response?.data?.message || e?.response?.data?.error || '목록 조회 실패');
     } finally {
       setLoading(false);
+    }
+    // B4 롤업 — 신규 엔드포인트 미배포(404)면 롤업 생략(배지 컬럼만 빠짐).
+    try {
+      const r = await api.get<ChildRollup[]>('/api/companies/children/rollup');
+      const m = new Map<number, ChildRollup>();
+      for (const x of r.data ?? []) m.set(x.child_company_id, x);
+      setRollup(m);
+    } catch {
+      setRollup(new Map());
     }
   };
 
@@ -71,6 +91,26 @@ export default function SubSuppliersPage() {
         </span>
       ),
     },
+    ...(rollup.size > 0 ? [{
+      key: 'rollup',
+      header: '현황',
+      cell: (c: CompanyResponse) => {
+        const r = rollup.get(c.id);
+        if (!r) return <span className="text-slate-300 text-xs">-</span>;
+        const total = r.readiness_ready + r.readiness_pending;
+        return (
+          <div className="flex flex-wrap items-center gap-1">
+            <StatusBadge tone="success">투입대기 {r.readiness_ready}/{total}</StatusBadge>
+            {r.documents_expiring_soon > 0 && (
+              <StatusBadge tone="danger">서류만료임박 {r.documents_expiring_soon}</StatusBadge>
+            )}
+            {r.pending_users > 0 && (
+              <StatusBadge tone="warning">가입대기 {r.pending_users}</StatusBadge>
+            )}
+          </div>
+        );
+      },
+    } as Column<CompanyResponse>] : []),
   ];
 
   return (
@@ -80,9 +120,12 @@ export default function SubSuppliersPage() {
           title="하위공급사 관리"
           subtitle="우리 회사가 관리하는 하위 공급사(장비/인력)를 등록·조회합니다. 하위 공급사의 장비·인원은 우리 목록에 함께 표시되고, 배차 시 우리 명의로 발송됩니다."
           actions={
-            <button type="button" onClick={() => setAddOpen(true)} className="btn-primary">
-              + 하위공급사 등록
-            </button>
+            <div className="flex items-center gap-2">
+              <Link to="/onboarding/sub-suppliers" className="btn-ghost">온보딩 안내</Link>
+              <button type="button" onClick={() => setAddOpen(true)} className="btn-primary">
+                + 하위공급사 등록
+              </button>
+            </div>
           }
         />
 

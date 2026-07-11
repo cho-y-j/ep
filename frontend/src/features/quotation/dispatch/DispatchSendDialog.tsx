@@ -49,6 +49,8 @@ type Defaults = Pick<EqRow, 'dailyPrice'|'otDailyPrice'|'monthlyPrice'|'otMonthl
 export default function DispatchSendDialog({ open, quotationRequestId, requestedCategory, requestedManpowerRole, onClose, onSent, initialEquipmentId, initialPrices }: Props) {
   const { user } = useAuth();
   const selfCompanyId = user?.company_id ?? null;
+  const isEquipmentSupplier = user?.role === 'EQUIPMENT_SUPPLIER';
+  const [sendBundle, setSendBundle] = useState(false);
   const [allEquipment, setAllEquipment] = useState<EquipmentResponse[]>([]);
   const [allPersons, setAllPersons] = useState<PersonResponse[]>([]);
   const [eqRows, setEqRows] = useState<Record<number, EqRow>>({});
@@ -64,6 +66,7 @@ export default function DispatchSendDialog({ open, quotationRequestId, requested
     if (!open) return;
     setLoading(true);
     setError(null);
+    setSendBundle(false);
     Promise.all([
       api.get<EquipmentResponse[] | { content: EquipmentResponse[] }>('/api/equipment'),
       api.get<PersonResponse[] | { content: PersonResponse[] }>('/api/persons'),
@@ -226,6 +229,21 @@ export default function DispatchSendDialog({ open, quotationRequestId, requested
         pN = Array.isArray(res.data) ? res.data.length : pItems.length;
       }
       toast.success(`견적서 발송 — 차량 ${eqN}대 · 인원 ${pN}명`);
+      // F1: 서류 묶음 통합 발송 — 차량 배차 성공 후에만(배차 선행 필수). 견적당 1회 멱등.
+      // 번들 실패는 배차를 되돌리지 않는다(부분성공): 배차는 발송됨을 명시하고 재시도 안내.
+      if (sendBundle && eqN > 0) {
+        try {
+          await api.post(`/api/quotations/${quotationRequestId}/document-bundle`, { includeEmail: false });
+          toast.success('서류 묶음도 함께 발송했습니다');
+        } catch (be) {
+          if (be instanceof AxiosError && be.response?.status === 409) {
+            toast.info('서류 묶음은 이미 발송되어 있습니다 (중복 발송 안 함)');
+          } else {
+            const bmsg = be instanceof AxiosError ? (be.response?.data?.message ?? '서류 묶음 발송 실패') : '서류 묶음 발송 실패';
+            toast.error(`배차는 발송됐으나 서류 묶음 발송 실패: ${bmsg} — 견적 상세에서 다시 시도하세요`);
+          }
+        }
+      }
       onSent();
       onClose();
     } catch (err) {
@@ -358,6 +376,19 @@ export default function DispatchSendDialog({ open, quotationRequestId, requested
                         className="mt-1 w-full px-2 py-1.5 text-sm border border-slate-300 rounded" />
             </label>
           </div>
+
+          {/* F1: 장비공급사가 차량 발송 시 서류 묶음까지 한 번에. 배차 성공 후 자동 전송(견적당 1회). */}
+          {isEquipmentSupplier && eqSelectedCount > 0 && (
+            <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 cursor-pointer">
+              <input type="checkbox" checked={sendBundle} onChange={(e) => setSendBundle(e.target.checked)} className="mt-0.5" />
+              <span className="text-sm text-slate-700">
+                <span className="font-semibold">서류 묶음도 함께 발송</span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  차량 발송 직후 차량별 서류 묶음을 BP에 전송합니다. 견적당 1회만 전송되며, 이미 보냈다면 건너뜁니다.
+                </span>
+              </span>
+            </label>
+          )}
 
         </div>
 

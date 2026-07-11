@@ -43,4 +43,12 @@ public interface DispatchedPersonRepository extends JpaRepository<DispatchedPers
             + "and d.personId in :ids")
     java.util.Set<Long> findDispatchedPersonIdsForBp(@Param("bp") Long bp,
                                                      @Param("ids") java.util.Collection<Long> ids);
+
+    /** 월마감 알림 대상: 배차행 보유 distinct 공급사(명의) id. */
+    @Query("select distinct d.supplierCompanyId from DispatchedPerson d")
+    List<Long> findDistinctSupplierCompanyIds();
+
+    /** 월마감 알림 대상: 자기 귀속(sub_supplier) distinct 공급사 id (null 제외). */
+    @Query("select distinct d.subSupplierCompanyId from DispatchedPerson d where d.subSupplierCompanyId is not null")
+    List<Long> findDistinctSubSupplierCompanyIds();
 }

@@ -6,11 +6,14 @@ import {
   CHECK_TYPE_LABEL, CHECK_STATUS_LABEL, CHECK_STATUS_CHIP_CLS,
   type ResourceCheckResponse,
 } from '../../types/resourceCheck';
+import type { InspectionResponse } from '../../types/safety';
 
 export default function ResourceCheckBpList() {
   const [items, setItems] = useState<ResourceCheckResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
+  // A2 연결뷰: target(owner) 별 SafetyInspection 상태 병기. key = `${owner_type}:${owner_id}`.
+  const [inspByTarget, setInspByTarget] = useState<Map<string, InspectionResponse[]>>(new Map());
 
   const load = async () => {
     setLoading(true);
@@ -20,6 +23,42 @@ export default function ResourceCheckBpList() {
     } finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);
+
+  // distinct target 만 by-target 조회. 신규 엔드포인트 미배포(404)면 해당 항목은 map 에 안 담겨 병기 생략.
+  useEffect(() => {
+    if (items.length === 0) { setInspByTarget(new Map()); return; }
+    let cancelled = false;
+    const distinct = new Map<string, { targetType: 'VEHICLE' | 'PERSON'; targetId: number }>();
+    for (const r of items) {
+      distinct.set(`${r.owner_type}:${r.owner_id}`, {
+        targetType: r.owner_type === 'EQUIPMENT' ? 'VEHICLE' : 'PERSON',
+        targetId: r.owner_id,
+      });
+    }
+    void Promise.all(
+      Array.from(distinct.entries()).map(([key, t]) =>
+        api.get<InspectionResponse[]>('/api/safety-inspections/by-target', {
+          params: { targetType: t.targetType, targetId: t.targetId },
+        })
+          .then((res) => [key, res.data] as const)
+          .catch(() => null),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      const map = new Map<string, InspectionResponse[]>();
+      for (const row of results) if (row) map.set(row[0], row[1]);
+      setInspByTarget(map);
+    });
+    return () => { cancelled = true; };
+  }, [items]);
+
+  const inspStatusFor = (r: ResourceCheckResponse): { label: string; cls: string } | null => {
+    const list = inspByTarget.get(`${r.owner_type}:${r.owner_id}`);
+    if (!list) return null;
+    if (list.length === 0) return { label: '없음', cls: 'bg-slate-100 text-slate-500' };
+    if (list.some((i) => i.status === 'COMPLETED')) return { label: '완료', cls: 'bg-emerald-100 text-emerald-800' };
+    return { label: '일정 대기', cls: 'bg-amber-100 text-amber-800' };
+  };
 
   const review = async (id: number, action: 'approve' | 'reject') => {
     let note: string | null = null;
@@ -48,7 +87,9 @@ export default function ResourceCheckBpList() {
         <div className="card p-8 text-center text-slate-400">보낸 요청이 없습니다.</div>
       ) : (
         <div className="space-y-2">
-          {items.map((r) => (
+          {items.map((r) => {
+            const si = inspStatusFor(r);
+            return (
             <div key={r.id} className="card p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -56,6 +97,11 @@ export default function ResourceCheckBpList() {
                   <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${CHECK_STATUS_CHIP_CLS[r.status]}`}>
                     {CHECK_STATUS_LABEL[r.status]}
                   </span>
+                  {si && (
+                    <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${si.cls}`}>
+                      안전점검 {si.label}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-0.5 text-sm text-slate-700 truncate">
                   {r.owner_label} → {r.supplier_company_name ?? '공급사'}
@@ -84,7 +130,8 @@ export default function ResourceCheckBpList() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </AppShell>

@@ -88,6 +88,10 @@ skep:
     sender: ${SKEP_SMS_SENDER:}
     api-key: ${SKEP_SMS_API_KEY:}
     api-secret: ${SKEP_SMS_API_SECRET:}
+  # 만료 알림(D-30/D-7) 외부발송 게이트 — 기본 OFF. ON 시 in-app dedup 통과 건을 공급사 마스터 phone 으로 SMS.
+  alimtalk:
+    expiry-notify:
+      enabled: ${SKEP_ALIMTALK_EXPIRY_NOTIFY_ENABLED:false}
 
 # Phase S-4 단계 2: verify-api / main-api 외부 검증 호출 설정.
 # 미연결/timeout 시 graceful fail (verification_status = OCR_REVIEW_REQUIRED).

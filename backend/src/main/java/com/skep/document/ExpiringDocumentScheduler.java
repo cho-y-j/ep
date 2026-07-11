@@ -1,5 +1,6 @@
 package com.skep.document;
 
+import com.skep.alimtalk.AlimTalkService;
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentRepository;
 import com.skep.notification.NotificationRepository;
@@ -7,7 +8,10 @@ import com.skep.notification.NotificationService;
 import com.skep.notification.NotificationType;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
+import com.skep.user.User;
+import com.skep.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +46,12 @@ public class ExpiringDocumentScheduler {
     private final PersonRepository personRepo;
     private final NotificationService notifications;
     private final NotificationRepository notificationRepo;
+    private final AlimTalkService alimTalk;
+    private final UserRepository users;
+
+    /** B2: 만료 알림 외부발송(SMS) 게이트 — 기본 OFF. OFF 시 발송 경로 진입 자체 차단(기존 in-app 동작 불변). */
+    @Value("${skep.alimtalk.expiry-notify.enabled:false}")
+    private boolean expiryNotifyEnabled;
 
     @Scheduled(cron = "0 40 8 * * *")
     @Transactional
@@ -99,6 +109,14 @@ public class ExpiringDocumentScheduler {
             String msg = ownerLabel + " " + typeName + " 만료 " + days + "일 남음 (만료일 " + d.getExpiryDate() + ")";
             notifications.sendToCompany(supplierId, NotificationType.DOCUMENT_EXPIRING,
                     "서류 만료 임박", msg, linkType, d.getOwnerId(), null);
+            // B2: 외부발송 게이트(기본 OFF). ON 일 때만 in-app dedup 통과 건을 자원 소유 공급사 마스터 phone 으로 SMS.
+            if (expiryNotifyEnabled) {
+                for (User u : users.findByCompanyIdAndIsCompanyAdminTrue(supplierId)) {
+                    if (u.getPhone() != null && !u.getPhone().isBlank()) {
+                        alimTalk.sendSmsText(u.getPhone(), "[SKEP] " + msg, null);
+                    }
+                }
+            }
         }
     }
 }

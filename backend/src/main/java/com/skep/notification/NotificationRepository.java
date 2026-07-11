@@ -34,6 +34,10 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             Long targetCompanyId, String type, String linkType, Long linkId,
             java.time.LocalDateTime createdAtFrom);
 
+    /** 월마감 스케줄러 중복 생성 가드 — 이번 달 같은 (회사, type) 알림이 이미 있는지. */
+    boolean existsByTargetCompanyIdAndTypeAndCreatedAtGreaterThanEqual(
+            Long targetCompanyId, String type, java.time.LocalDateTime createdAtFrom);
+
     /**
      * 사용자 가시성 알림 조회.
      *

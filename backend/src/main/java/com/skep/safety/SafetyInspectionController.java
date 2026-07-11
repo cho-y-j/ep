@@ -50,6 +50,14 @@ public class SafetyInspectionController {
         return service.listBySite(siteId, actor);
     }
 
+    /** B5: target(장비/인원) 기준 검사 상태 — BP 본인 현장만. A2 연결뷰 병기용. */
+    @GetMapping("/by-target")
+    public List<InspectionResponse> listByTarget(@RequestParam InspectionTarget targetType,
+                                                 @RequestParam Long targetId,
+                                                 @CurrentUser AuthenticatedUser actor) {
+        return service.listByTargetForBp(targetType, targetId, actor);
+    }
+
     /** 공급사 — 자기 회사 받은 검사 list. */
     @GetMapping("/mine")
     public List<InspectionResponse> listMine(@CurrentUser AuthenticatedUser actor) {

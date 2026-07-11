@@ -22,7 +22,7 @@ export default function SupplierDocumentHubPage() {
     { key: 'supplements', label: '보완요청', badge: counts.supplements },
     { key: 'checks', label: '자원점검', badge: counts.checks },
     { key: 'compliance', label: '이행지시', badge: counts.compliance },
-    { key: 'collections', label: '서류수집' },
+    { key: 'collections', label: '서류수집', badge: counts.collections },
     { key: 'reviews', label: '서류심사' },
   ];
 
