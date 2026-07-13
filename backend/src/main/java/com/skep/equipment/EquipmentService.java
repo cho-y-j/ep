@@ -240,15 +240,18 @@ public class EquipmentService {
                 .year(req.year())
                 .build();
         e.updateSourcing(req.isExternal(), req.vehicleOwnerName(), req.vehicleOwnerBusinessNo());
-        // Phase4: 외부 장비 기사(조종원) 함께 등록 — 한 번에. (이름/아이디/비번 다 있으면)
-        if (notBlank(req.operatorName()) && notBlank(req.operatorUsername()) && notBlank(req.operatorPassword())) {
-            e.linkOperator(createOperatorPerson(supplierId, req.operatorName(), req.operatorPhone(),
-                    req.operatorUsername(), req.operatorPassword(), actor));
+        // 기사(조종원) — 선택한 등록 인력(Person)을 장비에 연결. (있을 때만)
+        if (req.operatorPersonId() != null) {
+            // 존재 + 소속 스코프(actor 본인/직속 자식) 검증 후에만 연결. API 우회로 타사/유령 인력 지정 차단.
+            com.skep.person.Person operator = personRepo.findById(req.operatorPersonId()).orElseThrow(() ->
+                    ApiException.badRequest("PERSON_NOT_FOUND", "인원 " + req.operatorPersonId() + " 없음"));
+            if (!companyService.selfAndChildren(actor.companyId()).contains(operator.getSupplierId())) {
+                throw ApiException.forbidden("FORBIDDEN_OTHER_COMPANY", "다른 회사 소속 인력을 조종원으로 지정할 수 없습니다");
+            }
+            e.linkOperator(req.operatorPersonId());
         }
         return repo.save(e);
     }
-
-    private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
 
     public Equipment update(Long id, UpdateEquipmentRequest req, AuthenticatedUser actor) {
         Equipment e = repo.findById(id)

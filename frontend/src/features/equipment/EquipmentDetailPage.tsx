@@ -307,6 +307,7 @@ export default function EquipmentDetailPage() {
             ownerType="EQUIPMENT"
             ownerId={equipment.id}
             canEdit={canEdit}
+            ownerCategory={equipment.category}
             title="등록 서류"
             excludeTypeName={equipment.is_external ? undefined : '사업자등록증(외부장비)'}
           />

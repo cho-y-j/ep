@@ -35,6 +35,7 @@ function ocrTypeFor(typeName: string): string | null {
   if (n.includes('사업자')) return 'BUSINESS_REGISTRATION';
   if (n.includes('운전면허')) return 'DRIVER_LICENSE';
   if (n.includes('안전교육')) return 'KOSHA';
+  if (n.includes('자동차등록')) return 'EQUIPMENT_REGISTRATION';
   return null;
 }
 
@@ -59,6 +60,11 @@ const OCR_KEY_MAP: Record<string, Record<string, string>> = {
     name: 'name',
     birthDate: 'birth_date',
     registrationNumber: 'registration_no',
+  },
+  EQUIPMENT_REGISTRATION: {
+    vehicleNumber: 'vehicle_no',
+    modelName: 'model',
+    productionYear: 'year',
   },
 };
 
@@ -85,6 +91,8 @@ const FIELD_LABEL: Record<string, string> = {
   birth_date: '생년월일',
   name: '성명',
   vehicle_no: '차량번호',
+  model: '차명',
+  year: '연식',
   expiry_date: '만료일',
   registration_no: '교육 등록번호',
 };

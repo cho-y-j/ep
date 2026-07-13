@@ -8,9 +8,6 @@ export type EquipmentFieldValues = {
   model: string;
   manufacturer: string;
   year: string;
-  isExternal: boolean;
-  vehicleOwnerName: string;
-  vehicleOwnerBusinessNo: string;
 };
 
 type Props = {
@@ -51,39 +48,6 @@ export default function EquipmentFields({ values, onChange, equipmentSuppliers, 
             ))}
           </select>
         </label>
-      )}
-
-      <div className="block">
-        <span className="text-sm font-medium text-slate-700">장비 출처</span>
-        <label className={`mt-1 flex items-center gap-2.5 rounded-lg border px-3 py-2.5 select-none ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-slate-50'} ${values.isExternal ? 'border-amber-300 bg-amber-50/40' : 'border-slate-200'}`}>
-          <input
-            type="checkbox"
-            checked={!values.isExternal}
-            onChange={(e) => patch({ isExternal: !e.target.checked })}
-            disabled={disabled}
-            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-          />
-          <span className="text-sm font-semibold text-slate-800">우리 장비</span>
-          <span className="text-xs text-slate-400">— 체크 해제 시 외부 조달 장비</span>
-        </label>
-      </div>
-
-      {values.isExternal && (
-        <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
-          <p className="text-xs text-amber-700">외부에서 조달한 장비입니다. 소유주(사업자) 정보를 입력하세요. <strong>사업자등록증</strong>은 장비 등록 후 상세 화면의 '서류 추가'로 등록할 수 있습니다. 사진(파일)이 없으면 나중에 추가해도 됩니다.</p>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">소유주(사업자)명</span>
-            <input type="text" value={values.vehicleOwnerName}
-              onChange={(e) => patch({ vehicleOwnerName: e.target.value })} disabled={disabled}
-              placeholder="○○건설기계" className="input mt-1" />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">사업자등록번호</span>
-            <input type="text" value={values.vehicleOwnerBusinessNo}
-              onChange={(e) => patch({ vehicleOwnerBusinessNo: e.target.value })} disabled={disabled}
-              placeholder="123-45-67890" className="input mt-1" />
-          </label>
-        </div>
       )}
 
       <label className="block">
@@ -164,7 +128,4 @@ export const EMPTY_EQUIPMENT_FIELDS: EquipmentFieldValues = {
   model: '',
   manufacturer: '',
   year: '',
-  isExternal: false,
-  vehicleOwnerName: '',
-  vehicleOwnerBusinessNo: '',
 };

@@ -2,7 +2,7 @@
 name: planning
 description: 요구사항을 검증 가능한 목표로 분해하고 구현 계획을 세우는 기획 에이전트. 코드를 수정하기 전 "무엇을·왜·어떤 순서로" 정할 때 사용. 읽기 전용 — 코드/문서를 탐색해 근거 기반 계획만 산출한다.
 tools: Read, Grep, Glob, WebFetch, WebSearch
-model: fable
+model: opus
 effort: max
 ---
 

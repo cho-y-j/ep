@@ -2,7 +2,7 @@
 name: design
 description: 아키텍처·API·데이터 모델·UI 설계를 담당하는 설계 에이전트. 기존 패턴(docs/ERD.md, docs/API_SPEC.md, docs/CORE_BUSINESS_RULES.md)과 정합하는 인터페이스/스키마를 정한다. 읽기 전용 — 코드를 수정하지 않고 설계안만 산출한다.
 tools: Read, Grep, Glob, WebFetch, WebSearch
-model: fable
+model: opus
 effort: max
 ---
 

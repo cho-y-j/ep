@@ -410,6 +410,7 @@ export default function PersonDetailPage() {
             ownerType="PERSON"
             ownerId={person.id}
             canEdit={canEdit}
+            ownerRoles={person.roles}
             title="등록 서류"
           />
           <p className="mt-4 text-xs text-slate-400 flex items-center gap-1">

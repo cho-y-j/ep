@@ -19,7 +19,7 @@ type Props = {
   supplierType?: CompanyType;
   required?: boolean;
   disabled?: boolean;
-  /** 간소 등록 — 이름+전화만 받고 생년월일/역할 입력은 숨김 (등록 후 상세에서 추가). */
+  /** 간소 등록 — 생년월일 입력을 숨기고 이름·전화·역할만 받음 (역할은 필수 서류 안내에 사용). */
   minimal?: boolean;
 };
 
@@ -121,10 +121,12 @@ export default function PersonFields({ values, onChange, suppliers, supplierType
         </div>
       )}
 
-      {!minimal && (
       <fieldset>
         <legend className="text-sm font-medium text-slate-700 mb-2">
-          역할 (다중 선택) <span className="text-xs text-slate-400 font-semibold">(선택)</span>
+          역할 (다중 선택){' '}
+          {required
+            ? <span className="text-xs text-rose-600 font-semibold">(필수)</span>
+            : <span className="text-xs text-slate-400 font-semibold">(선택)</span>}
           {effectiveType && (
             <span className="ml-2 text-xs text-slate-500">
               {effectiveType === 'EQUIPMENT' ? '장비공급사 — 조종원만 가능' : '인력공급사 — 6개 역할 선택 가능'}
@@ -150,7 +152,6 @@ export default function PersonFields({ values, onChange, suppliers, supplierType
           </div>
         )}
       </fieldset>
-      )}
     </div>
   );
 }

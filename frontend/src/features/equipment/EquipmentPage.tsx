@@ -148,6 +148,7 @@ export default function EquipmentPage() {
           <EquipmentCreateForm
             equipmentSuppliers={isAdmin ? equipmentSuppliers : undefined}
             requireSupplierId={isAdmin}
+            showDocumentStep
             onCreated={handleCreated}
             onCancel={() => setCreating(false)}
           />

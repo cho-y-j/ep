@@ -215,6 +215,7 @@ export default function PersonPage() {
             suppliers={isAdmin ? supplierCompanies : undefined}
             selfSupplierType={selfSupplierType}
             requireSupplierId={isAdmin}
+            showDocumentStep
             onCreated={handleCreated}
             onCancel={() => setCreating(false)}
           />

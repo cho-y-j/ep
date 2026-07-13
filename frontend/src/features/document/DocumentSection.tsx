@@ -18,9 +18,13 @@ type Props = {
   title?: string;
   /** 이 이름의 서류타입을 목록에서 제외 (예: 내부 장비일 때 외부장비 사업자등록증 숨김) */
   excludeTypeName?: string;
+  /** EQUIPMENT 자원의 카테고리 — 업로드 다이얼로그에서 필수/선택 서류 그룹핑에 사용. */
+  ownerCategory?: string;
+  /** PERSON 자원의 역할 목록 — 업로드 다이얼로그에서 필수/선택 서류 그룹핑에 사용. */
+  ownerRoles?: string[];
 };
 
-export default function DocumentSection({ ownerType, ownerId, canEdit, title = '서류', excludeTypeName }: Props) {
+export default function DocumentSection({ ownerType, ownerId, canEdit, title = '서류', excludeTypeName, ownerCategory, ownerRoles }: Props) {
   const [docs, setDocs] = useState<DocumentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -188,6 +192,8 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
           ownerType={ownerType}
           ownerId={ownerId}
           types={Array.from(docTypes.values())}
+          ownerCategory={ownerCategory}
+          ownerRoles={ownerRoles}
           onClose={() => setUploading(false)}
           onUploaded={() => { setUploading(false); void load(); }}
         />
