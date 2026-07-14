@@ -14,7 +14,7 @@ import fitz
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
-from . import config, document_align, ocr_engine, preprocess
+from . import config, document_align, ocr_engine, pii_mask, preprocess
 from .reading_order import reconstruct
 
 
@@ -117,6 +117,20 @@ async def extract_regions(
         except Exception:
             pts = None
     return document_align.extract_regions(img, tmpl, pts, bool(return_warped))
+
+
+@app.post("/mask-pii")
+async def mask_pii(image: UploadFile = File(...)):
+    data = await image.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="empty file")
+    try:
+        img = _load_image(data, image.filename, image.content_type)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"cannot decode image: {e}")
+    if img is None:
+        raise HTTPException(status_code=400, detail="invalid image")
+    return pii_mask.mask_pii(img)
 
 
 @app.post("/detect-corners")

@@ -43,9 +43,10 @@ public class PaddleOcrClient {
 
     @PostConstruct
     void init() {
-        // fullText 응답은 수 KB~수십 KB 수준 — 여유 있게 8MB 버퍼.
+        // fullText 는 수 KB~수십 KB 지만 /mask-pii 는 원본 해상도 PNG 를 base64 로 실어보낸다(수~수십 MB).
+        // 폰 사진(수 MB) 마스킹 응답이 버퍼 초과로 유실(→ fail-open 원본 저장)되지 않도록 32MB 로 확대.
         this.webClient = WebClient.builder()
-                .codecs(c -> c.defaultCodecs().maxInMemorySize(8 * 1024 * 1024))
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(32 * 1024 * 1024))
                 .build();
         log.info("PaddleOcrClient init: url={} timeout={}s", paddleUrl, timeoutSeconds);
     }
@@ -174,6 +175,34 @@ public class PaddleOcrClient {
             return objectMapper.readTree(response);
         } catch (Exception e) {
             log.warn("paddle detect-corners call failed url={} error={}", paddleUrl, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * PII 이미지 주민/법인번호 영역 검정 마스킹. 파일 → /mask-pii →
+     * 응답 JSON({ok, masked, masked_image_base64}) 그대로 반환. 실패 / 타임아웃 시 null.
+     * {@link com.skep.document.PiiImageMasker} 전용 — Vision 대신 로컬 paddle 로 마스킹.
+     */
+    public JsonNode maskPii(byte[] fileBytes, String filename) {
+        try {
+            MultipartBodyBuilder builder = new MultipartBodyBuilder();
+            builder.part("image", new ByteArrayResource(fileBytes) {
+                @Override public String getFilename() { return filename; }
+            }).contentType(MediaType.APPLICATION_OCTET_STREAM);
+
+            String response = webClient.post()
+                    .uri(paddleUrl + "/mask-pii")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters.fromMultipartData(builder.build()))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .block();
+            if (response == null) return null;
+            return objectMapper.readTree(response);
+        } catch (Exception e) {
+            log.warn("paddle mask-pii call failed url={} error={}", paddleUrl, e.getMessage());
             return null;
         }
     }
