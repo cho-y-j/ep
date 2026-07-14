@@ -32,3 +32,6 @@ frontend/vite.dev-local.config.ts
 
 # Firebase 서비스계정 키 (비밀값 — 절대 커밋 금지)
 backend/firebase-admin-key.json
+
+# 실제 신분증/면허 등 PII 샘플 — 커밋 금지
+test/
