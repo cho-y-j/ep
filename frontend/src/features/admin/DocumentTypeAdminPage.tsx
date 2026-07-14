@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
@@ -17,6 +18,7 @@ type DocType = {
   sort_order: number;
   applies_to_person_roles: string | null;
   applies_to_categories: string | null;
+  ocr_region_template: string | null;
 };
 
 const APPLIES_LABEL: Record<DocType['applies_to'], string> = {
@@ -58,6 +60,7 @@ function Chips({ value, options, labels, onChange }: {
 }
 
 export default function DocumentTypeAdminPage() {
+  const navigate = useNavigate();
   const [types, setTypes] = useState<DocType[]>([]);
   const [loading, setLoading] = useState(true);
   // 신규 추가 폼
@@ -179,6 +182,9 @@ export default function DocumentTypeAdminPage() {
                   {groups[grp].map((t) => (
                     <div key={t.id} className={`px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 ${t.active ? '' : 'opacity-50'}`}>
                       <span className="font-semibold text-slate-900 w-40 truncate">{t.name}</span>
+                      {t.ocr_region_template && (
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">영역맵</span>
+                      )}
                       <label className="flex items-center gap-1.5 text-sm text-slate-700">
                         <input type="checkbox" checked={t.required}
                                onChange={(e) => patch(t.id, { required: e.target.checked })} />
@@ -200,7 +206,11 @@ export default function DocumentTypeAdminPage() {
                                  onChange={(csv) => patch(t.id, { applies_to_categories: csv })} />
                         </div>
                       )}
-                      <label className="flex items-center gap-1.5 text-xs text-slate-500 ml-auto">
+                      <button type="button" onClick={() => navigate(`/admin/document-types/${t.id}/regions`)}
+                        className="ml-auto text-xs px-2.5 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50">
+                        영역 편집
+                      </button>
+                      <label className="flex items-center gap-1.5 text-xs text-slate-500">
                         <input type="checkbox" checked={t.active}
                                onChange={(e) => patch(t.id, { active: e.target.checked })} />
                         활성

@@ -103,6 +103,15 @@ verify:
     url: ${VERIFY_INNER_API_URL:http://verify-api:8081}
   api-key: ${VERIFY_API_KEY:}
 
+# V82: 서류 만료일 로컬 OCR 비동기 백필. verify_endpoint 없는 만료+OCR 타입(정기검사증)만 대상.
+# engine=off default(백필 미동작). paddle=로컬 PaddleOCR, google=verify-api OCR expiryDate 재사용.
+# verify.enabled 와 독립 — engine=paddle 은 외부 검증 off 여도 동작.
+ocr:
+  engine: ${OCR_ENGINE:off}
+  paddle:
+    url: ${PADDLE_OCR_URL:http://127.0.0.1:8100}
+    timeout-seconds: 120
+
 # Phase S-8.4: OnlyOffice 인플레이스 편집. enabled=false 일 때 status endpoint 가 disabled 응답.
 onlyoffice:
   enabled: ${ONLYOFFICE_ENABLED:false}

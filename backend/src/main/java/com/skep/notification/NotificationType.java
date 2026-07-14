@@ -9,6 +9,8 @@ public final class NotificationType {
     public static final String DOCUMENT_VERIFIED = "DOCUMENT_VERIFIED";
     public static final String DOCUMENT_EXPIRING = "DOCUMENT_EXPIRING";
     public static final String DOCUMENT_EXPIRED = "DOCUMENT_EXPIRED";
+    /** V82: 로컬 OCR 비동기 백필로 서류 만료일이 자동 추출/입력됨 → 소유사. */
+    public static final String DOCUMENT_EXPIRY_EXTRACTED = "DOCUMENT_EXPIRY_EXTRACTED";
     public static final String ASSIGNMENT_OVERRIDDEN = "ASSIGNMENT_OVERRIDDEN";
 
     /** S-10: 견적 요청 발송 → 공급사. */

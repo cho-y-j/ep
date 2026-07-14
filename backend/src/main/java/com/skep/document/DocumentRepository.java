@@ -1,10 +1,12 @@
 package com.skep.document;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface DocumentRepository extends JpaRepository<Document, Long> {
@@ -133,6 +135,16 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     List<Document> findExpiringForCompany(@Param("companyId") Long companyId, @Param("maxDate") LocalDate maxDate);
 
     long countByOwnerTypeAndOwnerIdIn(OwnerType ownerType, List<Long> ownerIds);
+
+    /**
+     * V82: OCR 백필 — expiry_date 가 아직 NULL 인 경우에만 만료일을 채운다.
+     * 타깃 UPDATE(전체 row rewrite 아님)라 AutoVerify 등 다른 async write 와의 lost-update 회피.
+     * expiry_date IS NULL 가드로 사용자가 그 사이 직접 입력한 값을 오탐이 덮지 않음(멱등).
+     */
+    @Modifying
+    @Query("update Document d set d.expiryDate = :date, d.updatedAt = :now "
+            + "where d.id = :id and d.expiryDate is null")
+    int updateExpiryIfNull(@Param("id") Long id, @Param("date") LocalDate date, @Param("now") LocalDateTime now);
 
     /** S-11: 회사 사업자등록증 게이트 검사 — chain head VERIFIED 인 서류가 있는지. */
     @Query("""

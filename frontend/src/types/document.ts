@@ -28,6 +28,7 @@ export type DocumentTypeResponse = {
   required_fields?: string | null;        // JSON 배열 문자열
   applies_to_person_roles?: string | null;  // PersonRole CSV, null=모든 역할
   applies_to_categories?: string | null;    // EquipmentCategory CSV, null=모든 카테고리
+  ocr_region_template?: string | null;      // 영역-크롭 OCR 템플릿 JSON, null=미사용 (정렬/영역OCR 분기 기준)
 };
 
 export type DocumentResponse = {

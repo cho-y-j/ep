@@ -7,13 +7,26 @@
 - (없음 — 자동화 파이프라인 일단락)
 
 ## 예정 / 백로그
-- [ ] 이번 세션 전체 커밋 + 푸시 (사용자 요청 시) — 정산 재설계 + 감사수정 + UX P0 + 자동화 E/D/A
+- [ ] 이번 세션 전체 커밋 + 푸시 (사용자 요청 시) — OCR 만료 백필(paddle-ocr 서비스 + verify/OcrExpiry*·V82) + **영역-템플릿 OCR/4모서리 정렬**(paddle document_align·detect개선 + backend Ocr*Region*·DetectCorners·V83/V84 + FE DocumentCornerAligner) + **admin PATCH 영속 수정** + 수집링크·필터·미리보기·체크리스트 + 이전 미커밋분(safe-8 등)
+- [ ] Phase 3: 수퍼어드민 영역지정 도구(샘플→4모서리→박스 드로잉→field key 배정→ocr_region_template 저장, DocumentCornerAligner 재사용, admin PATCH로 저장)
+- [ ] 운전면허·화물자격·조종사면허·안전교육이수증(QR) 템플릿 + 검증배선 — 각 실샘플 필요
+- [ ] 로컬 영역추출→정부API(RIMS/CARGO) 검증 배선으로 Vision 대체(면허/화물, Vision 결제 불필요화). 안전교육=QR 추출 진위, 조종사면허=만료관리
+- [ ] prod paddle 배치(도커화 or host-gateway) + prod `OCR_ENGINE=paddle` 주입 — 현재 dev(호스트 백엔드→localhost:8100)만 동작
+- [ ] FE 만료필수 완화 게이트가 `ocr.engine` 미인지 → prod engine=off면 FE(선택)/BE(필수) 불일치. engine 상태 FE 노출로 정합화(현재 의도배포 engine=paddle에선 일치)
+- [ ] 추가 장비 만료타입 OCR 백필 확장(보험증권·안전인증서 등, 데이터 추가로 ocr_enabled=TRUE+extract 지정)
+- [ ] ADMIN/BP 통합 서류관리 화면(현재 board·검토큐·만료페이지·자원상세 4분할 — 공급사는 한 화면 OK)
+- [ ] BP 서류심사 상태머신(심사중→승인/반려) + DocumentReview↔ResourceCheck/WorkPlan 연결(현재 단방향 우편함)
+- [ ] 수퍼어드민 대행 등록 시 공급사의 하위협력사를 소유자로 선택하는 UI(현재 create 폼 미노출)
 - [ ] 자동화 나머지 (UX 리포트 B/F/G/H/I): 서명 대기 알림·현황 자동화 등
 - [ ] BP 대시보드 "서명 대기" 집계 — 전역 집계 엔드포인트 백엔드 신설 후 위젯에 추가
 - [ ] D 근본 개선: 작업확인서↔견적요청 링크 신설(이중계상 제거)
 - [ ] 워치 낙상감지 Phase3(Enforce 모드)·임계값 튜닝 — 실기기 데이터 확보 후
 
 ## 완료 (최근, 검증까지)
+- [x] (2026-07-14) 로컬 OCR 문서 6종 템플릿 + Phase3 도구 — 자동차·건설기계 등록증 + 운전면허·화물·조종사·안전교육(V83/84/85), 실샘플 detect→warp→추출 검증, Phase3 수퍼어드민 영역지정 도구(코드+백엔드 검증)
+- [x] (2026-07-14) 로컬 영역-템플릿 OCR Phase1·2 — 공식문서 필드 크롭추출 ~1-2초, 폰사진 4모서리 정렬(배경제거+원근보정), 자동차/건설기계 등록증 템플릿(V83/V84), detect_corners Otsu개선, admin PATCH 영속버그 수정 — 독립QA 검증(회귀0)
+- [x] (2026-07-14) 서류 파이프라인 실동작 검증 — 장비임대사업자 등록→서류업로드→서류관리→만료→BP전달 8단계 실데이터 통과(이미 동작)
+- [x] (2026-07-14) OCR 만료 자동 백필(정기검사증 로컬 paddle 비동기, V82) — 독립 QA 검증됨(A즉시응답0.3s·B 2026-05-19·C알림, 단위테스트 7/7). 면허/화물=Vision 즉시확인 무손상
 - [x] 정산 재설계(÷25·근무일수·OT·현장정산일 V79) — 독립 QA 검증됨
 - [x] 5역할 기능·성능 감사 — 부분검증(핵심 통과, 경미 결함 식별)
 - [x] 감사 수정: 클라이언트 오류 500→400, 견적/안전알림 N+1 배치 — 독립 QA 검증됨

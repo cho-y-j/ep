@@ -4,6 +4,8 @@ import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { useSubSuppliers } from '../company/useSubSuppliers';
 import DocumentSection from '../document/DocumentSection';
+import DocumentCornerAligner from '../document/DocumentCornerAligner';
+import { detectDocumentCorners } from '../document/detectCorners';
 import EquipmentFields, { EMPTY_EQUIPMENT_FIELDS, type EquipmentFieldValues } from './EquipmentFields';
 import type { CompanyResponse } from '../../types/auth';
 import type { EquipmentResponse } from '../../types/equipment';
@@ -33,39 +35,119 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
   const [created, setCreated] = useState<EquipmentResponse | null>(null);
   // 문서-우선: 자동차등록증 파일을 먼저 올려 OCR 프리필 → 등록 후 그대로 서류 첨부. (선택 경로)
   const [regFile, setRegFile] = useState<File | null>(null);
+  const [regPreviewUrl, setRegPreviewUrl] = useState<string | null>(null);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrNote, setOcrNote] = useState('');
+  // Phase 2 정렬(4모서리 맞추기) — 이미지 등록증일 때만. alignTypeId = 영역맵 보유 자동차등록증 doc-type id.
+  const [aligning, setAligning] = useState(false);
+  const [alignTypeId, setAlignTypeId] = useState<number | null>(null);
+  const [alignInitialCorners, setAlignInitialCorners] = useState<[number, number][] | undefined>(undefined);
 
-  // 자동차등록증 픽 → ocr-preview 로 차량번호·차명·연식 프리필. 실패/미설정이면 빈 값 유지(수기 입력).
+  // 자동차등록증 픽 → 차량번호·차명·연식 프리필. 템플릿 보유 시 로컬 영역-크롭 OCR(ocr-region-preview),
+  // 아니면 기존 Vision(ocr-preview). 실패/미설정이면 빈 값 유지(수기 입력).
   async function onRegFilePicked(f: File) {
     setRegFile(f);
     setOcrBusy(true);
     setOcrNote('');
     try {
+      // 자동차등록증 doc-type 조회 → 영역맵(ocr_region_template) 유무로 OCR 경로 분기.
+      let regionTypeId: number | null = null;
+      try {
+        const typesRes = await api.get<Array<{ id: number; name: string; ocr_region_template?: string | null }>>(
+          '/api/document-types', { params: { appliesTo: 'EQUIPMENT' } });
+        const vt = typesRes.data.find((t) => t.name === '자동차등록증' && !!t.ocr_region_template);
+        regionTypeId = vt ? vt.id : null;
+      } catch { /* 조회 실패 시 Vision 경로로 폴백 */ }
+
+      // Phase 2: 이미지 등록증 + 영역맵 보유 → 4모서리 정렬 단계(자동검출 프리필). PDF/템플릿없음은 Phase 1 그대로.
+      if (regionTypeId != null && f.type.startsWith('image/')) {
+        const corners = await detectDocumentCorners(f);
+        setAlignTypeId(regionTypeId);
+        setAlignInitialCorners(corners);
+        setAligning(true);
+        return; // finally 가 ocrBusy 를 내림
+      }
+
       const fd = new FormData();
       fd.append('file', f);
-      fd.append('ocrType', 'EQUIPMENT_REGISTRATION');
-      const res = await api.post<{ ok: boolean; fields?: Record<string, string> }>(
-        '/api/documents/ocr-preview', fd,
-        { headers: { 'Content-Type': 'multipart/form-data' } },
-      );
-      const ocr = res.data.fields ?? {};
-      if (res.data.ok && (ocr.vehicleNumber || ocr.modelName || ocr.productionYear)) {
-        setValues((prev) => ({
-          ...prev,
-          vehicleNo: ocr.vehicleNumber || prev.vehicleNo,
-          model: ocr.modelName || prev.model,
-          year: ocr.productionYear || prev.year,
-        }));
-        setOcrNote('자동 추출 완료 — 아래 값을 확인/수정 후 등록하세요.');
+      let ok = false;
+      if (regionTypeId != null) {
+        // 로컬 영역-크롭 OCR (warp 없이 평면 가정). 응답 fields 는 snake_case.
+        fd.append('documentTypeId', String(regionTypeId));
+        const res = await api.post<{ ok: boolean; fields?: Record<string, string> }>(
+          '/api/documents/ocr-region-preview', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        const ocr = res.data.fields ?? {};
+        ok = res.data.ok && !!(ocr.vehicle_no || ocr.model || ocr.year);
+        if (ok) {
+          setValues((prev) => ({
+            ...prev,
+            vehicleNo: ocr.vehicle_no || prev.vehicleNo,
+            model: ocr.model || prev.model,
+            year: ocr.year || prev.year,
+          }));
+        }
       } else {
-        setOcrNote('자동 추출을 못 했습니다. 아래 항목을 직접 입력하세요. (등록증은 등록 후 그대로 첨부됩니다)');
+        // 템플릿 없음 → 기존 Vision 경로.
+        fd.append('ocrType', 'EQUIPMENT_REGISTRATION');
+        const res = await api.post<{ ok: boolean; fields?: Record<string, string> }>(
+          '/api/documents/ocr-preview', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        const ocr = res.data.fields ?? {};
+        ok = res.data.ok && !!(ocr.vehicleNumber || ocr.modelName || ocr.productionYear);
+        if (ok) {
+          setValues((prev) => ({
+            ...prev,
+            vehicleNo: ocr.vehicleNumber || prev.vehicleNo,
+            model: ocr.modelName || prev.model,
+            year: ocr.productionYear || prev.year,
+          }));
+        }
       }
+      setOcrNote(ok
+        ? '자동 추출 완료 — 아래 값을 확인/수정 후 등록하세요.'
+        : '자동 추출을 못 했습니다. 아래 항목을 직접 입력하세요. (등록증은 등록 후 그대로 첨부됩니다)');
     } catch {
       setOcrNote('OCR 호출 실패 — 직접 입력하세요. (등록증은 등록 후 그대로 첨부됩니다)');
     } finally {
       setOcrBusy(false);
     }
+  }
+
+  // 정렬 완료 → 맞춘 4모서리(원본 px)로 warp+영역-크롭 OCR → 차량번호·차명·연식 프리필.
+  async function onAlignConfirm(corners: [number, number][]) {
+    setAligning(false);
+    if (!regFile || alignTypeId == null) return;
+    setOcrBusy(true);
+    setOcrNote('');
+    try {
+      const fd = new FormData();
+      fd.append('file', regFile);
+      fd.append('documentTypeId', String(alignTypeId));
+      fd.append('corners', JSON.stringify(corners));
+      const res = await api.post<{ ok: boolean; fields?: Record<string, string> }>(
+        '/api/documents/ocr-region-preview', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const ocr = res.data.fields ?? {};
+      const ok = res.data.ok && !!(ocr.vehicle_no || ocr.model || ocr.year);
+      if (ok) {
+        setValues((prev) => ({
+          ...prev,
+          vehicleNo: ocr.vehicle_no || prev.vehicleNo,
+          model: ocr.model || prev.model,
+          year: ocr.year || prev.year,
+        }));
+      }
+      setOcrNote(ok
+        ? '자동 추출 완료 — 아래 값을 확인/수정 후 등록하세요.'
+        : '자동 추출을 못 했습니다. 아래 항목을 직접 입력하세요. (등록증은 등록 후 그대로 첨부됩니다)');
+    } catch {
+      setOcrNote('OCR 호출 실패 — 직접 입력하세요. (등록증은 등록 후 그대로 첨부됩니다)');
+    } finally {
+      setOcrBusy(false);
+    }
+  }
+
+  function onAlignCancel() {
+    setAligning(false);
+    setOcrNote('정렬을 취소했습니다. 아래 항목을 직접 입력하세요. (등록증은 등록 후 그대로 첨부됩니다)');
   }
 
   // 조종원 후보 — 등록된 OPERATOR 인력 (백엔드가 actor 권한별로 스코프). EquipmentDefaultOperators 패턴 재사용.
@@ -78,6 +160,14 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
       })
       .catch(() => setOperatorCandidates([]));
   }, []);
+
+  // 자동차등록증 미리보기 — 이미지/PDF blob URL 생성, 파일 교체/언마운트 시 revoke.
+  useEffect(() => {
+    if (!regFile) { setRegPreviewUrl(null); return; }
+    const url = URL.createObjectURL(regFile);
+    setRegPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [regFile]);
 
   // 소유자 파생: 협력사(subSupplier)를 소유자로 고르면 조달(is_external)로 파생. 우리 회사면 supplierId='' → 본인 소유.
   const ownerCompany = values.supplierId !== ''
@@ -174,6 +264,7 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
   }
 
   return (
+    <>
     <form onSubmit={onSubmit} className="card mb-6 space-y-4">
       <h2 className="text-base font-bold">새 장비 등록</h2>
       <div className="rounded-lg border border-slate-200 bg-brand-50 p-3">
@@ -184,6 +275,17 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void onRegFilePicked(f); }} />
           {regFile ? `선택됨: ${regFile.name}` : '자동차등록증 파일 선택'}
         </label>
+        {regFile && regPreviewUrl && (
+          <div className="mt-2 flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2">
+            {regFile.type.startsWith('image/') ? (
+              <img src={regPreviewUrl} alt="자동차등록증 미리보기" className="max-h-56 max-w-full rounded object-contain" />
+            ) : regFile.type === 'application/pdf' ? (
+              <iframe src={regPreviewUrl} sandbox="" className="h-56 w-full border-0" title="자동차등록증 미리보기" />
+            ) : (
+              <div className="text-sm text-slate-500">미리보기 미지원</div>
+            )}
+          </div>
+        )}
         {ocrBusy && <p className="mt-1 text-xs text-slate-500">OCR 분석 중...</p>}
         {ocrNote && !ocrBusy && <p className="mt-1 text-xs text-slate-600">{ocrNote}</p>}
       </div>
@@ -246,5 +348,19 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
         </button>
       </div>
     </form>
+    {aligning && regPreviewUrl && (
+      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl max-w-4xl w-full max-h-[92vh] overflow-hidden shadow-2xl flex flex-col">
+          <div className="px-5 py-3 border-b border-slate-200 text-sm font-bold text-slate-900">자동차등록증 영역 맞추기</div>
+          <DocumentCornerAligner
+            imageUrl={regPreviewUrl}
+            initialCorners={alignInitialCorners}
+            onConfirm={(c) => void onAlignConfirm(c)}
+            onCancel={onAlignCancel}
+          />
+        </div>
+      </div>
+    )}
+    </>
   );
 }

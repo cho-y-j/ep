@@ -78,6 +78,10 @@ public class DocumentType {
     @Column(name = "applies_to_person_roles", columnDefinition = "text")
     private String appliesToPersonRoles;
 
+    /** 영역-크롭 OCR 템플릿(영역맵) JSON. NULL 이면 영역 OCR 미사용(기존 full-OCR 경로). */
+    @Column(name = "ocr_region_template", columnDefinition = "text")
+    private String ocrRegionTemplate;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -129,4 +133,5 @@ public class DocumentType {
     public void setDefaultValidMonths(Integer v) { this.defaultValidMonths = v; }
     public void setAppliesToCategories(String v) { this.appliesToCategories = v; }
     public void setAppliesToPersonRoles(String v) { this.appliesToPersonRoles = v; }
+    public void setOcrRegionTemplate(String v) { this.ocrRegionTemplate = v; }
 }

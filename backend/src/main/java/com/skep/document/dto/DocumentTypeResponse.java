@@ -22,7 +22,8 @@ public record DocumentTypeResponse(
         String requiredFields,          // JSON 문자열 — 프론트는 JSON.parse 필요
         // 역할/카테고리 매칭 — 서류 등록 시 필수/선택/기타 그룹핑에 사용 (읽기 전용)
         String appliesToPersonRoles,    // PersonRole CSV, null = 모든 역할
-        String appliesToCategories      // EquipmentCategory CSV, null = 모든 카테고리
+        String appliesToCategories,     // EquipmentCategory CSV, null = 모든 카테고리
+        String ocrRegionTemplate        // 영역-크롭 OCR 템플릿 JSON, null = 미사용 (FE 분기 기준)
 ) {
     public static DocumentTypeResponse from(DocumentType t) {
         return new DocumentTypeResponse(
@@ -32,7 +33,8 @@ public record DocumentTypeResponse(
                 t.isRequired(), t.isBlocksAssignment(), t.getDefaultValidMonths(),
                 t.isOcrEnabled(), t.getOcrExtractType(), t.getOcrExpiryFieldKey(),
                 t.getVerifyEndpoint(), t.getRequiredFields(),
-                t.getAppliesToPersonRoles(), t.getAppliesToCategories()
+                t.getAppliesToPersonRoles(), t.getAppliesToCategories(),
+                t.getOcrRegionTemplate()
         );
     }
 }

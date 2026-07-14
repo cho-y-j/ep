@@ -9,3 +9,7 @@ logging:
   level:
     com.skep: DEBUG
     org.springframework.security: DEBUG
+
+# V82: dev 는 로컬 PaddleOCR(localhost:8100)로 정기검사증 만료일 자동 백필 (VERIFY_ENABLED 과 독립).
+ocr:
+  engine: paddle

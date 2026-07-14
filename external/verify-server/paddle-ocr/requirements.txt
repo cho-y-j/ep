@@ -1,0 +1,10 @@
+# PP-OCRv5 는 paddleocr 3.x + paddlepaddle 3.x 필요. PyPI 의 paddlepaddle 는 CPU 빌드.
+paddleocr>=3.0,<4.0
+paddlepaddle>=3.0,<4.0
+opencv-python-headless>=4.8
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+pillow>=10.0
+PyMuPDF>=1.24
+numpy>=1.24,<2.0

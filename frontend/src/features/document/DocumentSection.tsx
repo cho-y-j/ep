@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
-import { type DocumentResponse, type DocumentTypeResponse, type OwnerType } from '../../types/document';
+import { daysUntilExpiry, type DocumentResponse, type DocumentTypeResponse, type OwnerType } from '../../types/document';
+import { groupDocTypes } from './docTypeGrouping';
 import OcrUploadDialog from './OcrUploadDialog';
 import DocumentCard from './DocumentCard';
 import DocumentVerifyDialog from './DocumentVerifyDialog';
 import DocumentHistoryDialog from './DocumentHistoryDialog';
+import DocFilePreviewDialog from '../compliance/DocFilePreviewDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { tokenStorage } from '../../lib/tokenStorage';
 
@@ -34,6 +36,10 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
   const [renewing, setRenewing] = useState<DocumentResponse | null>(null);
   const [verifying, setVerifying] = useState<{ doc: DocumentResponse; type: DocumentTypeResponse } | null>(null);
   const [historyOf, setHistoryOf] = useState<DocumentResponse | null>(null);
+  // 파일 클릭 시 인앱 blob 모달 (window.open 팝업차단 회피).
+  const [previewDoc, setPreviewDoc] = useState<DocumentResponse | null>(null);
+  // 체크리스트에서 미등록 항목 업로드 — 종류 고정(presetTypeId) 다이얼로그.
+  const [checklistTypeId, setChecklistTypeId] = useState<number | null>(null);
   const [docTypes, setDocTypes] = useState<Map<number, DocumentTypeResponse>>(new Map());
   // 보완요청 deep-link — ?supplementType={typeId} 로 진입하면 해당 서류 업로드 다이얼로그 자동 오픈
   const [supplementTypeId, setSupplementTypeId] = useState<number | null>(null);
@@ -86,23 +92,9 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, canEdit, docTypes]);
 
-  function downloadUrl(doc: DocumentResponse): string {
-    return `/api/documents/${doc.id}/file`;
-  }
-
-  async function openFile(doc: DocumentResponse) {
-    // 현재 토큰을 헤더에 실어 새 탭으로 보내려면 blob URL 생성
-    try {
-      const res = await api.get(downloadUrl(doc), { responseType: 'blob' });
-      const blob = new Blob([res.data], { type: doc.content_type });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      // 일정 시간 후 revoke (탭 로드 완료 후)
-      setTimeout(() => URL.revokeObjectURL(url), 30_000);
-    } catch {
-      // fallback: token URL param (불가) → 그냥 안내
-      alert('파일을 열 수 없습니다');
-    }
+  // 파일 열기 — 인앱 blob 모달(DocFilePreviewDialog)로 표시. 모달이 blob fetch/revoke 를 담당.
+  function openFile(doc: DocumentResponse) {
+    setPreviewDoc(doc);
   }
 
   async function confirmDelete() {
@@ -161,6 +153,18 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
     }
   }
 
+  // 체크리스트 — 이 자원에 필요한 서류 종류를 필수/선택으로 그룹핑 (docTypes 는 이미 appliesTo/제외 필터 적용됨).
+  const checklist = useMemo(
+    () => groupDocTypes(Array.from(docTypes.values()), ownerType, ownerRoles, ownerCategory),
+    [docTypes, ownerType, ownerRoles, ownerCategory],
+  );
+  // 종류별 대표 문서(있으면) — 상태 뱃지 판정용.
+  const docByType = useMemo(() => {
+    const m = new Map<number, DocumentResponse>();
+    for (const d of docs) if (!m.has(d.document_type_id)) m.set(d.document_type_id, d);
+    return m;
+  }, [docs]);
+
   // 토큰 없으면 노출 안 함
   if (!tokenStorage.access) return null;
 
@@ -197,6 +201,33 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
           onClose={() => setUploading(false)}
           onUploaded={() => { setUploading(false); void load(); }}
         />
+      )}
+
+      {canEdit && (checklist.required.length > 0 || checklist.optional.length > 0) && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+          {checklist.required.length > 0 && (
+            <>
+              <div className="mb-2 text-sm font-bold text-slate-900">필수 서류</div>
+              <div className="space-y-1.5">
+                {checklist.required.map((t) => (
+                  <ChecklistRow key={t.id} type={t} doc={docByType.get(t.id)} onUpload={() => setChecklistTypeId(t.id)} />
+                ))}
+              </div>
+            </>
+          )}
+          {checklist.optional.length > 0 && (
+            <details className="mt-3" open={checklist.required.length === 0}>
+              <summary className="cursor-pointer text-xs font-semibold text-slate-500 hover:text-slate-700">
+                선택 서류 ({checklist.optional.length}건) ▾
+              </summary>
+              <div className="mt-2 space-y-1.5">
+                {checklist.optional.map((t) => (
+                  <ChecklistRow key={t.id} type={t} doc={docByType.get(t.id)} onUpload={() => setChecklistTypeId(t.id)} />
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
       )}
 
       {loading ? (
@@ -263,6 +294,21 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
         />
       )}
 
+      {checklistTypeId !== null && (
+        <OcrUploadDialog
+          open
+          ownerType={ownerType}
+          ownerId={ownerId}
+          types={Array.from(docTypes.values())}
+          presetTypeId={checklistTypeId}
+          title={`${docTypes.get(checklistTypeId)?.name ?? '서류'} 업로드`}
+          ownerCategory={ownerCategory}
+          ownerRoles={ownerRoles}
+          onClose={() => setChecklistTypeId(null)}
+          onUploaded={() => { setChecklistTypeId(null); void load(); }}
+        />
+      )}
+
       {verifying && (
         <DocumentVerifyDialog
           open
@@ -289,6 +335,52 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
           onClose={() => setHistoryOf(null)}
         />
       )}
+
+      {previewDoc && (
+        <DocFilePreviewDialog
+          doc={previewDoc}
+          docType={docTypes.get(previewDoc.document_type_id)}
+          canReverify={canEdit && !!docTypes.get(previewDoc.document_type_id)?.verify_endpoint}
+          onClose={() => setPreviewDoc(null)}
+          onReverified={() => void load()}
+          onReupload={() => { const d = previewDoc; setPreviewDoc(null); setRenewing(d); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 체크리스트 한 줄 — 종류명 + 등록 상태 뱃지 + (미등록이면) 업로드 버튼. */
+function ChecklistRow({ type, doc, onUpload }: {
+  type: DocumentTypeResponse;
+  doc?: DocumentResponse;
+  onUpload: () => void;
+}) {
+  const days = daysUntilExpiry(doc?.expiry_date);
+  const expired = doc != null && days != null && days < 0;
+  const status = !doc
+    ? { label: '미등록', cls: 'bg-slate-200 text-slate-600' }
+    : expired
+      ? { label: '만료', cls: 'bg-rose-100 text-rose-700' }
+      : doc.verification_status === 'VERIFIED'
+        ? { label: '검증완료', cls: 'bg-emerald-100 text-emerald-700' }
+        : { label: '등록됨', cls: 'bg-blue-100 text-blue-700' };
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200">
+      <div className="min-w-0 flex-1 truncate text-sm text-slate-800">
+        {type.required && <span className="mr-1 text-rose-500">*</span>}
+        {type.name}
+        {type.has_expiry && <span className="ml-2 text-[10px] text-slate-400">만료관리</span>}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${status.cls}`}>{status.label}</span>
+        {!doc && (
+          <button type="button" onClick={onUpload}
+            className="rounded-md bg-brand-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-700">
+            업로드
+          </button>
+        )}
+      </div>
     </div>
   );
 }

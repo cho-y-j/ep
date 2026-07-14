@@ -15,6 +15,7 @@ import OpenBidsBoardPage from './features/quotation/OpenBidsBoardPage';
 import MyProposalsPage from './features/quotation/MyProposalsPage';
 import OutgoingNewPage from './features/outgoing/OutgoingNewPage';
 import DocumentTypeAdminPage from './features/admin/DocumentTypeAdminPage';
+import DocumentTypeRegionEditorPage from './features/admin/regionTemplate/DocumentTypeRegionEditorPage';
 import OutgoingSentPage from './features/outgoing/OutgoingSentPage';
 import InboxPage from './features/outgoing/InboxPage';
 import EquipmentPage from './features/equipment/EquipmentPage';
@@ -301,6 +302,10 @@ export default function App() {
         <Route
           path="/admin/document-types"
           element={<ProtectedRoute roles={['ADMIN']}><DocumentTypeAdminPage /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/document-types/:id/regions"
+          element={<ProtectedRoute roles={['ADMIN']}><DocumentTypeRegionEditorPage /></ProtectedRoute>}
         />
         <Route path="/work-plans/:id/edit" element={<ProtectedRoute><WorkPlanEditPage /></ProtectedRoute>} />
 

@@ -210,6 +210,8 @@ function MyDocsExpiryView() {
   const [filter, setFilter] = useState<'all' | 'expired' | 'soon' | 'valid'>('all');
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'EQUIPMENT' | 'PERSON' | 'COMPANY'>('all');
   const [sourcingFilter, setSourcingFilter] = useState<'all' | 'internal' | 'external'>('all');
+  // 협력사(external) 선택 시 특정 소유 협력사로 좁히는 서브필터. 값은 owner_business_name.
+  const [companyFilter, setCompanyFilter] = useState<string>('');
   const [q, setQ] = useState('');
   const [addDialog, setAddDialog] = useState<null | 'EQUIPMENT' | 'PERSON'>(null);
   type GroupSortKey = 'type' | 'name' | 'docs' | 'status';
@@ -278,10 +280,21 @@ function MyDocsExpiryView() {
     valid: rows.filter((r) => !r.expiry_date || daysFrom(r.expiry_date) > 60).length,
   };
 
+  // 협력사(외부) 소유 서류의 distinct 사업자명 — sourcingFilter='external' 서브필터 옵션.
+  const externalCompanies = useMemo(
+    () => Array.from(new Set(
+      rows.filter((r) => r.owner_external === true)
+        .map((r) => r.owner_business_name)
+        .filter((n): n is string => !!n),
+    )).sort((a, b) => a.localeCompare(b, 'ko')),
+    [rows],
+  );
+
   const qLower = q.trim().toLowerCase();
   const filtered = rows.filter((r) => {
     if (ownerFilter !== 'all' && r.owner_type !== ownerFilter) return false;
     if (sourcingFilter === 'external' && r.owner_external !== true) return false;
+    if (sourcingFilter === 'external' && companyFilter && r.owner_business_name !== companyFilter) return false;
     if (sourcingFilter === 'internal' && r.owner_external === true) return false;
     if (filter !== 'all') {
       const d = daysFrom(r.expiry_date);
@@ -444,12 +457,21 @@ function MyDocsExpiryView() {
           <option value="soon">임박</option>
           <option value="valid">정상</option>
         </select>
-        <select value={sourcingFilter} onChange={(e) => setSourcingFilter(e.target.value as typeof sourcingFilter)}
+        <select value={sourcingFilter} onChange={(e) => { setSourcingFilter(e.target.value as typeof sourcingFilter); setCompanyFilter(''); }}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
           <option value="all">사업자 전체</option>
           <option value="internal">우리 장비</option>
-          <option value="external">외부 조달</option>
+          <option value="external">협력사</option>
         </select>
+        {sourcingFilter === 'external' && (
+          <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+            <option value="">협력사 전체</option>
+            {externalCompanies.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        )}
         <div className="relative flex-1 min-w-[220px]">
           <input
             type="search"
@@ -599,7 +621,7 @@ function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onRever
           {group.owner_type === 'EQUIPMENT' ? (
             <span className="flex flex-col gap-0.5 items-start">
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold ${group.owner_external ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'}`}>
-                {group.owner_external ? '외부' : '내부'}
+                {group.owner_external ? '협력사' : '내부'}
               </span>
               {group.owner_external && group.owner_business_name && (
                 <span className="max-w-full truncate text-[11px] text-slate-500" title={group.owner_business_name}>{group.owner_business_name}</span>

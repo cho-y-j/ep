@@ -118,8 +118,11 @@ public class VerificationService {
                 /* 파싱 실패 시 manual 필드 무시 — OCR 으로 진행 */
             }
         }
-        // 2) OCR 추출 (가능한 경우) — 실패해도 계속 진행
-        if (type.isOcrEnabled() && type.getOcrExtractType() != null) {
+        // 2) OCR 추출 — region template 보유 타입(운전면허/화물/안전교육)은 업로드 시 로컬 영역추출로
+        //    manual_* 를 이미 채웠으므로(사용자 확정) Vision extractOcr 를 건너뛴다(중복·유료 호출 제거).
+        //    템플릿 없는 타입(사업자등록증 NTS_BIZ 등)만 기존대로 Vision 사용 → Vision 경로 무손상.
+        boolean hasRegionTemplate = type.getOcrRegionTemplate() != null && !type.getOcrRegionTemplate().isBlank();
+        if (type.isOcrEnabled() && type.getOcrExtractType() != null && !hasRegionTemplate) {
             JsonNode ocr = runOcr(doc, type.getOcrExtractType());
             if (ocr != null) {
                 extractedFields = flattenStringFields(ocr);

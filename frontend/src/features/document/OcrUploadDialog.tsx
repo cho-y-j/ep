@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { parseRequiredFields, type DocumentResponse, type DocumentTypeResponse, type OwnerType } from '../../types/document';
+import { groupDocTypes } from './docTypeGrouping';
+import DocumentCornerAligner from './DocumentCornerAligner';
+import { detectDocumentCorners } from './detectCorners';
 
 type Props = {
   open: boolean;
@@ -27,7 +30,7 @@ type Props = {
   onUploaded: (doc: DocumentResponse) => void;
 };
 
-type Step = 'pick' | 'ocr' | 'review';
+type Step = 'pick' | 'align' | 'ocr' | 'review';
 
 /** 서류 이름 → verify-api ocrType 매핑. */
 function ocrTypeFor(typeName: string): string | null {
@@ -159,23 +162,6 @@ function LicenseTypeChips({ value, onChange }: { value: string; onChange: (v: st
  * - 서류 종류 select + 파일 선택 → OCR (가능한 종류만) → 결과 검토 → 업로드
  * - OCR 안 되는 종류는 pick 단계에서 바로 업로드.
  */
-/** 이 자원(역할/카테고리)에 서류종류가 적용되는지 — 백엔드 ComplianceService.matches 와 동일 규칙. */
-function ownerMatches(t: DocumentTypeResponse, ownerType: OwnerType, roles?: string[], category?: string): boolean {
-  if (ownerType === 'EQUIPMENT') {
-    const csv = t.applies_to_categories;
-    if (!csv) return true;
-    if (!category) return false;
-    return csv.split(',').map((s) => s.trim()).includes(category);
-  }
-  if (ownerType === 'PERSON') {
-    const csv = t.applies_to_person_roles;
-    if (!csv) return true;
-    if (!roles || roles.length === 0) return false;
-    return csv.split(',').some((c) => roles.includes(c.trim()));
-  }
-  return true; // COMPANY
-}
-
 export default function OcrUploadDialog({
   open, ownerType, ownerId, types, presetTypeId, title,
   reverifyDocId, reverifyExtractedData, ownerRoles, ownerCategory,
@@ -190,6 +176,9 @@ export default function OcrUploadDialog({
   const [expiryDate, setExpiryDate] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
   const [step, setStep] = useState<Step>('pick');
+  /** 정렬 단계 — 자동검출 코너 프리필(원본 px) + 검출 진행중 여부. */
+  const [initialCorners, setInitialCorners] = useState<[number, number][] | undefined>(undefined);
+  const [alignBusy, setAlignBusy] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -199,21 +188,25 @@ export default function OcrUploadDialog({
     [types, typeId],
   );
   const ocrType = selectedType ? ocrTypeFor(selectedType.name) : null;
+  /** 이 doc-type 가 영역-크롭 OCR 템플릿을 가지면(=폰/스캔 정렬 대상) 이미지 파일에 한해 정렬 단계 삽입. */
+  const hasRegionTemplate = !!(selectedType?.ocr_region_template && selectedType.ocr_region_template.trim());
   /** 종류별 사전 정의된 필수 필드 (DocumentType.required_fields). OCR 실패 시 직접 입력. */
   const requiredFieldKeys = useMemo(
     () => (selectedType ? parseRequiredFields(selectedType.required_fields) : []),
     [selectedType],
   );
+  /** V82: 로컬 OCR 만료일 백필 대상 — verify 미보유 + ocr_enabled + has_expiry (정기검사증).
+   *  이 타입만 만료일 입력을 선택으로 완화(업로드 후 OCR 이 자동 백필). BE 게이트와 근사 일치. */
+  const isOcrBackfillTarget = !!selectedType
+    && !selectedType.verify_endpoint
+    && selectedType.ocr_enabled
+    && selectedType.has_expiry;
 
   /** 이 자원에 맞춰 종류를 필수/선택/기타로 그룹핑 (pick 단계 표시용). */
-  const typeGroups = useMemo(() => {
-    const matched = types.filter((t) => ownerMatches(t, ownerType, ownerRoles, ownerCategory));
-    return {
-      required: matched.filter((t) => t.required),
-      optional: matched.filter((t) => !t.required),
-      etc: types.filter((t) => !ownerMatches(t, ownerType, ownerRoles, ownerCategory)),
-    };
-  }, [types, ownerType, ownerRoles, ownerCategory]);
+  const typeGroups = useMemo(
+    () => groupDocTypes(types, ownerType, ownerRoles, ownerCategory),
+    [types, ownerType, ownerRoles, ownerCategory],
+  );
   const optLabel = (t: DocumentTypeResponse) =>
     `${t.name}${ocrTypeFor(t.name) ? ' (OCR 자동 추출)' : ''}${t.has_expiry ? ' · 만료일 필수' : ''}`;
 
@@ -239,6 +232,8 @@ export default function OcrUploadDialog({
       setExpiryDate('');
       setFields({});
       setStep('pick');
+      setInitialCorners(undefined);
+      setAlignBusy(false);
       setOcrError('');
       setBusy(false);
       setError(null);
@@ -327,10 +322,51 @@ export default function OcrUploadDialog({
     }
   }
 
+  /** 정렬 단계 진입 — 자동 모서리 검출로 프리필 후 DocumentCornerAligner 표시 (이미지 + 템플릿 보유 시). */
+  async function startAlign(f: File) {
+    setOcrError('');
+    setInitialCorners(undefined);
+    setAlignBusy(true);
+    setStep('align');
+    const corners = await detectDocumentCorners(f);
+    setInitialCorners(corners);
+    setAlignBusy(false);
+  }
+
+  /** 사용자가 맞춘 4모서리(원본 px)로 영역-크롭 OCR → fields 자동채움. */
+  async function runRegionOcr(corners: [number, number][]) {
+    if (!file || typeId === '') { setStep('review'); return; }
+    setStep('ocr');
+    setOcrError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('documentTypeId', String(typeId));
+      fd.append('corners', JSON.stringify(corners));
+      const res = await api.post<{ ok: boolean; fields?: Record<string, string>; reasonCode?: string }>(
+        '/api/documents/ocr-region-preview', fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      // 영역 OCR 응답 fields 는 required_fields 와 동일 snake_case → 재매핑 없이 merge.
+      if (res.data.ok && res.data.fields) {
+        setFields((prev) => ({ ...prev, ...res.data.fields }));
+      } else {
+        setOcrError(`영역 OCR 자동 추출 실패 (${res.data.reasonCode ?? 'UNKNOWN'}). 직접 입력해주세요.`);
+      }
+    } catch {
+      setOcrError('OCR 호출 실패. 직접 입력해주세요.');
+    } finally {
+      setStep('review');
+    }
+  }
+
   function onFilePicked(f: File) {
     setFile(f);
     setMaskedPreview(null);
-    if (ocrType) {
+    // 이미지 + 영역맵 보유 → 4모서리 정렬 단계. PDF·템플릿없음은 기존 흐름(Vision or 수기) 유지.
+    if (f.type.startsWith('image/') && hasRegionTemplate) {
+      void startAlign(f);
+    } else if (ocrType) {
       void runOcr(f, ocrType);
     } else {
       setStep('review');
@@ -360,7 +396,8 @@ export default function OcrUploadDialog({
     }
 
     if (!file || !typeId || !selectedType) { setError('서류 종류와 파일을 선택하세요'); return; }
-    if (selectedType.has_expiry && !expiryDate) { setError('만료일을 입력하세요'); return; }
+    // V82: OCR 백필 대상은 만료일 미입력 허용 (업로드 후 자동 백필). 그 외 has_expiry 타입은 필수.
+    if (selectedType.has_expiry && !expiryDate && !isOcrBackfillTarget) { setError('만료일을 입력하세요'); return; }
     setError(null);
     setBusy(true);
     try {
@@ -403,7 +440,7 @@ export default function OcrUploadDialog({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-         onClick={() => !busy && step !== 'ocr' && onClose()}>
+         onClick={() => !busy && step !== 'ocr' && step !== 'align' && onClose()}>
       <div className="bg-white rounded-xl max-w-4xl w-full max-h-[92vh] overflow-hidden shadow-2xl flex flex-col"
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
@@ -411,6 +448,7 @@ export default function OcrUploadDialog({
             <h3 className="text-lg font-bold text-slate-900">{title ?? '서류 추가'}</h3>
             <div className="text-xs text-slate-500 mt-0.5">
               {step === 'pick' && '서류 종류 + 파일 선택'}
+              {step === 'align' && '문서 영역 맞추기'}
               {step === 'ocr' && 'OCR 분석 중...'}
               {step === 'review' && (ocrType
                 ? 'OCR 결과 검토 후 업로드'
@@ -480,6 +518,27 @@ export default function OcrUploadDialog({
           </div>
         )}
 
+        {step === 'align' && (
+          <div className="flex flex-1 min-h-0 flex-col">
+            {alignBusy || !previewUrl ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 p-10 min-h-[300px]">
+                <div className="relative w-14 h-14">
+                  <div className="absolute inset-0 rounded-full border-4 border-slate-200" />
+                  <div className="absolute inset-0 rounded-full border-4 border-brand-600 border-t-transparent animate-spin" />
+                </div>
+                <div className="text-sm font-semibold text-slate-900">문서 모서리 자동 검출 중...</div>
+              </div>
+            ) : (
+              <DocumentCornerAligner
+                imageUrl={previewUrl}
+                initialCorners={initialCorners}
+                onConfirm={(corners) => void runRegionOcr(corners)}
+                onCancel={() => setStep('review')}
+              />
+            )}
+          </div>
+        )}
+
         {step === 'review' && (
           <div className="flex flex-1 min-h-0">
             <div className="w-1/2 border-r border-slate-200 bg-slate-100 flex flex-col">
@@ -521,9 +580,16 @@ export default function OcrUploadDialog({
                 )}
                 {selectedType?.has_expiry && !isReverify && (
                   <label className="block">
-                    <span className="text-xs font-medium text-slate-600">만료일 *</span>
+                    <span className="text-xs font-medium text-slate-600">
+                      만료일 {isOcrBackfillTarget ? '(선택)' : '*'}
+                    </span>
                     <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)}
                       className="input mt-1" />
+                    {isOcrBackfillTarget && (
+                      <p className="text-[11px] text-brand-600 mt-1">
+                        비워두면 업로드 후 OCR 이 약 1~2분 뒤 검사유효기간을 자동 입력합니다.
+                      </p>
+                    )}
                     <div className="flex gap-1 mt-1.5 flex-wrap">
                       {[
                         { label: '+6개월', m: 6 },

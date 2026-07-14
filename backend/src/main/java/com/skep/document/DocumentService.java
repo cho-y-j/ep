@@ -116,6 +116,10 @@ public class DocumentService {
     private final PiiImageMasker piiImageMasker;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
+    /** V82: 로컬 OCR 만료일 백필 엔진 (off|paddle|google). off 아니면 백필 대상 타입은 만료일 입력을 선택으로 완화. */
+    @org.springframework.beans.factory.annotation.Value("${ocr.engine:${OCR_ENGINE:off}}")
+    private String ocrEngine;
+
     public DocumentService(DocumentRepository docRepo, DocumentTypeRepository typeRepo,
                            EquipmentRepository equipmentRepo, PersonRepository personRepo,
                            CompanyRepository companyRepo,
@@ -179,7 +183,11 @@ public class DocumentService {
             throw ApiException.badRequest("DOCUMENT_TYPE_OWNER_MISMATCH",
                     type.getName() + " 는 " + ownerType + " 서류가 아닙니다");
         }
-        if (type.isHasExpiry() && expiryDate == null) {
+        // V82: verify_endpoint 없는 만료+OCR 타입(=로컬 OCR 백필 대상, 예: 정기검사증)은 만료일 입력을 선택으로 완화.
+        //      업로드 직후 비동기 OCR 이 검사유효기간을 자동 백필한다. 그 외(면허/화물 등 verify 타입 포함)는 기존대로 필수.
+        boolean ocrBackfillTarget = (type.getVerifyEndpoint() == null || type.getVerifyEndpoint().isBlank())
+                && type.isOcrEnabled() && type.isHasExpiry() && !"off".equalsIgnoreCase(ocrEngine);
+        if (type.isHasExpiry() && expiryDate == null && !ocrBackfillTarget) {
             throw ApiException.badRequest("EXPIRY_REQUIRED", type.getName() + " 는 만료일 입력 필수입니다");
         }
 

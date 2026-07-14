@@ -51,6 +51,7 @@ public class DocumentTypeAdminController {
             Integer defaultValidMonths,
             String appliesToCategories,    // null 이면 변경 안 함, 빈 문자열이면 매핑 해제
             String appliesToPersonRoles,
+            String ocrRegionTemplate,      // null 이면 변경 안 함, 빈 문자열이면 템플릿 해제
             Boolean active
     ) {}
 
@@ -95,10 +96,12 @@ public class DocumentTypeAdminController {
             t.setAppliesToCategories(body.appliesToCategories().isBlank() ? null : body.appliesToCategories());
         if (body.appliesToPersonRoles() != null)
             t.setAppliesToPersonRoles(body.appliesToPersonRoles().isBlank() ? null : body.appliesToPersonRoles());
+        if (body.ocrRegionTemplate() != null)
+            t.setOcrRegionTemplate(body.ocrRegionTemplate().isBlank() ? null : body.ocrRegionTemplate());
         if (body.active() != null) {
             if (body.active()) t.activate(); else t.deactivate();
         }
-        return t;
+        return repo.save(t);   // open-in-view=false + @Transactional 부재 → detached 이므로 명시 save 필요(선재 버그 수정)
     }
 
     @DeleteMapping("/{id}")
@@ -108,5 +111,6 @@ public class DocumentTypeAdminController {
                 .orElseThrow(() -> ApiException.notFound("DOCUMENT_TYPE_NOT_FOUND",
                         "서류 타입 " + id + " 없음"));
         t.deactivate();
+        repo.save(t);   // detached → 명시 save (update()와 동일 선재 버그)
     }
 }
