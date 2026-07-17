@@ -93,6 +93,7 @@ public class DocumentController {
     ) {
         LocalDate expiry = parseDate(expiryDate);
         java.util.Map<String, String> manualFields = new java.util.HashMap<>();
+        String corners = allParams != null ? allParams.get("corners") : null; // 4모서리 정렬 크롭 저장용
         if (allParams != null) {
             for (var e : allParams.entrySet()) {
                 if (e.getKey() != null && e.getKey().startsWith("manual") && e.getValue() != null && !e.getValue().isBlank()) {
@@ -100,7 +101,7 @@ public class DocumentController {
                 }
             }
         }
-        return service.upload(ownerType, ownerId, documentTypeId, expiry, file, manualFields, actor);
+        return service.upload(ownerType, ownerId, documentTypeId, expiry, file, manualFields, corners, actor);
     }
 
     @GetMapping("/{id}/file")

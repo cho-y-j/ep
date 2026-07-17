@@ -43,6 +43,8 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
   const [docTypes, setDocTypes] = useState<Map<number, DocumentTypeResponse>>(new Map());
   // 보완요청 deep-link — ?supplementType={typeId} 로 진입하면 해당 서류 업로드 다이얼로그 자동 오픈
   const [supplementTypeId, setSupplementTypeId] = useState<number | null>(null);
+  // EQUIPMENT: 종류×서류 junction requirement (doc_type_id → required). 없으면 기존 CSV/글로벌 required.
+  const [reqByTypeId, setReqByTypeId] = useState<Map<number, boolean> | undefined>(undefined);
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
@@ -78,6 +80,30 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownerType, ownerId, excludeTypeName]);
+
+  // 자원별 junction 기반 필수/선택/해당없음 조회 (어드민 체크리스트 반영).
+  // EQUIPMENT=종류×서류, PERSON=역할×서류(여러 역할이면 합집합, required 는 OR). 없으면 기존 CSV/글로벌.
+  const rolesKey = ownerRoles?.join(',') ?? '';
+  useEffect(() => {
+    if (ownerType === 'EQUIPMENT' && ownerCategory) {
+      api.get<Array<{ document_type_id: number; required: boolean }>>(`/api/equipment-types/${ownerCategory}/documents`)
+        .then((r) => setReqByTypeId(new Map(r.data.map((x) => [x.document_type_id, x.required]))))
+        .catch(() => setReqByTypeId(undefined));
+      return;
+    }
+    if (ownerType === 'PERSON' && rolesKey) {
+      Promise.all(rolesKey.split(',').map((role) =>
+        api.get<Array<{ document_type_id: number; required: boolean }>>(`/api/person-roles/${role}/documents`)
+          .then((r) => r.data).catch(() => [] as Array<{ document_type_id: number; required: boolean }>)))
+        .then((lists) => {
+          const m = new Map<number, boolean>();
+          for (const list of lists) for (const x of list) m.set(x.document_type_id, (m.get(x.document_type_id) ?? false) || x.required);
+          setReqByTypeId(m);
+        });
+      return;
+    }
+    setReqByTypeId(undefined);
+  }, [ownerType, ownerCategory, rolesKey]);
 
   // 보완요청에서 넘어온 경우: 해당 서류 타입 업로드 다이얼로그 자동 오픈 (1회) + 쿼리 소비
   useEffect(() => {
@@ -155,8 +181,8 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
 
   // 체크리스트 — 이 자원에 필요한 서류 종류를 필수/선택으로 그룹핑 (docTypes 는 이미 appliesTo/제외 필터 적용됨).
   const checklist = useMemo(
-    () => groupDocTypes(Array.from(docTypes.values()), ownerType, ownerRoles, ownerCategory),
-    [docTypes, ownerType, ownerRoles, ownerCategory],
+    () => groupDocTypes(Array.from(docTypes.values()), ownerType, ownerRoles, ownerCategory, reqByTypeId),
+    [docTypes, ownerType, ownerRoles, ownerCategory, reqByTypeId],
   );
   // 종류별 대표 문서(있으면) — 상태 뱃지 판정용.
   const docByType = useMemo(() => {
@@ -198,6 +224,7 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
           types={Array.from(docTypes.values())}
           ownerCategory={ownerCategory}
           ownerRoles={ownerRoles}
+          reqByTypeId={reqByTypeId}
           onClose={() => setUploading(false)}
           onUploaded={() => { setUploading(false); void load(); }}
         />
@@ -210,7 +237,7 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
               <div className="mb-2 text-sm font-bold text-slate-900">필수 서류</div>
               <div className="space-y-1.5">
                 {checklist.required.map((t) => (
-                  <ChecklistRow key={t.id} type={t} doc={docByType.get(t.id)} onUpload={() => setChecklistTypeId(t.id)} />
+                  <ChecklistRow key={t.id} type={t} required doc={docByType.get(t.id)} onUpload={() => setChecklistTypeId(t.id)} />
                 ))}
               </div>
             </>
@@ -222,7 +249,7 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
               </summary>
               <div className="mt-2 space-y-1.5">
                 {checklist.optional.map((t) => (
-                  <ChecklistRow key={t.id} type={t} doc={docByType.get(t.id)} onUpload={() => setChecklistTypeId(t.id)} />
+                  <ChecklistRow key={t.id} type={t} required={false} doc={docByType.get(t.id)} onUpload={() => setChecklistTypeId(t.id)} />
                 ))}
               </div>
             </details>
@@ -350,11 +377,13 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
   );
 }
 
-/** 체크리스트 한 줄 — 종류명 + 등록 상태 뱃지 + (미등록이면) 업로드 버튼. */
-function ChecklistRow({ type, doc, onUpload }: {
+/** 체크리스트 한 줄 — 종류명 + 등록 상태 뱃지 + (미등록이면) 업로드 버튼.
+ *  required 는 이 자원 기준 필수 여부(EQUIPMENT junction / 그 외 글로벌) — 소속 섹션이 전달. */
+function ChecklistRow({ type, doc, onUpload, required }: {
   type: DocumentTypeResponse;
   doc?: DocumentResponse;
   onUpload: () => void;
+  required: boolean;
 }) {
   const days = daysUntilExpiry(doc?.expiry_date);
   const expired = doc != null && days != null && days < 0;
@@ -368,7 +397,7 @@ function ChecklistRow({ type, doc, onUpload }: {
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200">
       <div className="min-w-0 flex-1 truncate text-sm text-slate-800">
-        {type.required && <span className="mr-1 text-rose-500">*</span>}
+        {required && <span className="mr-1 text-rose-500">*</span>}
         {type.name}
         {type.has_expiry && <span className="ml-2 text-[10px] text-slate-400">만료관리</span>}
       </div>

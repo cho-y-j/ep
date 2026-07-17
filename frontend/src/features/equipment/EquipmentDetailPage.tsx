@@ -13,7 +13,7 @@ import EquipmentPhotoGallery from './EquipmentPhotoGallery';
 import DonutChart from './DonutChart';
 import ResourceAssignmentSection from '../assignment/ResourceAssignmentSection';
 import AssignmentBadge from '../assignment/AssignmentBadge';
-import { EQUIPMENT_CATEGORY_LABEL, type EquipmentResponse } from '../../types/equipment';
+import { equipmentCategoryLabel, type EquipmentResponse } from '../../types/equipment';
 import ClientOrgHistory from '../../components/ClientOrgHistory';
 import EquipmentDefaultOperators from './EquipmentDefaultOperators';
 import EquipmentDuePanel from './EquipmentDuePanel';
@@ -129,7 +129,7 @@ export default function EquipmentDetailPage() {
     );
   }
 
-  const title = equipment.vehicle_no || equipment.model || EQUIPMENT_CATEGORY_LABEL[equipment.category];
+  const title = equipment.vehicle_no || equipment.model || equipmentCategoryLabel(equipment.category);
   // V77: 이 장비 소유사가 내 직속 하위 공급사면 부모로서 서류수집/보완요청 가능.
   const isParentOfOwner = subSuppliers.some((c) => c.id === equipment.supplier_id);
   const status = equipment.expiring_count > 0
@@ -156,12 +156,12 @@ export default function EquipmentDetailPage() {
             { label: '공급사 관리', to: '/admin/suppliers' },
             { label: fromCompanyName ?? `회사 #${fromCompanyId}`, to: `/admin/companies/${fromCompanyId}?tab=equipment` },
             { label: '장비', to: `/admin/companies/${fromCompanyId}?tab=equipment` },
-            { label: `${EQUIPMENT_CATEGORY_LABEL[equipment.category]} ${title}` },
+            { label: `${equipmentCategoryLabel(equipment.category)} ${title}` },
           ]
         : [
             { label: '장비 관리', to: '/equipment' },
             { label: '장비 목록', to: '/equipment' },
-            { label: `${EQUIPMENT_CATEGORY_LABEL[equipment.category]} ${title}` },
+            { label: `${equipmentCategoryLabel(equipment.category)} ${title}` },
           ]}
     >
       <div className="space-y-6">
@@ -183,7 +183,7 @@ export default function EquipmentDetailPage() {
               <div className="flex items-start justify-between gap-3 mb-1">
                 <div className="min-w-0">
                   <h1 className="text-2xl font-bold text-slate-900 break-keep flex items-center gap-2 flex-wrap">
-                    {EQUIPMENT_CATEGORY_LABEL[equipment.category]} {title}
+                    {equipmentCategoryLabel(equipment.category)} {title}
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${statusCls}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
                       {status}
@@ -213,7 +213,7 @@ export default function EquipmentDetailPage() {
 
               {/* 4-col spec grid */}
               <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
-                <SpecItem label="장비 종류" value={EQUIPMENT_CATEGORY_LABEL[equipment.category]} />
+                <SpecItem label="장비 종류" value={equipmentCategoryLabel(equipment.category)} />
                 <SpecItem label="구입일" value="-" />
                 <SpecItem
                   label="소속 현장"

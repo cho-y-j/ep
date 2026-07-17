@@ -4,6 +4,7 @@ import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyType;
+import com.skep.document.Document;
 import com.skep.document.DocumentRepository;
 import com.skep.document.OwnerType;
 import com.skep.person.dto.CreatePersonRequest;
@@ -235,8 +236,12 @@ public class PersonService {
         Person p = repo.findById(id)
                 .orElseThrow(() -> ApiException.notFound("PERSON_NOT_FOUND", "person " + id + " not found"));
         ensureCanModify(actor, p.getSupplierId());
+        // 소유 서류(다형 owner_type/owner_id — FK 캐스케이드 없음)를 함께 삭제해 고아 문서·파일 방지.
+        List<Document> docs = docRepo.findByOwnerTypeAndOwnerIdOrderByIdDesc(OwnerType.PERSON, id);
+        docRepo.deleteAll(docs);
         String photoKey = p.getPhotoKey();
         repo.delete(p);
+        docs.forEach(d -> storage.delete(d.getFileKey()));
         if (photoKey != null) storage.delete(photoKey);
     }
 

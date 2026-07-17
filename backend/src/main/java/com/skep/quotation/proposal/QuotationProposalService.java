@@ -38,6 +38,7 @@ public class QuotationProposalService {
     private final SiteRepository sites;
     private final com.skep.quotation.snapshot.ComparisonSnapshotService snapshotService;
     private final com.skep.quotation.dispatch.draft.DispatchDraftService dispatchDrafts;
+    private final com.skep.equipment.EquipmentTypeService equipmentTypes;
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(QuotationProposalService.class);
 
@@ -50,7 +51,8 @@ public class QuotationProposalService {
                                      NotificationService notifications,
                                      SiteRepository sites,
                                      com.skep.quotation.snapshot.ComparisonSnapshotService snapshotService,
-                                     com.skep.quotation.dispatch.draft.DispatchDraftService dispatchDrafts) {
+                                     com.skep.quotation.dispatch.draft.DispatchDraftService dispatchDrafts,
+                                     com.skep.equipment.EquipmentTypeService equipmentTypes) {
         this.proposals = proposals;
         this.requests = requests;
         this.equipmentRepo = equipmentRepo;
@@ -61,13 +63,14 @@ public class QuotationProposalService {
         this.sites = sites;
         this.snapshotService = snapshotService;
         this.dispatchDrafts = dispatchDrafts;
+        this.equipmentTypes = equipmentTypes;
     }
 
     /** qr 의 시각 친화 라벨 — "굴삭기 · 7/10~7/15 · 강남현장" */
     private String labelOf(QuotationRequest qr) {
         String siteName = qr.getSiteId() != null
                 ? sites.findById(qr.getSiteId()).map(Site::getName).orElse(null) : null;
-        return NotificationLabels.quotationLabel(qr, siteName);
+        return NotificationLabels.quotationLabel(qr, siteName, equipmentTypes.labelOf(qr.getEquipmentCategory()));
     }
 
     // ── 공급사 작성 ────────────────────────────────────────
@@ -101,7 +104,7 @@ public class QuotationProposalService {
             if (!e.getSupplierId().equals(actor.companyId())) {
                 throw ApiException.forbidden("EQUIPMENT_NOT_OWNED", "본인 회사 장비만 제안 가능");
             }
-            if (qr.getEquipmentCategory() != null && e.getCategory() != qr.getEquipmentCategory()) {
+            if (qr.getEquipmentCategory() != null && !java.util.Objects.equals(e.getCategory(), qr.getEquipmentCategory())) {
                 throw ApiException.badRequest("EQUIPMENT_CATEGORY_MISMATCH",
                         "장비 카테고리가 견적과 다릅니다");
             }

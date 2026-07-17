@@ -1,6 +1,5 @@
 package com.skep.quotation;
 
-import com.skep.equipment.EquipmentCategory;
 import com.skep.person.PersonRole;
 import com.skep.quotation.dto.*;
 import com.skep.security.AuthenticatedUser;
@@ -27,7 +26,7 @@ public class QuotationController {
     /** Site-C: site 무관. 카테고리 매칭되는 전체 EQUIPMENT 공급사 장비 풀. */
     @GetMapping("/equipment-candidates")
     public List<QuotationCandidateResponse> equipmentCandidates(
-            @RequestParam(required = false) EquipmentCategory category,
+            @RequestParam(required = false) String category,
             @CurrentUser AuthenticatedUser actor) {
         return service.candidates(category, actor);
     }

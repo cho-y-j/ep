@@ -1,7 +1,6 @@
 package com.skep.quotation.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.skep.equipment.EquipmentCategory;
 import com.skep.person.PersonRole;
 import com.skep.quotation.QuotationRequestType;
 import jakarta.validation.constraints.NotNull;
@@ -18,7 +17,7 @@ import java.time.LocalDate;
  */
 public record CreateOpenBidRequest(
         @JsonProperty("request_type") QuotationRequestType requestType,
-        @JsonProperty("equipment_category") EquipmentCategory equipmentCategory,
+        @JsonProperty("equipment_category") @Size(max = 32) String equipmentCategory,
         @JsonProperty("manpower_role") PersonRole manpowerRole,
         @JsonProperty("client_org_id") Long clientOrgId,
         @JsonProperty("work_location_text") @Size(max = 1000) String workLocationText,

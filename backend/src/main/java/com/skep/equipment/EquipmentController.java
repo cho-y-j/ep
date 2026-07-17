@@ -45,7 +45,7 @@ public class EquipmentController {
     public List<EquipmentResponse> list(
             @CurrentUser AuthenticatedUser actor,
             @RequestParam(required = false) Long supplierId,
-            @RequestParam(required = false) EquipmentCategory category
+            @RequestParam(required = false) String category
     ) {
         var list = service.list(actor, supplierId, category);
         var ids = list.stream().map(Equipment::getId).toList();

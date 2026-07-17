@@ -39,6 +39,23 @@ function parseTemplate(s?: string | null): { aspect: Aspect; boxes: Box[] } | nu
   }
 }
 
+/** 4모서리에서 문서의 실제 종횡비를 추정 → warp aspect 로. A4 강제 대신이라 신분증·자격증 등 비-A4 왜곡 방지.
+ *  긴 변을 2048로 스케일해 비율 보존(코너 순서 무관: 합=TL/BR, y-x=TR/BL 로 정렬). */
+function aspectFromCorners(c: Point[] | null): Aspect | null {
+  if (!c || c.length !== 4) return null;
+  const bySum = [...c].sort((a, b) => (a[0] + a[1]) - (b[0] + b[1]));
+  const byDiff = [...c].sort((a, b) => (a[1] - a[0]) - (b[1] - b[0]));
+  const tl = bySum[0], br = bySum[3], tr = byDiff[0], bl = byDiff[3];
+  const dist = (p: Point, q: Point) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  const w = (dist(tl, tr) + dist(bl, br)) / 2;
+  const h = (dist(tl, bl) + dist(tr, br)) / 2;
+  if (!(w > 0) || !(h > 0)) return null;
+  const longer = 2048;
+  return w >= h
+    ? { w: longer, h: Math.max(1, Math.round((longer * h) / w)) }
+    : { w: Math.max(1, Math.round((longer * w) / h)), h: longer };
+}
+
 /**
  * 수퍼어드민 영역지정(템플릿) 도구 — 오케스트레이터.
  * 업로드 → (사진이면 4모서리 정렬+warp / 평면이면 스킵) → warped 캔버스 위 박스 편집 → 디바운스 미리보기 → 저장(PATCH).
@@ -163,10 +180,14 @@ export default function DocumentTypeRegionEditorPage() {
   async function doWarp(c: Point[]) {
     if (!file) return;
     setWarpBusy(true);
+    // 코너에서 문서 실제 종횡비를 계산해 warp aspect 로 사용 → A4 강제 왜곡 방지(신분증·자격증 등 비-A4).
+    // 사용자가 필요 시 aspect 입력/A4 프리셋으로 덮어쓸 수 있음.
+    const derived = aspectFromCorners(c) ?? aspect;
+    setAspect(derived);
     try {
       const fd = new FormData();
       fd.append('file', file);
-      fd.append('template', JSON.stringify({ version: 1, aspect, fields: [] }));
+      fd.append('template', JSON.stringify({ version: 1, aspect: derived, fields: [] }));
       fd.append('corners', JSON.stringify(c));
       fd.append('returnWarped', 'true');
       const res = await api.post<ExtractResp>('/api/admin/document-types/region-extract', fd, {

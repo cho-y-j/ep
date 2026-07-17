@@ -4,6 +4,7 @@ import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyType;
+import com.skep.document.Document;
 import com.skep.document.DocumentRepository;
 import com.skep.document.OwnerType;
 import com.skep.equipment.dto.CreateEquipmentRequest;
@@ -42,6 +43,7 @@ public class EquipmentService {
     private final EquipmentDefaultOperatorRepository defaultOperators;
     private final com.skep.person.PersonRepository personRepo;
     private final com.skep.person.PersonService personService;
+    private final EquipmentTypeService equipmentTypes;
 
     public EquipmentService(EquipmentRepository repo, CompanyRepository companies,
                             com.skep.company.CompanyService companyService,
@@ -49,7 +51,8 @@ public class EquipmentService {
                             SiteRepository sites, SiteParticipantRepository participants,
                             EquipmentDefaultOperatorRepository defaultOperators,
                             com.skep.person.PersonRepository personRepo,
-                            com.skep.person.PersonService personService) {
+                            com.skep.person.PersonService personService,
+                            EquipmentTypeService equipmentTypes) {
         this.repo = repo;
         this.companies = companies;
         this.companyService = companyService;
@@ -60,6 +63,7 @@ public class EquipmentService {
         this.defaultOperators = defaultOperators;
         this.personRepo = personRepo;
         this.personService = personService;
+        this.equipmentTypes = equipmentTypes;
     }
 
     // ── V36: 장비 기본 조종원 ───────────────────────────────
@@ -132,7 +136,7 @@ public class EquipmentService {
      * - MANPOWER_SUPPLIER / WORKER: 차단 (장비 도메인은 인력 공급사가 다룰 일 없음).
      */
     @Transactional(readOnly = true)
-    public List<Equipment> list(AuthenticatedUser actor, Long supplierIdParam, EquipmentCategory category) {
+    public List<Equipment> list(AuthenticatedUser actor, Long supplierIdParam, String category) {
         // BP 는 자기 사이트의 ACTIVE 장비 공급사로 list 를 좁힘.
         if (actor.role() == Role.BP) {
             requireCompany(actor);
@@ -145,7 +149,7 @@ public class EquipmentService {
             List<Long> targetSuppliers = supplierIdParam != null ? List.of(supplierIdParam) : visibleSupplierIds;
             List<Equipment> all = repo.findBySupplierIdInOrderByIdDesc(targetSuppliers);
             if (category != null) {
-                return all.stream().filter(e -> e.getCategory() == category).toList();
+                return all.stream().filter(e -> java.util.Objects.equals(e.getCategory(), category)).toList();
             }
             return all;
         }
@@ -162,7 +166,7 @@ public class EquipmentService {
                     : scope;
             if (targets.isEmpty()) return List.of();
             List<Equipment> all = repo.findBySupplierIdInOrderByIdDesc(targets);
-            return category != null ? all.stream().filter(e -> e.getCategory() == category).toList() : all;
+            return category != null ? all.stream().filter(e -> java.util.Objects.equals(e.getCategory(), category)).toList() : all;
         }
 
         Long supplierId = resolveListSupplier(actor, supplierIdParam);
@@ -231,6 +235,7 @@ public class EquipmentService {
         if (supplier.getType() != CompanyType.EQUIPMENT) {
             throw ApiException.badRequest("SUPPLIER_NOT_EQUIPMENT", "장비공급사 유형이 아닌 회사에 장비를 등록할 수 없습니다");
         }
+        requireActiveCategory(req.category());
         Equipment e = Equipment.builder()
                 .supplierId(supplierId)
                 .vehicleNo(req.vehicleNo())
@@ -250,6 +255,14 @@ public class EquipmentService {
             }
             e.linkOperator(req.operatorPersonId());
         }
+        // 검사만료일(정기검사 유효기간) — 폼 입력 또는 자동차등록증 OCR 자동채움. 있으면 저장(만료관리 반영).
+        if (req.inspectionDueDate() != null && !req.inspectionDueDate().isBlank()) {
+            try {
+                e.setInspectionDueDate(java.time.LocalDate.parse(req.inspectionDueDate().trim()));
+            } catch (java.time.format.DateTimeParseException ex) {
+                throw ApiException.badRequest("INVALID_DATE", "검사만료일 형식이 올바르지 않습니다 (YYYY-MM-DD)");
+            }
+        }
         return repo.save(e);
     }
 
@@ -257,6 +270,7 @@ public class EquipmentService {
         Equipment e = repo.findById(id)
                 .orElseThrow(() -> ApiException.notFound("EQUIPMENT_NOT_FOUND", "equipment " + id + " not found"));
         ensureCanModify(actor, e.getSupplierId());
+        if (req.category() != null) requireActiveCategory(req.category());
         e.update(req.vehicleNo(), req.category(), req.model(), req.manufacturer(), req.year());
         e.updateSourcing(req.isExternal(), req.vehicleOwnerName(), req.vehicleOwnerBusinessNo());
         return e;
@@ -266,8 +280,12 @@ public class EquipmentService {
         Equipment e = repo.findById(id)
                 .orElseThrow(() -> ApiException.notFound("EQUIPMENT_NOT_FOUND", "equipment " + id + " not found"));
         ensureCanModify(actor, e.getSupplierId());
+        // 소유 서류(다형 owner_type/owner_id — FK 캐스케이드 없음)를 함께 삭제해 고아 문서·파일 방지.
+        List<Document> docs = docRepo.findByOwnerTypeAndOwnerIdOrderByIdDesc(OwnerType.EQUIPMENT, id);
+        docRepo.deleteAll(docs);
         String photoKey = e.getPhotoKey();
         repo.delete(e);
+        docs.forEach(d -> storage.delete(d.getFileKey()));
         if (photoKey != null) storage.delete(photoKey);
     }
 
@@ -375,6 +393,14 @@ public class EquipmentService {
     private void requireCompany(AuthenticatedUser actor) {
         if (actor.companyId() == null) {
             throw ApiException.forbidden("NO_COMPANY", "소속 회사가 지정되지 않은 사용자입니다 (재로그인 필요)");
+        }
+    }
+
+    /** 장비 종류 코드가 활성 마스터(equipment_type)에 존재하는지 검증 — enum 이 주던 역직렬화 게이트 대체. */
+    private void requireActiveCategory(String code) {
+        if (!equipmentTypes.existsActive(code)) {
+            throw ApiException.badRequest("EQUIPMENT_CATEGORY_INVALID",
+                    "등록되지 않았거나 비활성 상태인 장비 종류입니다: " + code);
         }
     }
 }

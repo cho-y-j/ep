@@ -7,9 +7,11 @@ export type BreadcrumbItem = { label: string; to?: string };
 
 type Props = {
   breadcrumb?: BreadcrumbItem[];
+  /** 모바일 햄버거 → 사이드바 드로어 열기 (md 미만에서만 노출). */
+  onMenuClick: () => void;
 };
 
-export default function TopBar({ breadcrumb }: Props) {
+export default function TopBar({ breadcrumb, onMenuClick }: Props) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   // shared hook — Sidebar 와 같은 module-level cache + interval 1개 공유 (중복 polling 제거)
@@ -19,7 +21,15 @@ export default function TopBar({ breadcrumb }: Props) {
 
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200">
-      <div className="flex items-center gap-4 h-[68px] px-8">
+      <div className="flex items-center gap-3 md:gap-4 h-[68px] px-4 md:px-8">
+        <button
+          type="button"
+          onClick={onMenuClick}
+          aria-label="메뉴 열기"
+          className="shrink-0 -ml-1 rounded-lg p-2 text-slate-600 hover:bg-slate-100 md:hidden"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
+        </button>
         <nav className="flex items-center gap-2 text-sm flex-1 min-w-0 truncate">
           {(breadcrumb ?? []).map((it, i) => {
             const isLast = i === (breadcrumb?.length ?? 0) - 1;

@@ -58,6 +58,7 @@ public class QuotationExcelService {
     private final CompanyRepository companies;
     private final SiteRepository sites;
     private final UserRepository users;
+    private final com.skep.equipment.EquipmentTypeService equipmentTypes;
 
     private static final DecimalFormat MONEY = new DecimalFormat("#,##0");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -89,7 +90,7 @@ public class QuotationExcelService {
                 .toList();
 
         String fallbackCategory = qr.getEquipmentCategory() != null
-                ? NotificationLabels.equipmentCategory(qr.getEquipmentCategory()) : null;
+                ? NotificationLabels.equipmentCategory(equipmentTypes.labelOf(qr.getEquipmentCategory())) : null;
         String fallbackSpec = qr.getSpecText();
 
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
@@ -265,7 +266,7 @@ public class QuotationExcelService {
                 .sorted(Comparator.comparing(u -> u.getQuoteDisplayOrder() == null ? Integer.MAX_VALUE : u.getQuoteDisplayOrder()))
                 .limit(4).toList();
         String fallbackCategory = qr.getEquipmentCategory() != null
-                ? NotificationLabels.equipmentCategory(qr.getEquipmentCategory()) : null;
+                ? NotificationLabels.equipmentCategory(equipmentTypes.labelOf(qr.getEquipmentCategory())) : null;
         String fallbackSpec = qr.getSpecText();
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
             Sheet sh = wb.createSheet(safeSheetName(supplier.getName()));
@@ -345,7 +346,7 @@ public class QuotationExcelService {
                 .sorted(Comparator.comparing(u -> u.getQuoteDisplayOrder() == null ? Integer.MAX_VALUE : u.getQuoteDisplayOrder()))
                 .limit(4).toList();
         String fallbackCategory = qr.getEquipmentCategory() != null
-                ? NotificationLabels.equipmentCategory(qr.getEquipmentCategory()) : null;
+                ? NotificationLabels.equipmentCategory(equipmentTypes.labelOf(qr.getEquipmentCategory())) : null;
         String fallbackSpec = qr.getSpecText();
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -799,8 +800,8 @@ public class QuotationExcelService {
         return safe.length() > 31 ? safe.substring(0, 31) : safe;
     }
 
-    private static String categoryLabel(Equipment e) {
-        return NotificationLabels.equipmentCategory(e.getCategory());
+    private String categoryLabel(Equipment e) {
+        return NotificationLabels.equipmentCategory(equipmentTypes.labelOf(e.getCategory()));
     }
 
     private static String specOf(Equipment e) {

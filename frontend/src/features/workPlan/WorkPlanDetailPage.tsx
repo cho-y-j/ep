@@ -4,7 +4,7 @@ import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppShell from '../../components/layout/AppShell';
-import { EQUIPMENT_CATEGORY_LABEL, type EquipmentResponse } from '../../types/equipment';
+import { equipmentCategoryLabel, type EquipmentResponse } from '../../types/equipment';
 import type { PersonResponse } from '../../types/person';
 import {
   COMPLIANCE_STATUS_LABEL,
@@ -490,7 +490,7 @@ function EquipmentBlock({ wp, isDraft, isAdmin, canIssueCheck, checks, onCheckIs
             <option value="">장비 선택 (참여 공급사 소유)</option>
             {candidates.map((eq) => (
               <option key={eq.id} value={eq.id}>
-                {eq.vehicle_no ?? eq.model ?? `장비#${eq.id}`} ({EQUIPMENT_CATEGORY_LABEL[eq.category]})
+                {eq.vehicle_no ?? eq.model ?? `장비#${eq.id}`} ({equipmentCategoryLabel(eq.category)})
               </option>
             ))}
           </select>
@@ -526,7 +526,7 @@ function EquipmentBlock({ wp, isDraft, isAdmin, canIssueCheck, checks, onCheckIs
                     const c = resourceStatusChip(checks, 'EQUIPMENT', it.equipment_id, wp.status);
                     return <span className={`shrink-0 px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${c.cls}`}>{c.label}</span>;
                   })()}
-                  {it.category && <span className="ml-2 text-xs font-normal text-slate-500">{EQUIPMENT_CATEGORY_LABEL[it.category]}</span>}
+                  {it.category && <span className="ml-2 text-xs font-normal text-slate-500">{equipmentCategoryLabel(it.category)}</span>}
                 </div>
                 <div className="text-xs text-slate-500 truncate">
                   {it.supplier_company_name ?? '-'}{it.purpose ? ` · ${it.purpose}` : ''}

@@ -1,6 +1,5 @@
 package com.skep.quotation.dto;
 
-import com.skep.equipment.EquipmentCategory;
 import com.skep.person.PersonRole;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
@@ -30,7 +29,7 @@ public record CreateQuotationBundleRequest(
         List<String> alimtalkPhones
 ) {
     public record EquipmentItem(
-            @NotNull EquipmentCategory category,
+            @NotNull @Size(max = 32) String category,
             @Size(max = 4000) String specText,
             Integer proposedDailyRate,
             Integer proposedMonthlyRate,

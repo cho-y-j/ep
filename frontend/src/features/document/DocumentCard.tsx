@@ -79,7 +79,7 @@ export default function DocumentCard({ doc, canEdit, isAdmin, canAutoVerify, onO
         title="클릭하여 열기"
       >
         {isImage && thumbUrl ? (
-          <img src={thumbUrl} alt={doc.file_name} className="w-full h-full object-cover" />
+          <img src={thumbUrl} alt={doc.file_name} className="w-full h-full object-contain" />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-2">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

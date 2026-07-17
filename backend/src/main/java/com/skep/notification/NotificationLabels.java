@@ -1,6 +1,5 @@
 package com.skep.notification;
 
-import com.skep.equipment.EquipmentCategory;
 import com.skep.person.PersonRole;
 import com.skep.quotation.QuotationRequest;
 import com.skep.quotation.QuotationRequestType;
@@ -16,19 +15,10 @@ import java.time.LocalDate;
 public final class NotificationLabels {
     private NotificationLabels() {}
 
-    public static String equipmentCategory(EquipmentCategory c) {
-        if (c == null) return "장비";
-        return switch (c) {
-            case EXCAVATOR -> "굴삭기";
-            case WHEEL_LOADER -> "휠로더";
-            case CRANE -> "크레인";
-            case FORKLIFT -> "지게차";
-            case DOZER -> "도저";
-            case GRADER -> "그레이더";
-            case AERIAL_LIFT -> "고소작업차";
-            case PUMP_TRUCK -> "펌프카";
-            case ATTACHMENT -> "어태치먼트";
-        };
+    /** 이미 해석된 종류 라벨(또는 code)을 받아 표시. 빈 값이면 "장비". DB 이름 해석은 호출부(EquipmentTypeService)가 담당. */
+    public static String equipmentCategory(String label) {
+        if (label == null || label.isBlank()) return "장비";
+        return label;
     }
 
     public static String personRole(PersonRole r) {
@@ -44,11 +34,11 @@ public final class NotificationLabels {
         };
     }
 
-    /** 견적 요청을 짧은 라벨로. 예: "굴삭기 · 7/10~7/15 · 강남현장" */
-    public static String quotationLabel(QuotationRequest qr, String siteName) {
+    /** 견적 요청을 짧은 라벨로. 예: "굴삭기 · 7/10~7/15 · 강남현장". 장비 종류 라벨은 호출부가 해석해 전달. */
+    public static String quotationLabel(QuotationRequest qr, String siteName, String equipmentCategoryLabel) {
         String resource = qr.getRequestType() == QuotationRequestType.MANPOWER
                 ? personRole(qr.getManpowerRole())
-                : equipmentCategory(qr.getEquipmentCategory());
+                : equipmentCategory(equipmentCategoryLabel);
         String place = siteName != null ? siteName
                 : (qr.getWorkLocationText() != null && !qr.getWorkLocationText().isBlank()
                         ? qr.getWorkLocationText() : "장소 협의");

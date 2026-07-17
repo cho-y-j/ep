@@ -1,6 +1,5 @@
 package com.skep.quotation.proposal.dto;
 
-import com.skep.equipment.EquipmentCategory;
 import com.skep.person.PersonRole;
 import com.skep.quotation.QuotationMode;
 import com.skep.quotation.QuotationRequest;
@@ -41,7 +40,7 @@ public record ProposalResponse(
         Long requestRequestedByUserId,
         String requestRequestedByUserName,
         QuotationRequestType requestType,
-        EquipmentCategory requestEquipmentCategory,
+        String requestEquipmentCategory,
         PersonRole requestManpowerRole,
         LocalDate requestWorkPeriodStart,
         LocalDate requestWorkPeriodEnd,

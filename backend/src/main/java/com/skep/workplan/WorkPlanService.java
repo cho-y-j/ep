@@ -69,6 +69,8 @@ public class WorkPlanService {
     private final SiteParticipantRepository participants;
     private final CompanyRepository companies;
     private final EquipmentRepository equipmentRepo;
+    private final com.skep.equipment.EquipmentDocRequirementService equipDocReq;
+    private final com.skep.person.PersonDocRequirementService personDocReq;
     private final PersonRepository personRepo;
     private final DocumentRepository docRepo;
     private final DocumentTypeRepository docTypeRepo;
@@ -94,7 +96,10 @@ public class WorkPlanService {
                            WorkPlanPersonRepository wppRepo, WorkPlanComplianceCheckRepository wpccRepo,
                            SiteRepository sites, SiteParticipantRepository participants,
                            CompanyRepository companies,
-                           EquipmentRepository equipmentRepo, PersonRepository personRepo,
+                           EquipmentRepository equipmentRepo,
+                           com.skep.equipment.EquipmentDocRequirementService equipDocReq,
+                           com.skep.person.PersonDocRequirementService personDocReq,
+                           PersonRepository personRepo,
                            DocumentRepository docRepo, DocumentTypeRepository docTypeRepo,
                            EquipmentAssignmentRepository eqAssignments,
                            PersonAssignmentRepository personAssignments,
@@ -118,6 +123,8 @@ public class WorkPlanService {
         this.participants = participants;
         this.companies = companies;
         this.equipmentRepo = equipmentRepo;
+        this.equipDocReq = equipDocReq;
+        this.personDocReq = personDocReq;
         this.personRepo = personRepo;
         this.docRepo = docRepo;
         this.docTypeRepo = docTypeRepo;
@@ -393,14 +400,22 @@ public class WorkPlanService {
         if (ownerType == OwnerType.PERSON) {
             Person p = personRepo.findById(ownerId).orElse(null);
             Set<com.skep.person.PersonRole> personRoles = p != null ? p.getRoles() : Set.of();
+            // PERSON 적용여부는 역할×서류 junction(행 존재) 기준. 역할 미보유(비영속)만 기존 CSV fallback.
+            java.util.Set<Long> applicableTypeIds = !personRoles.isEmpty() ? personDocReq.applicableDocTypeIds(personRoles) : null;
             blocking = blocking.stream()
-                    .filter(t -> matchesPersonRoles(t.getAppliesToPersonRoles(), personRoles))
+                    .filter(t -> applicableTypeIds != null
+                            ? applicableTypeIds.contains(t.getId())
+                            : matchesPersonRoles(t.getAppliesToPersonRoles(), personRoles))
                     .toList();
         } else if (ownerType == OwnerType.EQUIPMENT) {
             com.skep.equipment.Equipment e = equipmentRepo.findById(ownerId).orElse(null);
-            com.skep.equipment.EquipmentCategory cat = e != null ? e.getCategory() : null;
+            String cat = e != null ? e.getCategory() : null;
+            // EQUIPMENT 적용여부는 종류×서류 junction(행 존재) 기준. cat==null(비영속)만 기존 CSV fallback.
+            java.util.Set<Long> applicableTypeIds = cat != null ? equipDocReq.applicableDocTypeIds(cat) : null;
             blocking = blocking.stream()
-                    .filter(t -> matchesEquipmentCategory(t.getAppliesToCategories(), cat))
+                    .filter(t -> applicableTypeIds != null
+                            ? applicableTypeIds.contains(t.getId())
+                            : matchesEquipmentCategory(t.getAppliesToCategories(), cat))
                     .toList();
         }
         if (blocking.isEmpty()) return new ComplianceResult(ComplianceStatus.OK, null, List.of());
@@ -657,14 +672,22 @@ public class WorkPlanService {
         if (ownerType == OwnerType.PERSON) {
             Person p = personRepo.findById(ownerId).orElse(null);
             Set<com.skep.person.PersonRole> personRoles = p != null ? p.getRoles() : Set.of();
+            // PERSON 적용여부는 역할×서류 junction(행 존재) 기준. 역할 미보유(비영속)만 기존 CSV fallback.
+            java.util.Set<Long> applicableTypeIds = !personRoles.isEmpty() ? personDocReq.applicableDocTypeIds(personRoles) : null;
             blocking = blocking.stream()
-                    .filter(t -> matchesPersonRoles(t.getAppliesToPersonRoles(), personRoles))
+                    .filter(t -> applicableTypeIds != null
+                            ? applicableTypeIds.contains(t.getId())
+                            : matchesPersonRoles(t.getAppliesToPersonRoles(), personRoles))
                     .toList();
         } else if (ownerType == OwnerType.EQUIPMENT) {
             com.skep.equipment.Equipment e = equipmentRepo.findById(ownerId).orElse(null);
-            com.skep.equipment.EquipmentCategory cat = e != null ? e.getCategory() : null;
+            String cat = e != null ? e.getCategory() : null;
+            // EQUIPMENT 적용여부는 종류×서류 junction(행 존재) 기준. cat==null(비영속)만 기존 CSV fallback.
+            java.util.Set<Long> applicableTypeIds = cat != null ? equipDocReq.applicableDocTypeIds(cat) : null;
             blocking = blocking.stream()
-                    .filter(t -> matchesEquipmentCategory(t.getAppliesToCategories(), cat))
+                    .filter(t -> applicableTypeIds != null
+                            ? applicableTypeIds.contains(t.getId())
+                            : matchesEquipmentCategory(t.getAppliesToCategories(), cat))
                     .toList();
         }
         if (blocking.isEmpty()) return java.util.List.of();
@@ -1080,14 +1103,22 @@ public class WorkPlanService {
         if (ownerType == OwnerType.PERSON) {
             Person p = personRepo.findById(ownerId).orElse(null);
             Set<com.skep.person.PersonRole> personRoles = p != null ? p.getRoles() : Set.of();
+            // PERSON 적용여부는 역할×서류 junction(행 존재) 기준. 역할 미보유(비영속)만 기존 CSV fallback.
+            java.util.Set<Long> applicableTypeIds = !personRoles.isEmpty() ? personDocReq.applicableDocTypeIds(personRoles) : null;
             blocking = blocking.stream()
-                    .filter(t -> matchesPersonRoles(t.getAppliesToPersonRoles(), personRoles))
+                    .filter(t -> applicableTypeIds != null
+                            ? applicableTypeIds.contains(t.getId())
+                            : matchesPersonRoles(t.getAppliesToPersonRoles(), personRoles))
                     .toList();
         } else if (ownerType == OwnerType.EQUIPMENT) {
             com.skep.equipment.Equipment e = equipmentRepo.findById(ownerId).orElse(null);
-            com.skep.equipment.EquipmentCategory cat = e != null ? e.getCategory() : null;
+            String cat = e != null ? e.getCategory() : null;
+            // EQUIPMENT 적용여부는 종류×서류 junction(행 존재) 기준. cat==null(비영속)만 기존 CSV fallback.
+            java.util.Set<Long> applicableTypeIds = cat != null ? equipDocReq.applicableDocTypeIds(cat) : null;
             blocking = blocking.stream()
-                    .filter(t -> matchesEquipmentCategory(t.getAppliesToCategories(), cat))
+                    .filter(t -> applicableTypeIds != null
+                            ? applicableTypeIds.contains(t.getId())
+                            : matchesEquipmentCategory(t.getAppliesToCategories(), cat))
                     .toList();
         }
         if (blocking.isEmpty()) {
@@ -1150,11 +1181,11 @@ public class WorkPlanService {
     }
 
     /** DocumentType.appliesToCategories (CSV, null=모든카테고리) ↔ equipment.category 매칭. */
-    private static boolean matchesEquipmentCategory(String csv, com.skep.equipment.EquipmentCategory cat) {
+    private static boolean matchesEquipmentCategory(String csv, String cat) {
         if (csv == null || csv.isBlank()) return true;
         if (cat == null) return false;
         for (String s : csv.split(",")) {
-            if (s.trim().equalsIgnoreCase(cat.name())) return true;
+            if (s.trim().equalsIgnoreCase(cat)) return true;
         }
         return false;
     }

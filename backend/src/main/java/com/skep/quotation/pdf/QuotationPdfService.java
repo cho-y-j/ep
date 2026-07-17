@@ -137,7 +137,7 @@ public class QuotationPdfService {
                 eqTable.addCell(tableCell(String.valueOf(idx++)));
                 eqTable.addCell(tableCell(e != null && e.getVehicleNo() != null ? e.getVehicleNo() : ("#" + d.getEquipmentId())));
                 eqTable.addCell(tableCell(e != null && e.getModel() != null ? e.getModel() : "-"));
-                eqTable.addCell(tableCell(e != null && e.getCategory() != null ? e.getCategory().name() : "-"));
+                eqTable.addCell(tableCell(e != null && e.getCategory() != null ? e.getCategory() : "-"));
                 eqTable.addCell(tableCellRight(d.getDailyPrice() != null ? formatMoney(d.getDailyPrice()) : "-"));
                 eqTable.addCell(tableCellRight(d.getMonthlyPrice() != null ? formatMoney(d.getMonthlyPrice()) : "-"));
                 if (d.getDailyPrice() != null) totalDaily += d.getDailyPrice();

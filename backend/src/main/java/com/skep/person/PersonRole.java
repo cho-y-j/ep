@@ -15,19 +15,17 @@ public enum PersonRole {
 
     public boolean isAllowedFor(CompanyType companyType) {
         return switch (companyType) {
-            case EQUIPMENT -> this == OPERATOR;
+            // 장비공급사·BP 는 자체 인력을 모든 역할로 등록 가능(조종원 외 신호수·유도원 등). 인력공급사는 인력역할만(조종원 제외).
+            case EQUIPMENT, BP -> true;
             case MANPOWER -> this != OPERATOR;
-            // BP 회사도 자체 인원 보유 가능 (직속 운전수/지휘자 등 모든 역할) — #5 정책 확장
-            case BP -> true;
         };
     }
 
     public static Set<PersonRole> allowedFor(CompanyType companyType) {
         return switch (companyType) {
-            case EQUIPMENT -> Set.of(OPERATOR);
             case MANPOWER -> Set.of(WORK_DIRECTOR, GUIDE, FIRE_WATCH, SIGNALER, INSPECTOR, SITE_MANAGER);
-            // BP 회사 자체 인원 — 모든 역할 허용
-            case BP -> Set.of(OPERATOR, WORK_DIRECTOR, GUIDE, FIRE_WATCH, SIGNALER, INSPECTOR, SITE_MANAGER);
+            // 장비공급사·BP — 모든 역할 허용
+            case EQUIPMENT, BP -> Set.of(OPERATOR, WORK_DIRECTOR, GUIDE, FIRE_WATCH, SIGNALER, INSPECTOR, SITE_MANAGER);
         };
     }
 }

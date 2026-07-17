@@ -11,7 +11,7 @@ import type {
 } from '../../types/assignment';
 import type { EquipmentResponse } from '../../types/equipment';
 import type { PersonResponse } from '../../types/person';
-import { EQUIPMENT_CATEGORY_LABEL } from '../../types/equipment';
+import { equipmentCategoryLabel } from '../../types/equipment';
 import { PERSON_ROLE_LABEL } from '../../types/person';
 
 type Kind = 'equipment' | 'person';
@@ -191,7 +191,7 @@ function ResourceList({ kind, siteId, canManage }: { kind: Kind; siteId: number;
                   className="text-sm font-semibold text-slate-900 hover:text-brand-700 truncate block"
                 >
                   {kind === 'equipment'
-                    ? `${EQUIPMENT_CATEGORY_LABEL[(it as EquipmentResponse).category]} ${(it as EquipmentResponse).vehicle_no ?? (it as EquipmentResponse).model ?? ''}`
+                    ? `${equipmentCategoryLabel((it as EquipmentResponse).category)} ${(it as EquipmentResponse).vehicle_no ?? (it as EquipmentResponse).model ?? ''}`
                     : (it as PersonResponse).name}
                 </Link>
                 <div className="text-xs text-slate-500 mt-0.5">

@@ -1,4 +1,5 @@
 import { EQUIPMENT_CATEGORIES, EQUIPMENT_CATEGORY_LABEL, type EquipmentCategory } from '../../types/equipment';
+import { useEquipmentTypes } from './useEquipmentTypes';
 import type { CompanyResponse } from '../../types/auth';
 
 export type EquipmentFieldValues = {
@@ -17,6 +18,8 @@ type Props = {
   equipmentSuppliers?: CompanyResponse[];
   required?: boolean;
   disabled?: boolean;
+  /** 상위 폼이 장비 종류를 따로 노출할 때 여기선 숨김 (중복 방지). */
+  hideCategory?: boolean;
 };
 
 /**
@@ -25,7 +28,12 @@ type Props = {
  * - ADMIN이 특정 공급사의 장비를 등록 (supplierId dropdown으로 선택)
  * - 같은 컴포넌트로 양쪽 다 처리.
  */
-export default function EquipmentFields({ values, onChange, equipmentSuppliers, required, disabled }: Props) {
+export default function EquipmentFields({ values, onChange, equipmentSuppliers, required, disabled, hideCategory }: Props) {
+  const { options: typeOptions } = useEquipmentTypes();
+  const categoryOptions = typeOptions.length
+    ? typeOptions
+    : EQUIPMENT_CATEGORIES.map((c) => ({ code: c, name: EQUIPMENT_CATEGORY_LABEL[c], grp: '' }));
+
   function patch(partial: Partial<EquipmentFieldValues>) {
     onChange({ ...values, ...partial });
   }
@@ -50,20 +58,22 @@ export default function EquipmentFields({ values, onChange, equipmentSuppliers, 
         </label>
       )}
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">장비 종류 <span className="text-xs text-rose-600 font-semibold">(필수)</span></span>
-        <select
-          value={values.category}
-          onChange={(e) => patch({ category: e.target.value as EquipmentCategory })}
-          required={required}
-          disabled={disabled}
-          className="input mt-1 bg-white"
-        >
-          {EQUIPMENT_CATEGORIES.map((c) => (
-            <option key={c} value={c}>{EQUIPMENT_CATEGORY_LABEL[c]}</option>
-          ))}
-        </select>
-      </label>
+      {!hideCategory && (
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">장비 종류 <span className="text-xs text-rose-600 font-semibold">(필수)</span></span>
+          <select
+            value={values.category}
+            onChange={(e) => patch({ category: e.target.value as EquipmentCategory })}
+            required={required}
+            disabled={disabled}
+            className="input mt-1 bg-white"
+          >
+            {categoryOptions.map((c) => (
+              <option key={c.code} value={c.code}>{c.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <label className="block">
         <span className="text-sm font-medium text-slate-700">차량번호 <span className="text-xs text-rose-600 font-semibold">(필수)</span></span>

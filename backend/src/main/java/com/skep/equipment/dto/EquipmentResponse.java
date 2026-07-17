@@ -2,7 +2,6 @@ package com.skep.equipment.dto;
 
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentAssignmentStatus;
-import com.skep.equipment.EquipmentCategory;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -13,7 +12,7 @@ public record EquipmentResponse(
         Long supplierId,
         String supplierName,
         String vehicleNo,
-        EquipmentCategory category,
+        String category,
         String model,
         String manufacturer,
         Integer year,

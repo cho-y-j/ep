@@ -4,6 +4,7 @@ import AppShell from '../../components/layout/AppShell';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { EQUIPMENT_CATEGORIES, EQUIPMENT_CATEGORY_LABEL, type EquipmentCategory } from '../../types/equipment';
+import { useEquipmentTypes } from '../equipment/useEquipmentTypes';
 import MoneyInput from '../../components/MoneyInput';
 import type { CompanyResponse } from '../../types/auth';
 
@@ -43,6 +44,10 @@ export default function OpenBidCreatePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const { options: typeOptions } = useEquipmentTypes();
+  const categoryOptions = typeOptions.length
+    ? typeOptions
+    : EQUIPMENT_CATEGORIES.map((c) => ({ code: c, name: EQUIPMENT_CATEGORY_LABEL[c], grp: '' }));
   const [orgs, setOrgs] = useState<ClientOrg[]>([]);
   const [bpCompanies, setBpCompanies] = useState<CompanyResponse[]>([]);
   const [draft, setDraft] = useState<Draft>(EMPTY);
@@ -149,7 +154,7 @@ export default function OpenBidCreatePage() {
               <select className={inputCls(fieldErrors.equipmentCategory)} value={draft.equipmentCategory}
                       onChange={(e) => update('equipmentCategory', e.target.value as EquipmentCategory)}>
                 <option value="">선택</option>
-                {EQUIPMENT_CATEGORIES.map((c) => <option key={c} value={c}>{EQUIPMENT_CATEGORY_LABEL[c]}</option>)}
+                {categoryOptions.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
               </select>
             </Field>
             <Field label="수량 *" error={fieldErrors.count}>

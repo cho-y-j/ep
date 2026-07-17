@@ -8,6 +8,9 @@ import { useBpReceivedReviewCount } from '../../lib/useBpReceivedReviewCount';
 type Props = {
   collapsed: boolean;
   onToggle: () => void;
+  /** 모바일 드로어 열림 여부 + 닫기 (md 미만에서만 사용). */
+  mobileOpen: boolean;
+  onMobileClose: () => void;
 };
 
 type NavItem = {
@@ -29,7 +32,7 @@ type NavSection = {
   defaultOpen?: boolean;
 };
 
-export default function Sidebar({ collapsed, onToggle }: Props) {
+export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Props) {
   const { user } = useAuth();
   const role = user?.role;
   const isMaster = !!user?.is_company_admin;
@@ -72,6 +75,8 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
         { label: '서류관리', to: '/document-management', icon: <IconShield /> },
         { label: '서류 수집 요청', to: '/document-collections', icon: <IconDoc /> },
         { label: '서류종류 관리', to: '/admin/document-types', icon: <IconDoc /> },
+        { label: '장비종류 서류', to: '/admin/equipment-type-docs', icon: <IconTruck /> },
+        { label: '인력역할 서류', to: '/admin/person-role-docs', icon: <IconUsers /> },
         { label: '이행지시', to: '/compliance-orders', icon: <IconShield /> },
         { label: '월별 작업확인서', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
         { label: 'DOCX 템플릿', to: '/admin/docx-templates', icon: <IconDoc /> },
@@ -176,11 +181,16 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
   ];
 
   return (
-    <aside
-      className={`flex shrink-0 flex-col bg-white border-r border-slate-200 transition-all ${
-        collapsed ? 'w-[72px]' : 'w-[240px]'
-      }`}
-    >
+    <>
+      {/* 모바일 드로어 백드롭 — 열렸을 때만, 클릭 시 닫힘 (md+ 에선 숨김) */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={onMobileClose} aria-hidden="true" />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col bg-white border-r border-slate-200 transition-transform
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:static md:z-auto md:translate-x-0 md:shrink-0 md:transition-all ${collapsed ? 'md:w-[72px]' : 'md:w-[240px]'}`}
+      >
       <div className="flex items-center gap-2 h-[68px] px-5 border-b border-slate-100">
         <div className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
           <IconHelmet />
@@ -188,6 +198,10 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
         {!collapsed && (
           <span className="text-base font-bold text-slate-900 truncate">현장관리 <span className="text-brand-600">Pro</span></span>
         )}
+        <button type="button" onClick={onMobileClose} aria-label="메뉴 닫기"
+          className="ml-auto shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 md:hidden">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
@@ -199,14 +213,15 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
       <button
         type="button"
         onClick={onToggle}
-        className="border-t border-slate-100 px-5 py-3 text-sm text-slate-500 hover:bg-slate-50 flex items-center gap-2"
+        className="border-t border-slate-100 px-5 py-3 text-sm text-slate-500 hover:bg-slate-50 hidden md:flex items-center gap-2"
       >
         <span className={`inline-block transition-transform ${collapsed ? 'rotate-180' : ''}`}>
           <IconChevronLeft />
         </span>
         {!collapsed && <span>메뉴 접기</span>}
       </button>
-    </aside>
+      </aside>
+    </>
   );
 }
 

@@ -1,6 +1,5 @@
 package com.skep.quotation.dto;
 
-import com.skep.equipment.EquipmentCategory;
 import com.skep.person.PersonRole;
 import jakarta.validation.constraints.Size;
 
@@ -11,7 +10,7 @@ import java.time.LocalDate;
  * spec 변경 시 active proposals 는 PENDING_REVIEW 로 자동 전환.
  */
 public record UpdateQuotationSpecRequest(
-        EquipmentCategory equipmentCategory,
+        String equipmentCategory,
         PersonRole manpowerRole,
         Long clientOrgId,
         @Size(max = 1000) String workLocationText,

@@ -1,6 +1,5 @@
 package com.skep.quotation;
 
-import com.skep.equipment.EquipmentCategory;
 import com.skep.person.PersonRole;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -63,9 +62,8 @@ public class QuotationRequest {
     @Column(name = "request_type", nullable = false, length = 16)
     private QuotationRequestType requestType = QuotationRequestType.EQUIPMENT;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "equipment_category", length = 32)
-    private EquipmentCategory equipmentCategory;
+    private String equipmentCategory;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "manpower_role", length = 32)
@@ -104,7 +102,7 @@ public class QuotationRequest {
     private QuotationRequest(Long siteId, Long requestedByUserId, Long onBehalfOfBpCompanyId,
                               LocalDate workPeriodStart, LocalDate workPeriodEnd,
                               QuotationRequestType requestType,
-                              EquipmentCategory equipmentCategory, PersonRole manpowerRole,
+                              String equipmentCategory, PersonRole manpowerRole,
                               String specText,
                               Integer proposedDailyRate, Integer proposedMonthlyRate,
                               Integer count, String notes,

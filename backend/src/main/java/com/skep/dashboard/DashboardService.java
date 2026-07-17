@@ -8,8 +8,8 @@ import com.skep.document.DocumentRepository;
 import com.skep.document.DocumentType;
 import com.skep.document.DocumentTypeRepository;
 import com.skep.document.OwnerType;
-import com.skep.equipment.EquipmentCategory;
 import com.skep.equipment.EquipmentRepository;
+import com.skep.equipment.EquipmentTypeService;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
 import com.skep.security.AuthenticatedUser;
@@ -37,16 +37,19 @@ public class DashboardService {
     private final EquipmentRepository equipmentRepo;
     private final DocumentRepository docRepo;
     private final DocumentTypeRepository typeRepo;
+    private final EquipmentTypeService equipmentTypes;
 
     public DashboardService(UserRepository userRepo, CompanyRepository companyRepo,
                             PersonRepository personRepo, EquipmentRepository equipmentRepo,
-                            DocumentRepository docRepo, DocumentTypeRepository typeRepo) {
+                            DocumentRepository docRepo, DocumentTypeRepository typeRepo,
+                            EquipmentTypeService equipmentTypes) {
         this.userRepo = userRepo;
         this.companyRepo = companyRepo;
         this.personRepo = personRepo;
         this.equipmentRepo = equipmentRepo;
         this.docRepo = docRepo;
         this.typeRepo = typeRepo;
+        this.equipmentTypes = equipmentTypes;
     }
 
     public DashboardSummary summary(AuthenticatedUser actor) {
@@ -135,18 +138,8 @@ public class DashboardService {
         return personRepo.findById(id).map(Person::getName).orElse("(삭제됨)");
     }
 
-    private static String categoryLabel(EquipmentCategory c) {
-        return switch (c) {
-            case EXCAVATOR -> "굴삭기";
-            case WHEEL_LOADER -> "휠로더";
-            case CRANE -> "크레인";
-            case FORKLIFT -> "지게차";
-            case DOZER -> "도저";
-            case GRADER -> "그레이더";
-            case AERIAL_LIFT -> "고소작업차";
-            case PUMP_TRUCK -> "펌프카";
-            case ATTACHMENT -> "어태치먼트";
-        };
+    private String categoryLabel(String code) {
+        return code == null ? "장비" : equipmentTypes.labelOf(code);
     }
 
     private static <T> List<T> limit(List<T> src) {

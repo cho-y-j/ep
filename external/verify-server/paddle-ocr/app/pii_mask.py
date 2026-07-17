@@ -1,4 +1,4 @@
-"""업로드 PII 이미지의 주민/법인 등록번호 영역을 검정 마스킹.
+"""업로드 PII 이미지의 주민/법인 등록번호 '뒷자리(마지막 7숫자)'만 검정 마스킹(앞 6자리 생년월일은 남김).
 
 2배 업스케일 후 OCR(작은 인쇄체 검출 개선) → 아래 두 경우만 마스킹한다.
  (1) 풀 RRN 단일 박스: 6자리 [-.]? 7자리 (점/공백 섞임 허용).
@@ -52,8 +52,12 @@ def _find_rrn_boxes(dets):
     masks = []
     for d in dets:
         t = d["text"].replace(" ", "")
-        if _RRN_FULL.search(t):  # (1) 풀 RRN 단일 박스
-            masks.append(_bbox(d["box"]))
+        m = _RRN_FULL.search(t)
+        if m:  # (1) 풀 RRN 단일 박스 — 앞 6자리(생년월일)는 남기고 '뒷자리(마지막 7숫자)'만 마스킹.
+            x0, y0, x1, y1 = _bbox(d["box"])
+            back_off = m.start() + max(0, len(m.group(0)) - 7)  # t 내 뒷 7자리 시작 char 위치
+            mx0 = int(x0 + (x1 - x0) * (back_off / max(len(t), 1)))
+            masks.append((mx0, y0, x1, y1))
             continue
         if _is_front6(t):        # (2) 앞 6자리 → 같은 줄 오른쪽 7자리류 짝이 있을 때만
             x0, y0, x1, y1 = _bbox(d["box"])
@@ -65,8 +69,7 @@ def _find_rrn_boxes(dets):
                 same_line = not (ey1 < y0 or ey0 > y1)   # y 겹침(같은 줄)
                 adjacent = 0 <= ex0 - x1 < fw * 1.5       # 바로 오른쪽(간격 제한)
                 if same_line and adjacent and _is_back7(e["text"]):
-                    masks.append((x0, y0, x1, y1))
-                    masks.append((ex0, ey0, ex1, ey1))
+                    masks.append((ex0, ey0, ex1, ey1))  # 뒷자리 박스만 (앞 6자리 생년월일 박스는 남김)
                     break
     return masks
 

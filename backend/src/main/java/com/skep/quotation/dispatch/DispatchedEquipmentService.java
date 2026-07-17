@@ -190,7 +190,7 @@ public class DispatchedEquipmentService {
                     String label = e != null
                             ? (e.getVehicleNo() != null ? e.getVehicleNo() : (e.getModel() != null ? e.getModel() : "#" + e.getId()))
                             : "단가 응답";
-                    String category = e != null && e.getCategory() != null ? e.getCategory().name() : null;
+                    String category = e != null ? e.getCategory() : null;
                     return DispatchedEquipmentResponse.from(d, supplierNames.get(d.getSupplierCompanyId()), label, category);
                 })
                 .toList();
@@ -205,7 +205,7 @@ public class DispatchedEquipmentService {
         String label = e != null
                 ? (e.getVehicleNo() != null ? e.getVehicleNo() : (e.getModel() != null ? e.getModel() : "#" + e.getId()))
                 : "단가 응답";
-        String category = e != null && e.getCategory() != null ? e.getCategory().name() : null;
+        String category = e != null ? e.getCategory() : null;
         String supplierName = companies.findById(d.getSupplierCompanyId()).map(Company::getName).orElse(null);
         return DispatchedEquipmentResponse.from(d, supplierName, label, category);
     }

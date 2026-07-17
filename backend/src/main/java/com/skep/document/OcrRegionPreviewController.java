@@ -1,5 +1,6 @@
 package com.skep.document;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.skep.verify.PaddleOcrClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -66,12 +68,43 @@ public class OcrRegionPreviewController {
         }
 
         String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload.jpg";
-        log.info("OCR region preview documentTypeId={} file={}({} bytes)", documentTypeId, filename, file.getSize());
-        Map<String, String> fields = paddleClient.extractRegions(file.getBytes(), filename, corners, template);
+        boolean hasCorners = corners != null && !corners.isBlank();
+        log.info("OCR region preview documentTypeId={} file={}({} bytes) corners={}",
+                documentTypeId, filename, file.getSize(), hasCorners);
+
+        Map<String, String> fields;
+        String warpedBase64 = null;
+        if (hasCorners) {
+            // 4모서리 정렬 경로 — warp(원근보정+크롭)된 이미지도 받아 FE 가 "맞춘 이미지" 미리보기로 보여준다.
+            JsonNode raw = paddleClient.extractRegionsRaw(file.getBytes(), filename, corners, template, true);
+            fields = parseFields(raw);
+            if (raw != null) {
+                JsonNode w = raw.get("warped_image_base64");
+                if (w != null && !w.isNull()) warpedBase64 = w.asText();
+            }
+        } else {
+            fields = paddleClient.extractRegions(file.getBytes(), filename, corners, template);
+        }
 
         Map<String, Object> result = new HashMap<>();
         result.put("ok", fields != null && !fields.isEmpty());
         result.put("fields", fields != null ? fields : Map.of());
+        if (warpedBase64 != null) result.put("warped_image_base64", warpedBase64);
         return ResponseEntity.ok(result);
+    }
+
+    /** raw /extract-regions 응답의 fields 오브젝트 → Map(null 값 제외). raw null 이면 null. */
+    private static Map<String, String> parseFields(JsonNode raw) {
+        if (raw == null) return null;
+        JsonNode fields = raw.get("fields");
+        if (fields == null || !fields.isObject()) return null;
+        Map<String, String> map = new HashMap<>();
+        Iterator<Map.Entry<String, JsonNode>> it = fields.fields();
+        while (it.hasNext()) {
+            Map.Entry<String, JsonNode> e = it.next();
+            JsonNode v = e.getValue();
+            if (v != null && !v.isNull()) map.put(e.getKey(), v.asText());
+        }
+        return map;
     }
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { EQUIPMENT_CATEGORY_LABEL, type EquipmentResponse } from '../../types/equipment';
+import { equipmentCategoryLabel, type EquipmentResponse } from '../../types/equipment';
 import type { CompanyResponse } from '../../types/auth';
 import Avatar from '../../components/Avatar';
 
@@ -38,7 +38,7 @@ function compareBy(
   };
   switch (key) {
     case 'name': return cmp(a.vehicle_no || a.model || '', b.vehicle_no || b.model || '');
-    case 'category': return cmp(EQUIPMENT_CATEGORY_LABEL[a.category], EQUIPMENT_CATEGORY_LABEL[b.category]);
+    case 'category': return cmp(equipmentCategoryLabel(a.category), equipmentCategoryLabel(b.category));
     case 'site': return cmp(a.current_site_name ?? '', b.current_site_name ?? '');
     case 'status': return cmp(statusOf(a).rank, statusOf(b).rank);
     case 'util': return cmp(a.utilization_pct ?? 0, b.utilization_pct ?? 0);
@@ -107,14 +107,14 @@ export default function EquipmentTable({ equipment, companiesById, showSupplierC
                   <div className="flex items-center gap-3">
                     <Avatar
                       fetchUrl={e.has_photo ? `/api/equipment/${e.id}/photo` : undefined}
-                      fallbackText={e.vehicle_no || EQUIPMENT_CATEGORY_LABEL[e.category]}
+                      fallbackText={e.vehicle_no || equipmentCategoryLabel(e.category)}
                       alt={e.vehicle_no ?? ''}
                       size={48}
                       rounded="lg"
                     />
                     <div className="min-w-0">
                       <div className="font-semibold text-slate-900 truncate">
-                        {e.vehicle_no || e.model || EQUIPMENT_CATEGORY_LABEL[e.category]}
+                        {e.vehicle_no || e.model || equipmentCategoryLabel(e.category)}
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">{e.code ?? '-'}</div>
                       {!showSupplierColumn && selfCompanyId != null && e.supplier_id !== selfCompanyId && e.supplier_name && (
@@ -126,7 +126,7 @@ export default function EquipmentTable({ equipment, companiesById, showSupplierC
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="text-slate-900">{EQUIPMENT_CATEGORY_LABEL[e.category]}</div>
+                  <div className="text-slate-900">{equipmentCategoryLabel(e.category)}</div>
                   <div className="text-xs text-slate-500 mt-0.5">
                     {e.bucket_capacity ? `버킷 ${e.bucket_capacity}㎥` : (e.model ?? '')}
                   </div>

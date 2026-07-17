@@ -8,7 +8,7 @@ import {
   type QuotationBundleResponse,
   type QuotationStatus,
 } from '../../types/quotation';
-import { EQUIPMENT_CATEGORY_LABEL } from '../../types/equipment';
+import { equipmentCategoryLabel } from '../../types/equipment';
 import { PERSON_ROLE_LABEL } from '../../types/person';
 
 /** 견적 목록 chip 용 단계 집계 (GET /api/quotations/stage-summary). id = 견적(quotation request) id. */
@@ -110,7 +110,7 @@ export default function QuotationListPage() {
     const mp = b.items.filter((i) => i.request_type === 'MANPOWER');
     const parts: string[] = [];
     if (eq.length) {
-      const cats = eq.map((i) => i.equipment_category ? EQUIPMENT_CATEGORY_LABEL[i.equipment_category] : '장비').join(', ');
+      const cats = eq.map((i) => i.equipment_category ? equipmentCategoryLabel(i.equipment_category) : '장비').join(', ');
       parts.push(`장비 ${cats}`);
     }
     if (mp.length) {

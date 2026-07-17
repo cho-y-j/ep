@@ -7,10 +7,17 @@ export const api = axios.create({
   timeout: 10_000,
 });
 
+// OCR/문서인식 계열(paddle 영역추출·4모서리 warp 이미지 반환)은 수 초~십수 초 걸릴 수 있어
+// 기본 10초 타임아웃이면 abort 된다. 해당 엔드포인트만 넉넉히(60초) 늘린다.
+const OCR_SLOW_ENDPOINTS = /\/(detect-corners|ocr-region-preview|ocr-preview|region-extract|mask-pii)/;
+
 api.interceptors.request.use((config) => {
   const token = tokenStorage.access;
   if (token) {
     config.headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (config.url && OCR_SLOW_ENDPOINTS.test(config.url)) {
+    config.timeout = 60_000;
   }
   return config;
 });

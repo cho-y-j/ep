@@ -113,7 +113,7 @@ public class FieldAuthController {
             m.put("type", "EQUIPMENT");
             m.put("id", e.getId());
             m.put("label", label);
-            m.put("category", e.getCategory() != null ? e.getCategory().name() : null);
+            m.put("category", e.getCategory());
             return m;
         }
         throw ApiException.notFound("NFC_NOT_REGISTERED", "등록되지 않은 태그입니다");

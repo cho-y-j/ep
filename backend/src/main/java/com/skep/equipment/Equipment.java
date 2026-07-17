@@ -24,9 +24,8 @@ public class Equipment {
     @Column(name = "vehicle_no", length = 32)
     private String vehicleNo;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
-    private EquipmentCategory category;
+    private String category;
 
     @Column(length = 100)
     private String model;
@@ -115,7 +114,7 @@ public class Equipment {
     private LocalDateTime updatedAt;
 
     @Builder
-    private Equipment(Long supplierId, String vehicleNo, EquipmentCategory category,
+    private Equipment(Long supplierId, String vehicleNo, String category,
                       String model, String manufacturer, Integer year) {
         this.supplierId = supplierId;
         this.vehicleNo = vehicleNo;
@@ -136,7 +135,7 @@ public class Equipment {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public void update(String vehicleNo, EquipmentCategory category, String model, String manufacturer, Integer year) {
+    public void update(String vehicleNo, String category, String model, String manufacturer, Integer year) {
         if (vehicleNo != null) this.vehicleNo = vehicleNo;
         if (category != null) this.category = category;
         if (model != null) this.model = model;
@@ -194,5 +193,10 @@ public class Equipment {
         this.inspectionDueDate = inspectionDue;
         this.oilChangeDueDate = oilDue;
         this.registrationExpiry = regExpiry;
+    }
+
+    /** 검사만료일(정기검사 유효기간) 단건 설정 — 장비 등록 시 폼/OCR 값 저장용(다른 due 는 보존). */
+    public void setInspectionDueDate(java.time.LocalDate d) {
+        this.inspectionDueDate = d;
     }
 }

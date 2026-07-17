@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { EQUIPMENT_CATEGORY_LABEL } from '../../types/equipment';
+import { equipmentCategoryLabel } from '../../types/equipment';
 import {
   COMPLIANCE_STATUS_LABEL,
   WORK_PLAN_STATUS_LABEL,
@@ -86,7 +86,7 @@ export default function WorkPlanPrintPage() {
                 {wp.equipment!.map((e) => (
                   <tr key={e.id}>
                     <Td>{e.equipment_name ?? `장비#${e.equipment_id}`}</Td>
-                    <Td>{e.category ? EQUIPMENT_CATEGORY_LABEL[e.category] : '-'}</Td>
+                    <Td>{e.category ? equipmentCategoryLabel(e.category) : '-'}</Td>
                     <Td>{e.supplier_company_name ?? '-'}</Td>
                     <Td>{e.purpose ?? '-'}</Td>
                     <Td>{e.note ?? '-'}</Td>

@@ -9,7 +9,7 @@ import {
   QUOTATION_TARGET_STATUS_LABEL,
   type QuotationRequestResponse,
 } from '../../types/quotation';
-import { EQUIPMENT_CATEGORY_LABEL } from '../../types/equipment';
+import { equipmentCategoryLabel } from '../../types/equipment';
 import { PERSON_ROLE_LABEL } from '../../types/person';
 import DispatchSection from './dispatch/DispatchSection';
 import DocumentBundleSection from './bundle/DocumentBundleSection';
@@ -187,7 +187,7 @@ export default function QuotationDetailPage() {
               {data.bp_company_name} · {data.site_name} · {
                 data.request_type === 'MANPOWER'
                   ? (data.manpower_role ? PERSON_ROLE_LABEL[data.manpower_role] : '-')
-                  : (data.equipment_category ? EQUIPMENT_CATEGORY_LABEL[data.equipment_category] : '-')
+                  : (data.equipment_category ? equipmentCategoryLabel(data.equipment_category) : '-')
               }
             </div>
           </div>

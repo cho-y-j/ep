@@ -1,6 +1,5 @@
 package com.skep.quotation.dto;
 
-import com.skep.equipment.EquipmentCategory;
 import com.skep.person.PersonRole;
 import com.skep.quotation.QuotationRequestType;
 import jakarta.validation.constraints.NotEmpty;
@@ -25,7 +24,7 @@ public record CreateQuotationRequest(
         @NotNull LocalDate workPeriodStart,
         @NotNull LocalDate workPeriodEnd,
         QuotationRequestType requestType,
-        EquipmentCategory equipmentCategory,
+        String equipmentCategory,
         PersonRole manpowerRole,
         @Size(max = 4000) String specText,
         Integer proposedDailyRate,

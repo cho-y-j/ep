@@ -1,6 +1,5 @@
 package com.skep.docx;
 
-import com.skep.equipment.EquipmentCategory;
 import com.skep.workplan.WorkPlan;
 import com.skep.workplan.WorkPlanEquipment;
 import com.skep.workplan.WorkPlanPerson;
@@ -156,7 +155,7 @@ public class WorkPlanDocxExporter {
         for (var pair : ctx.equipmentRows) {
             WorkPlanEquipment e = pair.row();
             eqList.append("• ").append(nz(pair.name()));
-            if (pair.category() != null) eqList.append(" [").append(pair.category().name()).append("]");
+            if (pair.category() != null) eqList.append(" [").append(pair.category()).append("]");
             eqList.append(" / ").append(nz(pair.supplierName()));
             if (e.getPurpose() != null && !e.getPurpose().isBlank()) {
                 eqList.append(" — ").append(e.getPurpose());
@@ -183,7 +182,7 @@ public class WorkPlanDocxExporter {
 
     private static String nz(String s) { return s == null ? "" : s; }
 
-    public record EquipmentRow(WorkPlanEquipment row, String name, EquipmentCategory category, String supplierName) {}
+    public record EquipmentRow(WorkPlanEquipment row, String name, String category, String supplierName) {}
     public record PersonRow(WorkPlanPerson row, String name, String supplierName) {}
 
     public record WorkPlanContext(

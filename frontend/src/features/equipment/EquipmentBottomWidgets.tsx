@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import Avatar from '../../components/Avatar';
-import { EQUIPMENT_CATEGORY_LABEL, type EquipmentResponse } from '../../types/equipment';
+import { equipmentCategoryLabel, type EquipmentResponse } from '../../types/equipment';
 
 type Props = {
   equipment: EquipmentResponse[];
@@ -35,7 +35,7 @@ export default function EquipmentBottomWidgets({ equipment }: Props) {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold truncate">
-                      {EQUIPMENT_CATEGORY_LABEL[e.category]} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
+                      {equipmentCategoryLabel(e.category)} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
                       {e.expiring_count > 0
@@ -66,7 +66,7 @@ export default function EquipmentBottomWidgets({ equipment }: Props) {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold truncate">
-                      {EQUIPMENT_CATEGORY_LABEL[e.category]} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
+                      {equipmentCategoryLabel(e.category)} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
                       가동률 <span className="text-slate-700 font-semibold">{e.utilization_pct ?? 0}%</span>
@@ -92,7 +92,7 @@ export default function EquipmentBottomWidgets({ equipment }: Props) {
                   <span className="shrink-0 w-5 text-sm font-bold text-slate-400">{i + 1}</span>
                   <div className="flex-1 min-w-0">
                     <Link to={`/equipment/${e.id}`} className="text-sm hover:underline truncate block">
-                      {EQUIPMENT_CATEGORY_LABEL[e.category]} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
+                      {equipmentCategoryLabel(e.category)} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
                     </Link>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">

@@ -178,7 +178,7 @@ public class DispatchDraftService {
             if (e != null) {
                 eqLabel = e.getVehicleNo() != null ? e.getVehicleNo()
                         : (e.getModel() != null ? e.getModel() : "#" + e.getId());
-                eqCategory = e.getCategory() != null ? e.getCategory().name() : null;
+                eqCategory = e.getCategory();
             }
         }
         if (d.getPersonId() != null) {

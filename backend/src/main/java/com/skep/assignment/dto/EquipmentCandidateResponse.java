@@ -2,7 +2,6 @@ package com.skep.assignment.dto;
 
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentAssignmentStatus;
-import com.skep.equipment.EquipmentCategory;
 
 import java.time.LocalDateTime;
 
@@ -20,7 +19,7 @@ public record EquipmentCandidateResponse(
         Long supplierId,
         String supplierName,
         String name,            // model 또는 vehicle_no
-        EquipmentCategory category,
+        String category,
         String code,
         String vehicleNo,
         boolean hasPhoto,

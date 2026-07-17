@@ -9,11 +9,16 @@ import EquipmentCreateForm from './EquipmentCreateForm';
 import EquipmentStatCards from './EquipmentStatCards';
 import EquipmentBottomWidgets from './EquipmentBottomWidgets';
 import { EQUIPMENT_CATEGORIES, EQUIPMENT_CATEGORY_LABEL, type EquipmentCategory, type EquipmentResponse } from '../../types/equipment';
+import { useEquipmentTypes } from './useEquipmentTypes';
 import type { CompanyResponse } from '../../types/auth';
 
 export default function EquipmentPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { options: typeOptions } = useEquipmentTypes();
+  const categoryOptions = typeOptions.length
+    ? typeOptions
+    : EQUIPMENT_CATEGORIES.map((c) => ({ code: c, name: EQUIPMENT_CATEGORY_LABEL[c], grp: '' }));
   const [search] = useSearchParams();
   // ADMIN 컨텍스트 필터: 회사 사이드 패널 "이 공급사의 장비" 링크에서 진입한 경우.
   const supplierFilterId = search.get('supplierId') ? Number(search.get('supplierId')) : null;
@@ -201,8 +206,8 @@ export default function EquipmentPage() {
             className="input max-w-[160px]"
           >
             <option value="">장비 종류 전체</option>
-            {EQUIPMENT_CATEGORIES.map((c) => (
-              <option key={c} value={c}>{EQUIPMENT_CATEGORY_LABEL[c]}</option>
+            {categoryOptions.map((c) => (
+              <option key={c.code} value={c.code}>{c.name}</option>
             ))}
           </select>
         </FilterBar>

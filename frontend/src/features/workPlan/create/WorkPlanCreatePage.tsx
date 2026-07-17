@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import type { WorkPlanResponse } from '../../../types/workPlan';
 import type { QuotationRequestResponse, QuotationBundleResponse } from '../../../types/quotation';
-import { EQUIPMENT_CATEGORY_LABEL } from '../../../types/equipment';
+import { equipmentCategoryLabel } from '../../../types/equipment';
 import { PERSON_ROLE_LABEL } from '../../../types/person';
 import { daysUntilExpiry, type DocumentResponse } from '../../../types/document';
 import { renderWorksheet, type Attachment } from '../../../lib/worksheet/engine';
@@ -189,7 +189,7 @@ export default function WorkPlanCreatePage() {
     const labels = items
       .map((it) => it.request_type === 'MANPOWER'
           ? (it.manpower_role ? PERSON_ROLE_LABEL[it.manpower_role] : '인력')
-          : (it.equipment_category ? EQUIPMENT_CATEGORY_LABEL[it.equipment_category] : '장비'))
+          : (it.equipment_category ? equipmentCategoryLabel(it.equipment_category) : '장비'))
       .join(' + ');
     state.setTitle(`[견적 #${head.id}] ${labels} ${head.work_period_start}`);
     if (head.notes) state.setDescription(head.notes);

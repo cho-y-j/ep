@@ -59,7 +59,7 @@ public class BpDispatchedController {
         return rows.stream().map(d -> {
             Equipment e = d.getEquipmentId() != null ? eqMap.get(d.getEquipmentId()) : null;
             String label = e != null ? (e.getVehicleNo() != null ? e.getVehicleNo() : e.getModel()) : ("#" + d.getEquipmentId());
-            String category = e != null && e.getCategory() != null ? e.getCategory().name() : null;
+            String category = e != null ? e.getCategory() : null;
             return DispatchedEquipmentResponse.from(d, supplierMap.get(d.getSupplierCompanyId()), label, category);
         }).toList();
     }

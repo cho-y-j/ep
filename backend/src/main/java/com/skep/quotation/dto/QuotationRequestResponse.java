@@ -1,6 +1,5 @@
 package com.skep.quotation.dto;
 
-import com.skep.equipment.EquipmentCategory;
 import com.skep.person.PersonRole;
 import com.skep.quotation.QuotationMode;
 import com.skep.quotation.QuotationRequestType;
@@ -24,7 +23,7 @@ public record QuotationRequestResponse(
         LocalDate workPeriodStart,
         LocalDate workPeriodEnd,
         QuotationRequestType requestType,
-        EquipmentCategory equipmentCategory,
+        String equipmentCategory,
         PersonRole manpowerRole,
         String specText,
         Integer proposedDailyRate,

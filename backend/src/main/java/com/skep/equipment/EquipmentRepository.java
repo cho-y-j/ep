@@ -15,8 +15,8 @@ public interface EquipmentRepository extends JpaRepository<Equipment, Long> {
     List<Equipment> findBySupplierIdOrderByIdDesc(Long supplierId);
     List<Equipment> findAllByOrderByIdDesc();
     long countBySupplierId(Long supplierId);
-    List<Equipment> findByCategoryOrderByIdDesc(EquipmentCategory category);
-    List<Equipment> findBySupplierIdAndCategoryOrderByIdDesc(Long supplierId, EquipmentCategory category);
+    List<Equipment> findByCategoryOrderByIdDesc(String category);
+    List<Equipment> findBySupplierIdAndCategoryOrderByIdDesc(Long supplierId, String category);
     /** 후보 조회: 여러 공급사 자원 일괄 조회. */
     List<Equipment> findBySupplierIdInOrderByIdDesc(Collection<Long> supplierIds);
 }

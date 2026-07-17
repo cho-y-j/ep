@@ -13,8 +13,8 @@ import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyType;
 import com.skep.equipment.Equipment;
-import com.skep.equipment.EquipmentCategory;
 import com.skep.equipment.EquipmentRepository;
+import com.skep.equipment.EquipmentTypeService;
 import com.skep.notification.NotificationService;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
@@ -61,6 +61,7 @@ public class QuotationService {
     private final ClientOrgRepository clientOrgs;
     private final QuotationProposalRepository proposals;
     private final EquipmentRepository equipmentRepo;
+    private final EquipmentTypeService equipmentTypes;
     private final UserRepository users;
     private final PersonRepository personRepo;
     private final NotificationService notifications;
@@ -82,6 +83,7 @@ public class QuotationService {
                             CompanyRepository companies, ClientOrgRepository clientOrgs,
                             QuotationProposalRepository proposals,
                             EquipmentRepository equipmentRepo,
+                            EquipmentTypeService equipmentTypes,
                             UserRepository users,
                             PersonRepository personRepo,
                             NotificationService notifications, AuditLogService auditLog,
@@ -99,6 +101,7 @@ public class QuotationService {
         this.clientOrgs = clientOrgs;
         this.proposals = proposals;
         this.equipmentRepo = equipmentRepo;
+        this.equipmentTypes = equipmentTypes;
         this.users = users;
         this.personRepo = personRepo;
         this.notifications = notifications;
@@ -117,7 +120,7 @@ public class QuotationService {
 
     /** Site-C: site 무관 — 카테고리 매칭되는 전체 EQUIPMENT 공급사 풀. ClientOrg 이력은 응답에 포함. */
     @Transactional(readOnly = true)
-    public List<QuotationCandidateResponse> candidates(EquipmentCategory category, AuthenticatedUser actor) {
+    public List<QuotationCandidateResponse> candidates(String category, AuthenticatedUser actor) {
         ensureBpOrAdmin(actor);
 
         List<Company> suppliers = companies.findByType(com.skep.company.CompanyType.EQUIPMENT);
@@ -139,7 +142,7 @@ public class QuotationService {
         List<Equipment> eligible = new ArrayList<>();
         Map<Long, Integer> expiringByEq = new HashMap<>();
         for (Equipment e : all) {
-            if (category != null && e.getCategory() != category) continue;
+            if (category != null && !java.util.Objects.equals(e.getCategory(), category)) continue;
             try {
                 var rc = compliance.forEquipment(e.getId(), actor);
                 if (!rc.readyForWorkPlan()) continue;
@@ -382,7 +385,7 @@ public class QuotationService {
                     throw ApiException.badRequest("EQUIPMENT_SUPPLIER_MISMATCH",
                             "장비 " + eq.getId() + " 는 지정 공급사 소속이 아닙니다");
                 }
-                if (eq.getCategory() != req.equipmentCategory()) {
+                if (!java.util.Objects.equals(eq.getCategory(), req.equipmentCategory())) {
                     throw ApiException.badRequest("EQUIPMENT_CATEGORY_MISMATCH",
                             "장비 " + eq.getId() + " 카테고리 (" + eq.getCategory()
                                     + ") 가 요청 카테고리 (" + req.equipmentCategory() + ") 와 다릅니다");
@@ -414,7 +417,7 @@ public class QuotationService {
         String titleLabel = (type == QuotationRequestType.MANPOWER) ? "인력 견적 요청 수신" : "장비 견적 요청 수신";
         String siteName = qr.getSiteId() != null
                 ? sites.findById(qr.getSiteId()).map(Site::getName).orElse(null) : null;
-        String label = NotificationLabels.quotationLabel(qr, siteName);
+        String label = NotificationLabels.quotationLabel(qr, siteName, equipmentTypes.labelOf(qr.getEquipmentCategory()));
         Company bpCompany = bpCompanyId != null ? companies.findById(bpCompanyId).orElse(null) : null;
         String bpLabel = bpCompany != null ? bpCompany.getName() : "BP";
         for (Long sid : notifiedSuppliers) {
@@ -426,7 +429,7 @@ public class QuotationService {
         }
         String resourceLabel = (type == QuotationRequestType.MANPOWER)
                 ? NotificationLabels.personRole(req.manpowerRole())
-                : NotificationLabels.equipmentCategory(req.equipmentCategory());
+                : NotificationLabels.equipmentCategory(equipmentTypes.labelOf(req.equipmentCategory()));
 
         auditLog.record(actor, AuditAction.QUOTATION_CREATED, AuditTargetType.QUOTATION_REQUEST,
                 qr.getId(), bpCompanyId, null,
@@ -499,7 +502,7 @@ public class QuotationService {
         if (sender == null || mailFrom == null || mailFrom.isBlank()) return;
         String[] addrs = csvOrLines.split("[,\\s\\n]+");
         String catLabel = qr.getEquipmentCategory() != null
-                ? equipmentCategoryKo(qr.getEquipmentCategory().name()) : "";
+                ? equipmentTypes.labelOf(qr.getEquipmentCategory()) : "";
         String roleLabel = qr.getManpowerRole() != null ? qr.getManpowerRole().name() : "";
         String resource = type == QuotationRequestType.MANPOWER ? roleLabel : catLabel;
         String period = qr.getWorkPeriodStart() + " ~ " + qr.getWorkPeriodEnd();
@@ -526,20 +529,6 @@ public class QuotationService {
                 // 실패해도 견적 생성은 유지
             }
         }
-    }
-
-    private static String equipmentCategoryKo(String cat) {
-        return switch (cat) {
-            case "AERIAL_LIFT" -> "고소작업대";
-            case "CRANE" -> "크레인";
-            case "EXCAVATOR" -> "굴착기";
-            case "BULLDOZER" -> "불도저";
-            case "FORKLIFT" -> "지게차";
-            case "LOADER" -> "로더";
-            case "PUMP_TRUCK" -> "펌프카";
-            case "DUMP_TRUCK" -> "덤프트럭";
-            default -> cat;
-        };
     }
 
     /** 공개입찰 게시판 — 공급사 카테고리 매칭 자동 필터. */
@@ -689,7 +678,7 @@ public class QuotationService {
         Company supplier = companies.findById(tgt.getSupplierCompanyId()).orElse(null);
         String supplierName = supplier != null ? supplier.getName() : ("회사 #" + tgt.getSupplierCompanyId());
         if (bpCompanyId != null) {
-            String label2 = NotificationLabels.quotationLabel(qr, null);
+            String label2 = NotificationLabels.quotationLabel(qr, null, equipmentTypes.labelOf(qr.getEquipmentCategory()));
             notifications.sendToCompany(bpCompanyId,
                     NotificationType.QUOTATION_RESPONDED,
                     "견적 응답 수신",
@@ -734,7 +723,7 @@ public class QuotationService {
 
         String finalSiteName = qr.getSiteId() != null
                 ? sites.findById(qr.getSiteId()).map(Site::getName).orElse(null) : null;
-        String finalLabel = NotificationLabels.quotationLabel(qr, finalSiteName);
+        String finalLabel = NotificationLabels.quotationLabel(qr, finalSiteName, equipmentTypes.labelOf(qr.getEquipmentCategory()));
         notifications.sendToCompany(tgt.getSupplierCompanyId(),
                 NotificationType.QUOTATION_FINALIZED,
                 "견적 최종 수락",
@@ -1132,7 +1121,7 @@ public class QuotationService {
         return sites.findById(siteId).map(Site::getName).orElse("-");
     }
 
-    private String atEquipmentName(Long equipmentId, EquipmentCategory category) {
+    private String atEquipmentName(Long equipmentId, String category) {
         if (equipmentId != null) {
             var found = equipmentRepo.findById(equipmentId).orElse(null);
             if (found != null) {
@@ -1140,7 +1129,7 @@ public class QuotationService {
                 if (found.getVehicleNo() != null && !found.getVehicleNo().isBlank()) return found.getVehicleNo();
             }
         }
-        return category != null ? equipmentCategoryKo(category.name()) : "장비";
+        return category != null ? equipmentTypes.labelOf(category) : "장비";
     }
 
     private String atOperatorName(java.util.List<CreateQuotationBundleRequest.ManpowerItem> manpower) {

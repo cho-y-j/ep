@@ -12,7 +12,7 @@ import {
   type QuotationStatus,
   type QuotationTargetStatus,
 } from '../../types/quotation';
-import { EQUIPMENT_CATEGORY_LABEL } from '../../types/equipment';
+import { equipmentCategoryLabel } from '../../types/equipment';
 import { PERSON_ROLE_LABEL } from '../../types/person';
 
 /** 견적 묶음 상세 — 한 현장 한 묶음 안의 장비/인력 명세 + 공급사 target 응답 모두 한 화면. */
@@ -245,7 +245,7 @@ function ItemPanel({ item, respond, isSupplier, userCompanyId, busy }: {
 }) {
   const isEq = item.request_type === 'EQUIPMENT';
   const label = isEq
-    ? (item.equipment_category ? EQUIPMENT_CATEGORY_LABEL[item.equipment_category] : '장비')
+    ? (item.equipment_category ? equipmentCategoryLabel(item.equipment_category) : '장비')
     : (item.manpower_role ? PERSON_ROLE_LABEL[item.manpower_role] : '인력');
   const colorBar = isEq ? 'border-brand-500' : 'border-amber-500';
   const chip = isEq ? 'bg-brand-100 text-brand-700' : 'bg-amber-100 text-amber-700';

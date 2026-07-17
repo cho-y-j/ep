@@ -13,7 +13,6 @@ import com.skep.document.DocumentTypeRepository;
 import com.skep.document.OwnerType;
 import com.skep.document.VerificationStatus;
 import com.skep.equipment.Equipment;
-import com.skep.equipment.EquipmentCategory;
 import com.skep.equipment.EquipmentRepository;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
@@ -60,12 +59,16 @@ public class ComplianceService {
     private final SiteRepository sites;
     private final SiteParticipantRepository participants;
     private final DocumentSupplementRequestRepository supplements;
+    private final com.skep.equipment.EquipmentDocRequirementService equipDocReq;
+    private final com.skep.person.PersonDocRequirementService personDocReq;
 
     public ComplianceService(DocumentTypeRepository typeRepo, DocumentRepository docRepo,
                               EquipmentRepository equipmentRepo, PersonRepository personRepo,
                               CompanyRepository companies, SiteRepository sites,
                               SiteParticipantRepository participants,
-                              DocumentSupplementRequestRepository supplements) {
+                              DocumentSupplementRequestRepository supplements,
+                              com.skep.equipment.EquipmentDocRequirementService equipDocReq,
+                              com.skep.person.PersonDocRequirementService personDocReq) {
         this.typeRepo = typeRepo;
         this.docRepo = docRepo;
         this.equipmentRepo = equipmentRepo;
@@ -74,6 +77,8 @@ public class ComplianceService {
         this.sites = sites;
         this.participants = participants;
         this.supplements = supplements;
+        this.equipDocReq = equipDocReq;
+        this.personDocReq = personDocReq;
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -94,7 +99,7 @@ public class ComplianceService {
         String supplierName = supplier != null ? supplier.getName() : null;
         return evaluate(OwnerType.EQUIPMENT, e.getId(),
                 e.getVehicleNo() != null ? e.getVehicleNo() : (e.getModel() != null ? e.getModel() : "장비#" + e.getId()),
-                e.getCategory() != null ? e.getCategory().name() : null,
+                e.getCategory(),
                 e.getSupplierId(), supplierName, e.getCategory(), null);
     }
 
@@ -157,7 +162,7 @@ public class ComplianceService {
             Company sup = companies.findById(e.getSupplierId()).orElse(null);
             return evaluate(OwnerType.EQUIPMENT, e.getId(),
                     e.getVehicleNo() != null ? e.getVehicleNo() : (e.getModel() != null ? e.getModel() : "장비#" + e.getId()),
-                    e.getCategory() != null ? e.getCategory().name() : null,
+                    e.getCategory(),
                     e.getSupplierId(), sup != null ? sup.getName() : null,
                     e.getCategory(), null);
         }).toList();
@@ -210,10 +215,22 @@ public class ComplianceService {
 
     private ResourceCompliance evaluate(OwnerType ownerType, Long ownerId, String ownerName, String subLabel,
                                           Long supplierId, String supplierName,
-                                          EquipmentCategory category, Set<PersonRole> roles) {
-        // 1. 적용되는 document_types
+                                          String category, Set<PersonRole> roles) {
+        // 1. 적용되는 document_types.
+        //    EQUIPMENT 는 종류×서류, PERSON 은 역할×서류 junction(적용=행 존재, 필수=행.required)으로 판정.
+        //    역할 미보유 인원·COMPANY 는 기존 applies_to_* 매핑(matches) 유지.
+        final Map<Long, Boolean> equipReq =
+                (ownerType == OwnerType.EQUIPMENT && category != null)
+                        ? equipDocReq.requiredByDocTypeId(category)
+                        : null;
+        final Map<Long, Boolean> personReq =
+                (ownerType == OwnerType.PERSON && roles != null && !roles.isEmpty())
+                        ? personDocReq.requiredByDocTypeId(roles)
+                        : null;
         List<DocumentType> applicable = typeRepo.findByAppliesToAndActiveOrderBySortOrderAsc(ownerType, true).stream()
-                .filter(t -> matches(t, ownerType, category, roles))
+                .filter(t -> equipReq != null ? equipReq.containsKey(t.getId())
+                        : personReq != null ? personReq.containsKey(t.getId())
+                        : matches(t, ownerType, category, roles))
                 .toList();
 
         // 2. 자원의 chain head 서류 (각 type 별 최신)
@@ -234,6 +251,10 @@ public class ComplianceService {
         int requiredTotal = 0, requiredOk = 0, missing = 0, rejected = 0, expiring = 0, openSup = 0;
 
         for (DocumentType t : applicable) {
+            // EQUIPMENT/PERSON 은 junction.required, 그 외는 글로벌 document_types.required.
+            boolean typeRequired = equipReq != null ? Boolean.TRUE.equals(equipReq.get(t.getId()))
+                    : personReq != null ? Boolean.TRUE.equals(personReq.get(t.getId()))
+                    : t.isRequired();
             Document head = headByType.get(t.getId());
             boolean present = head != null;
             boolean verified = present && head.getVerificationStatus() == VerificationStatus.VERIFIED;
@@ -251,7 +272,7 @@ public class ComplianceService {
 
             // OK 판정: required 일 때만 점수에 반영. 검증 + 미만료 + 보완요청 없음.
             boolean ok = verified && !expired && !openSupplement;
-            if (t.isRequired()) {
+            if (typeRequired) {
                 requiredTotal++;
                 if (ok) requiredOk++;
                 if (!present) missing++;
@@ -261,7 +282,7 @@ public class ComplianceService {
             if (openSupplement) openSup++;
 
             items.add(new ComplianceItem(
-                    t.getId(), t.getName(), t.isRequired(), t.isBlocksAssignment(), t.isHasExpiry(),
+                    t.getId(), t.getName(), typeRequired, t.isBlocksAssignment(), t.isHasExpiry(),
                     present, verified, isRejected, ocrRev, expired, expiringSoon,
                     head != null ? head.getId() : null, expDateStr,
                     openSupplement
@@ -282,13 +303,13 @@ public class ComplianceService {
 
     /** document_type 의 카테고리/역할 매핑이 자원과 매치하는가? NULL = 모든 sub-type 매치. */
     private static boolean matches(DocumentType t, OwnerType ownerType,
-                                    EquipmentCategory category, Set<PersonRole> roles) {
+                                    String category, Set<PersonRole> roles) {
         if (ownerType == OwnerType.EQUIPMENT) {
             String csv = t.getAppliesToCategories();
             if (csv == null || csv.isBlank()) return true;
             if (category == null) return false;
             for (String s : csv.split(",")) {
-                if (s.trim().equalsIgnoreCase(category.name())) return true;
+                if (s.trim().equalsIgnoreCase(category)) return true;
             }
             return false;
         }

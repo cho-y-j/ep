@@ -74,9 +74,9 @@ export const EMPLOYMENT_TYPE_LABEL: Record<EmploymentType, string> = {
 
 export function rolesAllowedFor(companyType: CompanyType): PersonRole[] {
   switch (companyType) {
-    case 'EQUIPMENT': return ['OPERATOR'];
+    // 장비공급사·BP 는 모든 역할 등록 가능(조종원 외 신호수·유도원 등). 인력공급사는 인력역할만.
+    case 'EQUIPMENT': return ALL_PERSON_ROLES;
     case 'MANPOWER': return ['WORK_DIRECTOR', 'GUIDE', 'FIRE_WATCH', 'SIGNALER', 'INSPECTOR', 'SITE_MANAGER'];
-    // BP 회사도 자체 인원 보유 가능 (직속 운전수/현장소장/지휘자 등 모든 역할)
-    case 'BP': return ['OPERATOR', 'WORK_DIRECTOR', 'GUIDE', 'FIRE_WATCH', 'SIGNALER', 'INSPECTOR', 'SITE_MANAGER'];
+    case 'BP': return ALL_PERSON_ROLES;
   }
 }

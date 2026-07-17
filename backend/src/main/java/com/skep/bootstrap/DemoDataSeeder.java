@@ -12,7 +12,6 @@ import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyType;
 import com.skep.document.*;
 import com.skep.equipment.Equipment;
-import com.skep.equipment.EquipmentCategory;
 import com.skep.equipment.EquipmentRepository;
 import com.skep.outgoing.OutgoingQuotation;
 import com.skep.outgoing.OutgoingQuotationRepository;
@@ -211,19 +210,19 @@ public class DemoDataSeeder {
             seedDoc(typeIndex, OwnerType.PERSON, p6.getId(), "안전교육 이수증", expired, false, stubKey, uploader);
             seedDoc(typeIndex, OwnerType.PERSON, p6.getId(), "자격증",         valid,   true,  stubKey, uploader);
 
-            Equipment e1 = saveEquipment(eq.getId(), "12가1234", EquipmentCategory.CRANE,       "200톤 크롤러크레인", "현대", 2020);
+            Equipment e1 = saveEquipment(eq.getId(), "12가1234", "CRANE",       "200톤 크롤러크레인", "현대", 2020);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e1.getId(), "자동차등록증", null,    true,  stubKey, uploader);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e1.getId(), "정기검사증",   expSoon, true,  stubKey, uploader);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e1.getId(), "보험증권",     valid,   true,  stubKey, uploader);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e1.getId(), "안전인증서",   expired, false, stubKey, uploader);
 
-            Equipment e2 = saveEquipment(eq.getId(), "23나5678", EquipmentCategory.AERIAL_LIFT, "45m 고소작업차",      "두산", 2021);
+            Equipment e2 = saveEquipment(eq.getId(), "23나5678", "AERIAL_LIFT", "45m 고소작업차",      "두산", 2021);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e2.getId(), "자동차등록증", null,    true,  stubKey, uploader);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e2.getId(), "정기검사증",   valid,   true,  stubKey, uploader);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e2.getId(), "보험증권",     expSoon, true,  stubKey, uploader);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e2.getId(), "점검표",       valid,   true,  stubKey, uploader);
 
-            Equipment e3 = saveEquipment(eq.getId(), "34다9012", EquipmentCategory.EXCAVATOR,   "30톤 굴삭기",          "현대", 2019);
+            Equipment e3 = saveEquipment(eq.getId(), "34다9012", "EXCAVATOR",   "30톤 굴삭기",          "현대", 2019);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e3.getId(), "자동차등록증", null,    true,  stubKey, uploader);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e3.getId(), "정기검사증",   expired, false, stubKey, uploader);
             seedDoc(typeIndex, OwnerType.EQUIPMENT, e3.getId(), "보험증권",     valid,   true,  stubKey, uploader);
@@ -338,7 +337,7 @@ public class DemoDataSeeder {
             throw new IllegalStateException("demo seeder: attendance_code 충돌이 반복됩니다");
         }
 
-        private Equipment saveEquipment(Long supplierId, String vehicleNo, EquipmentCategory cat,
+        private Equipment saveEquipment(Long supplierId, String vehicleNo, String cat,
                                         String model, String mfg, int year) {
             return equipments.save(Equipment.builder()
                     .supplierId(supplierId).vehicleNo(vehicleNo).category(cat)
@@ -379,7 +378,7 @@ public class DemoDataSeeder {
                             .build()));
         }
 
-        private Equipment ensureEqB(Long supplierId, String vehicleNo, EquipmentCategory cat,
+        private Equipment ensureEqB(Long supplierId, String vehicleNo, String cat,
                                      String model, String mfg, int year) {
             return equipments.findAll().stream()
                     .filter(e -> vehicleNo.equals(e.getVehicleNo()))
@@ -413,9 +412,9 @@ public class DemoDataSeeder {
             // 추가 EQ 공급사 B + master user + 장비 2개
             Company eqB = ensureEqSupplierB();
             User eqBUser = ensureEqSupplierBUser(eqB.getId());
-            Equipment e4 = ensureEqB(eqB.getId(), "45라3456", EquipmentCategory.CRANE,
+            Equipment e4 = ensureEqB(eqB.getId(), "45라3456", "CRANE",
                     "250톤 크롤러크레인", "삼성", 2022);
-            Equipment e5 = ensureEqB(eqB.getId(), "56마7890", EquipmentCategory.AERIAL_LIFT,
+            Equipment e5 = ensureEqB(eqB.getId(), "56마7890", "AERIAL_LIFT",
                     "35m 고소작업차", "현대", 2023);
 
             LocalDate today = LocalDate.now();
@@ -429,7 +428,7 @@ public class DemoDataSeeder {
                     .workPeriodStart(periodStart)
                     .workPeriodEnd(periodEnd)
                     .requestType(QuotationRequestType.EQUIPMENT)
-                    .equipmentCategory(EquipmentCategory.CRANE)
+                    .equipmentCategory("CRANE")
                     .specText("200톤 이상 크롤러크레인, 붐 60m+")
                     .count(2)
                     .proposedDailyRate(1_500_000)
@@ -466,7 +465,7 @@ public class DemoDataSeeder {
                     .workPeriodStart(periodStart)
                     .workPeriodEnd(periodStart.plusDays(5))
                     .requestType(QuotationRequestType.EQUIPMENT)
-                    .equipmentCategory(EquipmentCategory.AERIAL_LIFT)
+                    .equipmentCategory("AERIAL_LIFT")
                     .specText("35m 이상, 사다리식")
                     .count(1)
                     .proposedDailyRate(600_000)

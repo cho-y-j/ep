@@ -5,6 +5,7 @@ import { parseRequiredFields, type DocumentResponse, type DocumentTypeResponse, 
 import { groupDocTypes } from './docTypeGrouping';
 import DocumentCornerAligner from './DocumentCornerAligner';
 import { detectDocumentCorners } from './detectCorners';
+import { rotateImage90 } from './imageRotate';
 
 type Props = {
   open: boolean;
@@ -26,6 +27,8 @@ type Props = {
   ownerRoles?: string[];
   /** 이 자원의 EquipmentCategory — 종류 그룹핑용 (EQUIPMENT). */
   ownerCategory?: string;
+  /** EQUIPMENT 종류×서류 junction requirement (doc_type_id → required). 있으면 CSV/글로벌 대신 이걸로 그룹핑. */
+  reqByTypeId?: Map<number, boolean>;
   onClose: () => void;
   onUploaded: (doc: DocumentResponse) => void;
 };
@@ -40,6 +43,13 @@ function ocrTypeFor(typeName: string): string | null {
   if (n.includes('안전교육')) return 'KOSHA';
   if (n.includes('자동차등록')) return 'EQUIPMENT_REGISTRATION';
   return null;
+}
+
+/** OCR 만료일 문자열(2035.12.31 / 2035-12-31 등)을 <input type=date> 용 YYYY-MM-DD 로. 실패면 ''. */
+function toIsoDate(s?: string): string {
+  if (!s) return '';
+  const m = s.match(/(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : '';
 }
 
 /** OCR 응답 키(camelCase) → DocumentType.required_fields 키(snake_case) 매핑.
@@ -164,7 +174,7 @@ function LicenseTypeChips({ value, onChange }: { value: string; onChange: (v: st
  */
 export default function OcrUploadDialog({
   open, ownerType, ownerId, types, presetTypeId, title,
-  reverifyDocId, reverifyExtractedData, ownerRoles, ownerCategory,
+  reverifyDocId, reverifyExtractedData, ownerRoles, ownerCategory, reqByTypeId,
   onClose, onUploaded,
 }: Props) {
   const isReverify = reverifyDocId != null;
@@ -173,12 +183,18 @@ export default function OcrUploadDialog({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   /** 주민번호 검출 시 서버가 돌려준 마스킹 이미지 (data URL) — 저장도 이 형태로 됨. */
   const [maskedPreview, setMaskedPreview] = useState<string | null>(null);
+  /** 맞춘(원근보정+크롭) 컬러 이미지 — 리뷰 미리보기 '표시용'. 저장은 원본(마스킹)으로 한다
+   *  (크롭본은 주민번호 마스킹이 미검출돼 PII 노출 위험이라 저장엔 쓰지 않는다). */
+  const [croppedUrl, setCroppedUrl] = useState<string | null>(null);
   const [expiryDate, setExpiryDate] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
   const [step, setStep] = useState<Step>('pick');
   /** 정렬 단계 — 자동검출 코너 프리필(원본 px) + 검출 진행중 여부. */
   const [initialCorners, setInitialCorners] = useState<[number, number][] | undefined>(undefined);
+  const [alignCorners, setAlignCorners] = useState<[number, number][] | null>(null); // 맞춘 4모서리 — 저장 크롭용
   const [alignBusy, setAlignBusy] = useState(false);
+  const [rotating, setRotating] = useState(false);   // 정렬 90° 회전 진행중
+  const [alignKey, setAlignKey] = useState(0);        // 정렬기 강제 리마운트(감지/회전 반영)
   const [ocrError, setOcrError] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -204,8 +220,8 @@ export default function OcrUploadDialog({
 
   /** 이 자원에 맞춰 종류를 필수/선택/기타로 그룹핑 (pick 단계 표시용). */
   const typeGroups = useMemo(
-    () => groupDocTypes(types, ownerType, ownerRoles, ownerCategory),
-    [types, ownerType, ownerRoles, ownerCategory],
+    () => groupDocTypes(types, ownerType, ownerRoles, ownerCategory, reqByTypeId),
+    [types, ownerType, ownerRoles, ownerCategory, reqByTypeId],
   );
   const optLabel = (t: DocumentTypeResponse) =>
     `${t.name}${ocrTypeFor(t.name) ? ' (OCR 자동 추출)' : ''}${t.has_expiry ? ' · 만료일 필수' : ''}`;
@@ -229,11 +245,14 @@ export default function OcrUploadDialog({
       setFile(null);
       setPreviewUrl(null);
       setMaskedPreview(null);
+      setCroppedUrl(null);
+      setAlignCorners(null);
       setExpiryDate('');
       setFields({});
       setStep('pick');
       setInitialCorners(undefined);
       setAlignBusy(false);
+      setRotating(false);
       setOcrError('');
       setBusy(false);
       setError(null);
@@ -327,15 +346,35 @@ export default function OcrUploadDialog({
     setOcrError('');
     setInitialCorners(undefined);
     setAlignBusy(true);
-    setStep('align');
-    const corners = await detectDocumentCorners(f);
-    setInitialCorners(corners);
-    setAlignBusy(false);
+    setAlignKey((k) => k + 1);
+    setStep('align'); // 정렬 즉시 표시 — 자동 코너검출은 백그라운드(느려도 회전 버튼 바로 노출)
+    detectDocumentCorners(f)
+      .then((c) => { if (c && c.length === 4) { setInitialCorners(c); setAlignKey((k) => k + 1); } })
+      .finally(() => setAlignBusy(false));
+  }
+
+  /** 정렬 단계 90° 회전 → 파일 교체(똑바로 세워 저장/업로드) → 코너 재검출(백그라운드). 누운 사진 대응. */
+  async function rotateAlignImage() {
+    if (!file || rotating) return;
+    setRotating(true);
+    try {
+      const rotated = await rotateImage90(file); // 캔버스 회전(빠름)만 await
+      setInitialCorners(undefined);
+      setFile(rotated);                          // previewUrl 갱신 + 업로드도 회전본(똑바로)
+      setAlignKey((k) => k + 1);
+      setAlignBusy(true);
+      detectDocumentCorners(rotated)             // 자동감지는 백그라운드
+        .then((c) => { if (c && c.length === 4) { setInitialCorners(c); setAlignKey((k) => k + 1); } })
+        .finally(() => setAlignBusy(false));
+    } catch { /* 회전 실패 무시 */ } finally {
+      setRotating(false);
+    }
   }
 
   /** 사용자가 맞춘 4모서리(원본 px)로 영역-크롭 OCR → fields 자동채움. */
   async function runRegionOcr(corners: [number, number][]) {
     if (!file || typeId === '') { setStep('review'); return; }
+    setAlignCorners(corners); // 저장 시 서버가 마스킹 후 이 코너로 크롭
     setStep('ocr');
     setOcrError('');
     try {
@@ -343,13 +382,21 @@ export default function OcrUploadDialog({
       fd.append('file', file);
       fd.append('documentTypeId', String(typeId));
       fd.append('corners', JSON.stringify(corners));
-      const res = await api.post<{ ok: boolean; fields?: Record<string, string>; reasonCode?: string }>(
+      const res = await api.post<{ ok: boolean; fields?: Record<string, string>; reasonCode?: string; warped_image_base64?: string }>(
         '/api/documents/ocr-region-preview', fd,
         { headers: { 'Content-Type': 'multipart/form-data' } },
       );
+      // 맞춘(원근보정+크롭) 컬러 이미지를 리뷰 미리보기로 표시(4모서리 지정 결과 확인용). 저장은 원본으로.
+      if (res.data.warped_image_base64) {
+        setCroppedUrl(`data:image/png;base64,${res.data.warped_image_base64}`);
+      }
       // 영역 OCR 응답 fields 는 required_fields 와 동일 snake_case → 재매핑 없이 merge.
       if (res.data.ok && res.data.fields) {
-        setFields((prev) => ({ ...prev, ...res.data.fields }));
+        const f = res.data.fields;
+        setFields((prev) => ({ ...prev, ...f }));
+        // 추출된 만료일을 최상단 필수 만료일 피커에도 자동 채움(YYYY-MM-DD 정규화) — 수동 재입력 제거.
+        const iso = toIsoDate(f.expiry_date);
+        if (iso) setExpiryDate(iso);
       } else {
         setOcrError(`영역 OCR 자동 추출 실패 (${res.data.reasonCode ?? 'UNKNOWN'}). 직접 입력해주세요.`);
       }
@@ -363,6 +410,8 @@ export default function OcrUploadDialog({
   function onFilePicked(f: File) {
     setFile(f);
     setMaskedPreview(null);
+    setCroppedUrl(null);
+    setAlignCorners(null);
     // 이미지 + 영역맵 보유 → 4모서리 정렬 단계. PDF·템플릿없음은 기존 흐름(Vision or 수기) 유지.
     if (f.type.startsWith('image/') && hasRegionTemplate) {
       void startAlign(f);
@@ -411,13 +460,16 @@ export default function OcrUploadDialog({
           fd.append('manual' + camel, v.trim());
         }
       });
+      // 4모서리 정렬 크롭 저장: 서버가 원본 마스킹 후 이 코너로 원근보정+크롭해 저장(크롭+마스킹 둘 다).
+      if (alignCorners) fd.append('corners', JSON.stringify(alignCorners));
       const params: Record<string, string> = {
         ownerType,
         ownerId: String(ownerId),
         documentTypeId: String(typeId),
       };
       if (expiryDate) params.expiryDate = expiryDate;
-      const res = await api.post<DocumentResponse>('/api/documents', fd, { params });
+      // 업로드는 서버측 PII 마스킹(paddle)을 트리거해 수초~수십초 걸릴 수 있어 기본 10초로는 abort 된다.
+      const res = await api.post<DocumentResponse>('/api/documents', fd, { params, timeout: 60_000 });
       // 자동 검증 trigger — verify_endpoint 있는 서류만 의미 있음
       try { await api.post(`/api/documents/${res.data.id}/verify`, {}); } catch { /* ignore */ }
       // 면허증 등 OCR 로 주소가 잡혔고 인원 서류면, 인원 주소(선택)에 반영 — best-effort.
@@ -520,16 +572,20 @@ export default function OcrUploadDialog({
 
         {step === 'align' && (
           <div className="flex flex-1 min-h-0 flex-col">
-            {alignBusy || !previewUrl ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-4 p-10 min-h-[300px]">
-                <div className="relative w-14 h-14">
-                  <div className="absolute inset-0 rounded-full border-4 border-slate-200" />
-                  <div className="absolute inset-0 rounded-full border-4 border-brand-600 border-t-transparent animate-spin" />
-                </div>
-                <div className="text-sm font-semibold text-slate-900">문서 모서리 자동 검출 중...</div>
-              </div>
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2">
+              {alignBusy
+                ? <span className="text-xs text-amber-600">자동 영역 감지 중… 잠시 후 시작점이 맞춰집니다</span>
+                : <span className="text-xs text-slate-400">사진이 누워있으면 회전으로 똑바로 세우고 4모서리를 맞추세요</span>}
+              <button type="button" onClick={() => void rotateAlignImage()} disabled={rotating || !file}
+                className="flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                {rotating ? '회전 중…' : '↻ 90° 회전'}
+              </button>
+            </div>
+            {!previewUrl ? (
+              <div className="flex-1 flex items-center justify-center p-10 min-h-[240px] text-sm text-slate-500">이미지 불러오는 중…</div>
             ) : (
               <DocumentCornerAligner
+                key={alignKey}
                 imageUrl={previewUrl}
                 initialCorners={initialCorners}
                 onConfirm={(corners) => void runRegionOcr(corners)}
@@ -557,9 +613,9 @@ export default function OcrUploadDialog({
                   주민등록번호 자동 마스킹됨 — 마스킹된 이미지로 저장됩니다
                 </div>
               )}
-              <div className="flex-1 overflow-auto flex items-center justify-center p-3">
+              <div className="flex-1 overflow-auto flex items-center justify-center p-3 bg-slate-900">
                 {isImage ? (
-                  <img src={maskedPreview ?? previewUrl ?? undefined} alt="preview" className="max-w-full max-h-full object-contain rounded shadow" />
+                  <img src={croppedUrl ?? maskedPreview ?? previewUrl ?? undefined} alt="preview" className="max-w-full max-h-full object-contain rounded shadow" />
                 ) : isPdf ? (
                   <iframe src={previewUrl ?? undefined} sandbox="" className="w-full h-full border-0" title="pdf" />
                 ) : (

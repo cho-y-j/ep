@@ -76,18 +76,45 @@ public class VerifyClient {
         // skep `LiftonVerifyClient` 그대로: f_license_no / f_resident_name / f_licn_con_code 필드.
         body.put("f_license_no", safe(licenseNo));
         body.put("f_resident_name", safe(name));
-        body.put("f_licn_con_code", (licenseConditionCode != null && !licenseConditionCode.isBlank())
-                ? licenseConditionCode : "01");
+        body.put("f_licn_con_code", toRimsLicenseCode(licenseConditionCode));
         return callJson(mainApiUrl + "/api/verify/rims/license", body);
+    }
+
+    /** 면허종별(한글 텍스트/복수표기) → RIMS 2자리 코드. main-api 가 f_licn_con_code 를 \d{2} 로 검증하므로
+     *  '1종 보통' 같은 텍스트를 그대로 보내면 400. 미상/미입력은 최빈값 1종보통(12)로 폴백. */
+    static String toRimsLicenseCode(String s) {
+        if (s == null || s.isBlank()) return "12";
+        String t = s.replaceAll("\\s", "");
+        if (t.matches("\\d{2}")) return t;              // 이미 코드면 그대로
+        if (t.contains("1종대형")) return "11";
+        if (t.contains("1종보통")) return "12";
+        if (t.contains("1종소형")) return "13";
+        if (t.contains("2종보통")) return "21";
+        if (t.contains("2종소형")) return "22";
+        if (t.contains("2종원동기") || t.contains("원동기")) return "23";
+        return "12";                                    // 폴백: 1종 보통
     }
 
     // ─── 화물운송자격증 ─────────────────────────────────────
     public JsonNode verifyCargo(String name, String birth, String lcnsNo) {
         return callJson(mainApiUrl + "/api/verify/cargo", Map.of(
                 "name", safe(name),
-                "birth", safe(birth),
+                "birth", toIsoBirth(birth),
                 "lcnsNo", safe(lcnsNo)
         ));
+    }
+
+    /** 생년월일 → YYYY-MM-DD. main-api cargo 가 @Pattern(\d{4}-\d{2}-\d{2}) 검증하므로 '1970.03.27'·'19700327' 등을 변환. */
+    static String toIsoBirth(String s) {
+        if (s == null || s.isBlank()) return "";
+        String t = s.replaceAll("\\s", "");
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(\\d{4})[.\\-/](\\d{1,2})[.\\-/](\\d{1,2})").matcher(t);
+        if (m.find()) return String.format("%s-%02d-%02d",
+                m.group(1), Integer.parseInt(m.group(2)), Integer.parseInt(m.group(3)));
+        m = java.util.regex.Pattern.compile("(\\d{4})(\\d{2})(\\d{2})").matcher(t);
+        if (m.find()) return m.group(1) + "-" + m.group(2) + "-" + m.group(3);
+        return t; // 변환 불가 — 원본(검증에서 걸리면 사용자 보정)
     }
 
     // ─── KOSHA 안전보건교육 (multipart 이미지) ────────────

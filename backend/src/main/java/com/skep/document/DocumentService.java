@@ -114,6 +114,7 @@ public class DocumentService {
     private final com.skep.supplement.DocumentSupplementService supplementService;
     private final com.skep.quotation.dispatch.ResourceRenewalNotifier renewalNotifier;
     private final PiiImageMasker piiImageMasker;
+    private final com.skep.verify.PaddleOcrClient paddleClient;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
     /** V82: 로컬 OCR 만료일 백필 엔진 (off|paddle|google). off 아니면 백필 대상 타입은 만료일 입력을 선택으로 완화. */
@@ -131,7 +132,9 @@ public class DocumentService {
                            com.skep.supplement.DocumentSupplementService supplementService,
                            @org.springframework.context.annotation.Lazy
                            com.skep.quotation.dispatch.ResourceRenewalNotifier renewalNotifier,
-                           PiiImageMasker piiImageMasker) {
+                           PiiImageMasker piiImageMasker,
+                           com.skep.verify.PaddleOcrClient paddleClient) {
+        this.paddleClient = paddleClient;
         this.docRepo = docRepo;
         this.typeRepo = typeRepo;
         this.equipmentRepo = equipmentRepo;
@@ -167,13 +170,13 @@ public class DocumentService {
 
     public DocumentResponse upload(OwnerType ownerType, Long ownerId, Long documentTypeId,
                                    LocalDate expiryDate, MultipartFile file, AuthenticatedUser actor) {
-        return upload(ownerType, ownerId, documentTypeId, expiryDate, file, java.util.Map.of(), actor);
+        return upload(ownerType, ownerId, documentTypeId, expiryDate, file, java.util.Map.of(), null, actor);
     }
 
     /** S-9-G.2: 사용자가 OCR preview 단계에서 검토/수정한 manual 필드를 extracted_data 에 같이 저장. */
     public DocumentResponse upload(OwnerType ownerType, Long ownerId, Long documentTypeId,
                                    LocalDate expiryDate, MultipartFile file,
-                                   java.util.Map<String, String> manualFields, AuthenticatedUser actor) {
+                                   java.util.Map<String, String> manualFields, String corners, AuthenticatedUser actor) {
         Long ownerSupplierId = ownerSupplierIdOrThrow(ownerType, ownerId);
         ensureCanModify(actor, ownerSupplierId);
 
@@ -208,11 +211,34 @@ public class DocumentService {
         long storedSize = file.getSize();
         String key;
         PiiImageMasker.MaskedFile masked = piiImageMasker.maskIfNeeded(type.getName(), file);
-        if (masked != null) {
-            key = storage.storeBytes(masked.bytes(), ".jpg");
-            storedName = masked.fileName();
-            storedCt = masked.contentType();
-            storedSize = masked.bytes().length;
+        // 4모서리 정렬 크롭 저장: 코너가 오면 이미지를 display 와 동일 warp(원근보정+크롭)해 저장한다.
+        // ★순서 중요 — 주민번호 마스킹은 반드시 '원본'에서 먼저 수행(maskIfNeeded)하고, 그 마스킹본을 warp 한다.
+        //   (크롭된 warp 이미지는 mask-pii 가 주민번호를 미검출 → PII 노출되므로 절대 warp 후 마스킹하지 않는다.)
+        boolean crop = corners != null && !corners.isBlank()
+                && storedCt.toLowerCase().startsWith("image/")
+                && type.getOcrRegionTemplate() != null && !type.getOcrRegionTemplate().isBlank();
+        if (masked != null || crop) {
+            byte[] bytes;
+            try {
+                bytes = masked != null ? masked.bytes() : file.getBytes();
+            } catch (java.io.IOException e) {
+                throw ApiException.badRequest("FILE_READ_FAILED", "파일을 읽지 못했습니다");
+            }
+            String nm = masked != null ? masked.fileName() : storedName;
+            String cc = masked != null ? masked.contentType() : storedCt;
+            if (crop) {
+                com.fasterxml.jackson.databind.JsonNode raw =
+                        paddleClient.extractRegionsRaw(bytes, nm, corners, type.getOcrRegionTemplate(), true);
+                if (raw != null && raw.hasNonNull("warped_image_base64")) {
+                    bytes = java.util.Base64.getDecoder().decode(raw.get("warped_image_base64").asText());
+                    cc = "image/png";
+                    nm = nm.replaceAll("(?i)\\.[a-z0-9]+$", "") + "-cropped.png";
+                }
+            }
+            key = storage.storeBytes(bytes, cc.toLowerCase().contains("png") ? ".png" : ".jpg");
+            storedName = nm;
+            storedCt = cc;
+            storedSize = bytes.length;
         } else {
             key = storage.store(file);
         }
@@ -504,7 +530,7 @@ public class DocumentService {
                 Equipment e = equipmentRepo.findById(d.getOwnerId()).orElse(null);
                 ownerName = e != null ? (e.getVehicleNo() != null ? e.getVehicleNo()
                         : (e.getModel() != null ? e.getModel() : ("장비 #" + d.getOwnerId()))) : "(삭제됨)";
-                if (e != null && e.getCategory() != null) ownerSubLabel = e.getCategory().name();
+                if (e != null && e.getCategory() != null) ownerSubLabel = e.getCategory();
                 if (e != null && e.getAssignmentStatus() != null) ownerAssignmentStatus = e.getAssignmentStatus().name();
                 if (e != null) { ownerExternal = e.isExternal(); ownerBusinessName = e.getVehicleOwnerName(); }
             } else if (d.getOwnerType() == OwnerType.COMPANY) {

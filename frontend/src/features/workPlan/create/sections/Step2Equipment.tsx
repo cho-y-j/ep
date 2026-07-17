@@ -1,5 +1,5 @@
 import Avatar from '../../../../components/Avatar';
-import { EQUIPMENT_CATEGORY_LABEL } from '../../../../types/equipment';
+import { equipmentCategoryLabel } from '../../../../types/equipment';
 import { REQUIRED_ROLES, type DocPreviewTarget } from '../types';
 import { PersonRoleCardGroup } from '../components/PersonRoleCardGroup';
 import { EquipDocsGroup, RoleDocsGroup } from '../components/DocPanel';
@@ -66,7 +66,7 @@ export function Step2Equipment({ state, onPreview, showDocuments = true }: Step2
                 || state.connectedEquipmentIds.includes(e.id))
               .map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.vehicle_no || e.model || '#' + e.id} · {EQUIPMENT_CATEGORY_LABEL[e.category]}
+                  {e.vehicle_no || e.model || '#' + e.id} · {equipmentCategoryLabel(e.category)}
                 </option>
               ))}
           </select>
@@ -93,7 +93,7 @@ export function Step2Equipment({ state, onPreview, showDocuments = true }: Step2
                 {state.selectedEquipment.vehicle_no || state.selectedEquipment.model || `장비 #${state.selectedEquipment.id}`}
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                <span>{EQUIPMENT_CATEGORY_LABEL[state.selectedEquipment.category]}</span>
+                <span>{equipmentCategoryLabel(state.selectedEquipment.category)}</span>
                 <span>{state.selectedEquipment.code ?? '-'}</span>
                 {state.selectedEquipment.current_site_name && <span>@ {state.selectedEquipment.current_site_name}</span>}
               </div>

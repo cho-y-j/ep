@@ -319,7 +319,7 @@ public class OutgoingQuotationService {
                 .append("</div>")
                 .append("<table>");
         if (eq != null) {
-            String catLabel = categoryLabel(eq.getCategory().name());
+            String catLabel = categoryLabel(eq.getCategory());
             String head = nonBlank(eq.getVehicleNo(), eq.getModel(), "장비 #" + eq.getId());
             String detail = catLabel
                     + (eq.getModel() != null ? " · " + esc(eq.getModel()) : "")

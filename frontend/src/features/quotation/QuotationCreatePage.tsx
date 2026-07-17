@@ -10,6 +10,7 @@ import {
   EQUIPMENT_CATEGORY_LABEL,
   type EquipmentCategory,
 } from '../../types/equipment';
+import { useEquipmentTypes } from '../equipment/useEquipmentTypes';
 import { ALL_PERSON_ROLES, PERSON_ROLE_LABEL, type PersonRole } from '../../types/person';
 import MoneyInput from '../../components/MoneyInput';
 import AlimTalkSendBox from '../../components/AlimTalkSendBox';
@@ -106,6 +107,10 @@ export default function QuotationCreatePage() {
   const navigate = useNavigate();
   const isAdmin = user?.role === 'ADMIN';
   const isBP = user?.role === 'BP';
+  const { options: typeOptions, labelOf: categoryLabelOf } = useEquipmentTypes();
+  const categoryOptions = typeOptions.length
+    ? typeOptions
+    : EQUIPMENT_CATEGORIES.map((c) => ({ code: c, name: EQUIPMENT_CATEGORY_LABEL[c], grp: '' }));
   if (!isAdmin && !isBP) {
     return (
       <AppShell breadcrumb={[{ label: '견적 요청' }]}>
@@ -358,8 +363,8 @@ export default function QuotationCreatePage() {
                   required
                 >
                   <option value="">— 카테고리 —</option>
-                  {EQUIPMENT_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{EQUIPMENT_CATEGORY_LABEL[c]}</option>
+                  {categoryOptions.map((c) => (
+                    <option key={c.code} value={c.code}>{c.name}</option>
                   ))}
                 </select>
               </label>
@@ -442,7 +447,7 @@ export default function QuotationCreatePage() {
                                     {e.year ? ` · ${e.year}` : ''}
                                   </div>
                                   <div className="text-[10px] text-slate-500">
-                                    {EQUIPMENT_CATEGORY_LABEL[e.category]}
+                                    {categoryLabelOf(e.category)}
                                     {e.serial_number ? ` · S/N ${e.serial_number}` : ''}
                                   </div>
                                   <CandidateBadges
