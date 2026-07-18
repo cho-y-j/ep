@@ -4,6 +4,7 @@ import type { CompanyResponse, UserResponse } from '../../types/auth';
 import AppShell from '../../components/layout/AppShell';
 import UserDetailPanel from './UserDetailPanel';
 import UserTable from './UserTable';
+import CreateClientUserForm from './CreateClientUserForm';
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserResponse[]>([]);
@@ -49,6 +50,8 @@ export default function AdminUsersPage() {
             회원가입 신청 사용자를 승인하거나, 역할/상태를 변경합니다. 행을 클릭하면 상세 패널이 열립니다.
           </p>
         </div>
+
+        <CreateClientUserForm onCreated={load} />
 
         {loading ? (
           <p className="text-slate-400">불러오는 중...</p>

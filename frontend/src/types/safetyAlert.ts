@@ -18,7 +18,37 @@ export type SafetyAlertResponse = {
   work_plan_id: number | null;
   resolved: boolean;
   resolved_at: string | null;
+  // S5' 3등급 + 확인응답(ack).
+  severity?: string | null;
+  acknowledged_at?: string | null;
+  ack_person_id?: number | null;
+  escalated_at?: string | null;
   created_at: string;
+};
+
+/** S5' 확인응답 대상 kind(작업자 수신 알림). SOS(emergency·fall)는 관리자 응답 흐름이라 ack 대상 아님. */
+export const ACK_KINDS = new Set(['wind_stop', 'heat', 'rest']);
+
+export type AckState = 'acknowledged' | 'escalated' | 'pending' | 'na';
+
+/** 알림의 확인응답 상태 — 관제 ack 컬럼·미확인 필터용. severity 미지정(레거시)/비대상 kind = na. */
+export function ackState(r: {
+  kind: string;
+  severity?: string | null;
+  acknowledged_at?: string | null;
+  escalated_at?: string | null;
+}): AckState {
+  const ackable = ACK_KINDS.has(r.kind) && r.severity != null && r.severity !== 'NORMAL';
+  if (!ackable) return 'na';
+  if (r.acknowledged_at) return 'acknowledged';
+  if (r.escalated_at) return 'escalated';
+  return 'pending';
+}
+
+export const SEVERITY_LABEL: Record<string, string> = {
+  EMERGENCY: '긴급',
+  CAUTION: '주의',
+  NORMAL: '일반',
 };
 
 export const LEVEL_LABEL: Record<string, string> = {
@@ -42,4 +72,5 @@ export const KIND_LABEL: Record<string, string> = {
   manual: '수동호출',
   heat: '폭염알림',
   rest: '휴식알림',
+  wind_stop: '강풍중지',
 };

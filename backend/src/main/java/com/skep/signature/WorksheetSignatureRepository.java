@@ -12,6 +12,14 @@ public interface WorksheetSignatureRepository extends JpaRepository<WorksheetSig
 
     List<WorksheetSignature> findByWorkPlanIdOrderById(Long workPlanId);
 
+    /**
+     * P3d 이행 보고서 — 여러 계획서의 서명 상태 배치 조회(N+1 회피, PNG 미로드).
+     * Object[]{workPlanId(Long), role(SignatureRole), status(SignatureStatus), signedAt(LocalDateTime)}.
+     */
+    @Query("SELECT s.workPlanId, s.role, s.status, s.signedAt FROM WorksheetSignature s "
+            + "WHERE s.workPlanId IN :workPlanIds")
+    List<Object[]> findStatusesByWorkPlanIds(@Param("workPlanIds") Collection<Long> workPlanIds);
+
     Optional<WorksheetSignature> findByWorkPlanIdAndRole(Long workPlanId, SignatureRole role);
 
     Optional<WorksheetSignature> findBySignToken(String token);

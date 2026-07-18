@@ -120,6 +120,21 @@ export default function EquipmentDuePanel({ equipment, canEdit, onSaved }: {
               </div>
             );
           })}
+          {/* S4'(P3a): 가동시간 기반 정비 — oil_change(날짜)와 병존. */}
+          <div className={`rounded-lg border p-3 ${equipment.maintenance_due ? 'border-rose-200 bg-rose-50' : 'border-slate-100'}`}>
+            <div className="text-xs text-slate-500">가동시간 정비</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-slate-900">누적 {equipment.cumulative_work_hours}h</span>
+              {equipment.maintenance_interval_hours != null ? (
+                <span className="text-xs text-slate-500">/ 주기 {equipment.maintenance_interval_hours}h</span>
+              ) : (
+                <span className="text-xs text-slate-400">주기 미설정</span>
+              )}
+              {equipment.maintenance_due && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-700">정비 도래</span>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

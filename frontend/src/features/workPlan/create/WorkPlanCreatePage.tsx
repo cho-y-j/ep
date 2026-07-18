@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { toast } from '../../../lib/toast';
 import type { WorkPlanResponse } from '../../../types/workPlan';
 import type { QuotationRequestResponse, QuotationBundleResponse } from '../../../types/quotation';
 import { equipmentCategoryLabel } from '../../../types/equipment';
@@ -67,16 +68,27 @@ export default function WorkPlanCreatePage() {
 
   useEffect(() => {
     if (state.loading || prefilledRef.current) return;
+    // P1a 기반①: 기존 계획서 편집 진입 (?planId=) — 저장된 formValues·자원·서명상태 복원.
+    const planIdParam = params.get('planId');
+    if (planIdParam) {
+      prefilledRef.current = true;
+      void hydrateFromPlan(Number(planIdParam));
+      return;
+    }
     const q = params.get('fromQuotation');
     const b = params.get('fromQuotationBundle');
     const siteIdParam = params.get('siteId');
     const titleParam = params.get('title');
-    // 서류관리(현장)에서 진입 시 siteId/title 만 prefill
-    if (!q && !b && (siteIdParam || titleParam)) {
+    const eqSupParam = params.get('equipmentSupplierId');
+    const mpSupParam = params.get('manpowerSupplierId');
+    // 서류관리(현장)/서류 심사에서 진입 시 siteId/title/공급사 prefill
+    if (!q && !b && (siteIdParam || titleParam || eqSupParam || mpSupParam)) {
       prefilledRef.current = true;
       if (siteIdParam) state.setSiteId(Number(siteIdParam));
       if (titleParam) state.setTitle(titleParam);
-      setPrefillNote('서류관리에서 진입했습니다. 현장과 제목이 자동으로 채워졌습니다.');
+      if (eqSupParam) state.setEquipmentSupplierId(Number(eqSupParam));
+      if (mpSupParam) state.setManpowerSupplierId(Number(mpSupParam));
+      setPrefillNote('서류 심사/서류관리에서 진입했습니다. 현장·제목·공급사가 자동으로 채워졌습니다.');
       return;
     }
     if (!q && !b) return;
@@ -102,6 +114,51 @@ export default function WorkPlanCreatePage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.loading, params]);
+
+  /** P1a 기반①: 저장된 계획서(#planId) 로드 → 워크시트 132필드 + roleAssign + 첨부선택 + 자원 복원. */
+  const hydrateFromPlan = async (planId: number) => {
+    try {
+      const { data: wp } = await api.get<WorkPlanResponse>(`/api/work-plans/${planId}`);
+      setSavedWorkPlanId(wp.id);
+      // 저장본 자원 매칭을 위해 공급사 목록을 넓게 로드.
+      state.setBypassConnection(true);
+      // 메타
+      if (wp.title) state.setTitle(wp.title);
+      if (wp.work_date) state.setWorkDate(wp.work_date);
+      if (wp.start_time) state.setStartTime(wp.start_time.slice(0, 5));
+      if (wp.end_time) state.setEndTime(wp.end_time.slice(0, 5));
+      if (wp.work_location) state.setWorkLocation(wp.work_location);
+      if (wp.description) state.setDescription(wp.description);
+      // bpCompanyId 를 먼저 복원해야 sitesForBp 에 현장이 포함되어 setSiteId 가 유지됨.
+      // (bp 미복원 시 훅의 BP변경 초기화 effect 가 siteId 를 즉시 null 로 지워 save() 가 막힘)
+      if (wp.bp_company_id) state.setBpCompanyId(wp.bp_company_id);
+      if (wp.site_id) state.setSiteId(wp.site_id);
+      // 자원 공급사 + 장비 (복원은 기존 pending 머신 재사용 — 목록 로드되면 자동 적용)
+      const eq0 = (wp.equipment ?? [])[0];
+      if (eq0?.supplier_company_id) state.setEquipmentSupplierId(eq0.supplier_company_id);
+      if (eq0?.equipment_id) setPendingEquipmentId(eq0.equipment_id);
+      const persons = wp.persons ?? [];
+      const mp0 = persons.find((p) => !p.equipment_id) ?? persons[0];
+      if (mp0?.supplier_company_id) state.setManpowerSupplierId(mp0.supplier_company_id);
+      // 워크시트 폼 + roleAssign + 첨부 선택 (form_values)
+      const fv = (wp.form_values ?? {}) as Record<string, any>;
+      if (fv.values) state.setValues(fv.values);
+      if (fv.workSiteDiagramKey) state.setWorkSiteDiagramKey(fv.workSiteDiagramKey);
+      if (Array.isArray(fv.equipDocIds)) state.setSelectedEquipDocIds(new Set(fv.equipDocIds));
+      if (Array.isArray(fv.personDocIds)) state.setSelectedPersonDocIds(new Set(fv.personDocIds));
+      const ra = (fv.roleAssign ?? {}) as Record<string, number[]>;
+      if (Array.isArray(ra.operator) && ra.operator.length) setPendingOperatorIds(ra.operator);
+      const byRole: Record<string, number[]> = {};
+      for (const roleKey of Object.keys(ra)) {
+        if (roleKey !== 'operator' && Array.isArray(ra[roleKey]) && ra[roleKey].length) byRole[roleKey] = ra[roleKey];
+      }
+      if (Object.keys(byRole).length) setPendingManpowerByRole(byRole);
+      setPrefillNote(`저장된 작업계획서 #${wp.id} 를 불러왔습니다. 워크시트·첨부·서명 상태가 복원되었습니다.`);
+    } catch (e) {
+      console.warn('계획서 로드 실패', e);
+      setPrefillNote('저장된 작업계획서를 불러오지 못했습니다.');
+    }
+  };
 
   /** 발송된 차량/인원 또는 finalize 된 target/proposal 에서 공급사 + 자원 ID 추출 → 자동 설정. */
   const prefillSupplierFromQuotation = async (qId: number) => {
@@ -315,6 +372,29 @@ export default function WorkPlanCreatePage() {
     }
   };
 
+  /** P1a 기반②: 현재 formValues 로 렌더한 워크시트 전문 PDF 를 서명 스냅샷으로 업로드.
+   *  공개 /sign 페이지·서명요청 메일이 이 스냅샷을 우선 서빙(서명자가 셸이 아닌 실문서를 봄). best-effort. */
+  const uploadSignSnapshot = async (planId: number) => {
+    try {
+      const { blob, baseName } = await buildDocxBlob(true);
+      const fd = new FormData();
+      fd.append('file', blob, `${baseName}.docx`);
+      fd.append('name', baseName);
+      const res = await api.post('/api/worksheet/to-pdf', fd, {
+        responseType: 'blob',
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const pdfBlob = res.data instanceof Blob ? res.data : new Blob([res.data as any], { type: 'application/pdf' });
+      const sfd = new FormData();
+      sfd.append('file', pdfBlob, `${baseName}.pdf`);
+      await api.post(`/api/work-plans/${planId}/sign-snapshot`, sfd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    } catch (e) {
+      console.warn('서명 스냅샷 생성 실패(무시하고 진행)', e);
+    }
+  };
+
   /** OnlyOffice editor session 생성 — DOCX 업로드 후 sessionId + config 받아옴. */
   const createEditorSession = async (blob: Blob, baseName: string) => {
     const fd = new FormData();
@@ -364,28 +444,21 @@ export default function WorkPlanCreatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.values, state.roleAssign, state.siteId, state.equipmentId, hasAnySigned, savedWorkPlanId]);
 
-  const handleInvalidate = async (confirm: boolean) => {
+  // P1a 기반②: 전원 재서명 정책 — 내용 변경 시 사인 유지 선택 없음. 무효화 확인만.
+  const handleInvalidate = async () => {
     setInvalidateDialogOpen(false);
     if (!savedWorkPlanId) return;
-    if (confirm) {
-      try {
-        await api.post(`/api/work-plans/${savedWorkPlanId}/signatures/invalidate`);
-        setSaveMsg('기존 사인이 모두 무효화되었습니다. 다시 사인 요청을 보내세요.');
-        // 스냅샷 초기화 — 다음 사인 완료 시 다시 기록
-        formSnapshotRef.current = '';
-        setHasAnySigned(false);
-        setAllSigned(false);
-      } catch (e: any) {
-        alert('무효화 실패: ' + (e?.response?.data?.error || e?.message || e));
-      }
-    } else {
-      // 사용자가 유지 선택 — 다이얼로그 닫고 다음 변경까지 무시
-      formSnapshotRef.current = JSON.stringify({
-        values: state.values,
-        roleAssign: state.roleAssign,
-        siteId: state.siteId,
-        equipmentId: state.equipmentId,
-      });
+    try {
+      await api.post(`/api/work-plans/${savedWorkPlanId}/signatures/invalidate`);
+      setSaveMsg('기존 사인이 모두 무효화되었습니다. 저장 후 다시 사인 요청을 보내세요.');
+    } catch (e: any) {
+      // 서버가 내용 저장 시 자동 무효화하므로 여기 실패해도 정책은 지켜짐.
+      console.warn('사인 무효화 호출 실패(저장 시 서버가 강제)', e);
+    } finally {
+      // 스냅샷 초기화 — 다음 사인 완료 시 다시 기록
+      formSnapshotRef.current = '';
+      setHasAnySigned(false);
+      setAllSigned(false);
     }
   };
 
@@ -503,19 +576,24 @@ export default function WorkPlanCreatePage() {
     }
   };
 
+  /** 임시저장 — savedWorkPlanId 있으면 progress 무관 언제든 최신 formValues PATCH.
+   *  hydrated(?planId=) 계획서 편집분 저장 경로. save() 성공 시 토스트 피드백. */
+  const handleSaveDraft = async () => {
+    const planId = await save();
+    if (planId != null) toast.success(`임시저장 완료 (#${planId})`);
+  };
+
   /** 제출하기 — 한 번에 처리:
-   *  1) DRAFT 저장 (id 부여)
+   *  1) DRAFT 저장/갱신 (셸 재생성은 planId 존재 시 생략, formValues 는 항상 PATCH)
    *  2) 입력된 4명 이메일에 사인 요청 일괄 발송
    *  3) 5/5 SIGNED 이면 SUBMITTED 전이, 아니면 detail 페이지로 이동 (사인 상태 확인)
    */
   const submitWorkPlan = async () => {
     setSubmitting(true);
     try {
-      let planId = savedWorkPlanId;
-      if (planId == null) {
-        planId = await save();
-        if (planId == null) return;
-      }
+      // savedWorkPlanId 유무와 무관하게 항상 save() — hydrated 계획서의 최신 워크시트 수정분을 반영.
+      const planId = await save();
+      if (planId == null) return;
 
       // 입력된 4명 이메일 → 사인 요청 메일 일괄 발송 (방금 부여된 planId 명시적으로 전달)
       let sent = 0;
@@ -523,6 +601,8 @@ export default function WorkPlanCreatePage() {
       if (!sigPanelRef.current) {
         console.error('[submit] SignaturePanel ref is null — 4번 섹션이 mount 안 됨');
       }
+      // P1a 기반②: 외부 서명요청 발송 전 스냅샷 생성 → 서명자가 워크시트 전문을 봄.
+      await uploadSignSnapshot(planId);
       try {
         const result = await sigPanelRef.current?.sendAllPending(planId);
         sent = result?.sent ?? 0;
@@ -718,6 +798,7 @@ export default function WorkPlanCreatePage() {
                 <SignaturePanel
                   ref={sigPanelRef}
                   workPlanId={savedWorkPlanId}
+                  buildSnapshot={uploadSignSnapshot}
                   onAllSignedChange={setAllSigned}
                   onAnySignedChange={(any) => {
                     setHasAnySigned((prev) => {
@@ -817,6 +898,17 @@ export default function WorkPlanCreatePage() {
             >
               PDF 메일
             </button>
+            {savedWorkPlanId != null && (
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={saving || submitting}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+                title="현재 워크시트·첨부·자원 수정분을 저장합니다 (진행률 무관)"
+              >
+                {saving ? '저장 중…' : '임시저장'}
+              </button>
+            )}
             <button
               type="button"
               onClick={submitWorkPlan}
@@ -837,24 +929,18 @@ export default function WorkPlanCreatePage() {
       {invalidateDialogOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5">
-            <h3 className="text-base font-bold text-slate-900 mb-2">사인 무효화 확인</h3>
-            <p className="text-sm text-slate-700 mb-4">
-              일부 사인이 완료된 후 작업계획서 내용이 변경되었습니다. 기존 사인을 무효화하고 다시 사인을 받으시겠습니까?
+            <h3 className="text-base font-bold text-slate-900 mb-2">사인 재수집 안내</h3>
+            <p className="text-sm text-slate-700 mb-1">
+              작업계획서 내용이 변경되었습니다. <b>전원 재서명 정책</b>에 따라 기존 사인은 모두 무효화되며, 저장 시 서버가 자동으로 무효 처리합니다.
             </p>
+            <p className="text-sm text-slate-500 mb-4">변경된 내용으로 사인을 다시 요청하세요.</p>
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => handleInvalidate(false)}
-                className="text-sm px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50"
-              >
-                유지
-              </button>
-              <button
-                type="button"
-                onClick={() => handleInvalidate(true)}
+                onClick={() => void handleInvalidate()}
                 className="text-sm px-4 py-1.5 rounded-md bg-rose-600 text-white font-medium hover:bg-rose-700"
               >
-                기존 사인 무효화
+                확인 (기존 사인 무효화)
               </button>
             </div>
           </div>

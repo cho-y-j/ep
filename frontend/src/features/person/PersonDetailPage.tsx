@@ -13,6 +13,8 @@ import ResourceAssignmentSection from '../assignment/ResourceAssignmentSection';
 import AssignmentBadge from '../assignment/AssignmentBadge';
 import ClientOrgHistory from '../../components/ClientOrgHistory';
 import PersonCredentialCard from './PersonCredentialCard';
+import DeployCheckCard from '../readiness/DeployCheckCard';
+import OnboardingBadge from '../onboarding/OnboardingBadge';
 import {
   EMPLOYMENT_TYPE_LABEL, PERSON_STATUS_LABEL, type PersonResponse, type PersonStatus,
 } from '../../types/person';
@@ -298,6 +300,7 @@ export default function PersonDetailPage() {
                 {person.assignment_status && (
                   <AssignmentBadge status={person.assignment_status} />
                 )}
+                <OnboardingBadge ownerType="PERSON" ownerId={person.id} />
               </div>
               <div className="text-slate-500 mb-6 flex items-center gap-2 flex-wrap">
                 {editMode ? (
@@ -421,6 +424,9 @@ export default function PersonDetailPage() {
 
         {/* 앱 로그인 계정 */}
         {canEdit && <PersonCredentialCard person={person} onUpdated={setPerson} />}
+
+        {/* L3: 현장 투입가능 사전판정 */}
+        <DeployCheckCard ownerType="person" ownerId={person.id} />
 
         {/* 현장 배치 섹션 */}
         <ResourceAssignmentSection

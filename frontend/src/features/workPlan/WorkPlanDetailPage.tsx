@@ -19,6 +19,7 @@ import WorkConfirmationSection from '../workConfirmation/WorkConfirmationSection
 import { SignaturePanel } from './create/components/SignaturePanel';
 import MissingDocsDialog from './create/components/MissingDocsDialog';
 import IssueResourceCheckDialog from '../resourceCheck/IssueResourceCheckDialog';
+import ReplaceResourceDialog from './ReplaceResourceDialog';
 import {
   CHECK_TYPE_LABEL, CHECK_STATUS_LABEL,
   type ResourceCheckResponse,
@@ -130,6 +131,7 @@ export default function WorkPlanDetailPage() {
   const [busy, setBusy] = useState(false);
   const [allSigned, setAllSigned] = useState(false);
   const [missingDocsOpen, setMissingDocsOpen] = useState(false);
+  const [replaceOpen, setReplaceOpen] = useState(false);
   const [checks, setChecks] = useState<ResourceCheckResponse[]>([]);
 
   const loadChecks = useCallback(async () => {
@@ -291,6 +293,15 @@ export default function WorkPlanDetailPage() {
                   className="rounded border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >복제</button>
               )}
+              {canManage && wp.status !== 'CANCELLED' && wp.status !== 'DONE' && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setReplaceOpen(true)}
+                  className="rounded border border-blue-200 bg-white px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                  title="자원 교체 — 새 계획서 생성 + 원본 자동 종료(전원 재서명)"
+                >자원 교체</button>
+              )}
               {/* DRAFT 상태의 "제출" 버튼은 하단 박스로 통합 — 헤더에는 두지 않음 */}
               {canManage && wp.status === 'SUBMITTED' && (
                 <button type="button" disabled={busy} onClick={() => void transition('approve')} className="btn-primary disabled:opacity-50">승인</button>
@@ -313,6 +324,13 @@ export default function WorkPlanDetailPage() {
           {wp.cancel_reason && (
             <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               취소 사유: {wp.cancel_reason}
+            </p>
+          )}
+          {wp.cloned_from_id && (
+            <p className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+              이 계획서는 자원 교체로 계획서{' '}
+              <button type="button" onClick={() => navigate(`/work-plans/${wp.cloned_from_id}`)} className="font-semibold underline">#{wp.cloned_from_id}</button>
+              {' '}를 대체해 생성되었습니다.
             </p>
           )}
           {error && <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>}
@@ -402,6 +420,20 @@ export default function WorkPlanDetailPage() {
         <ComplianceHistory items={wp.compliance_checks ?? []} />
       </div>
       <MissingDocsDialog open={missingDocsOpen} workPlanId={wp.id} onClose={() => setMissingDocsOpen(false)} />
+      {replaceOpen && (
+        <ReplaceResourceDialog
+          workPlanId={wp.id}
+          siteId={wp.site_id}
+          currentEquipmentSupplierId={wp.equipment?.[0]?.supplier_company_id ?? null}
+          currentEquipmentId={wp.equipment?.[0]?.equipment_id ?? null}
+          onClose={() => setReplaceOpen(false)}
+          onReplaced={(newId) => { setReplaceOpen(false); navigate(`/work-plans/new?planId=${newId}`); }}
+          onOpenChangeRequest={() => {
+            setReplaceOpen(false);
+            navigate(`/resource-change-requests/new?workPlanId=${wp.id}${wp.site_id ? `&siteId=${wp.site_id}` : ''}`);
+          }}
+        />
+      )}
     </AppShell>
   );
 }

@@ -31,6 +31,8 @@ export interface SignatureItem {
 
 interface SignaturePanelProps {
   workPlanId: number | null;
+  /** P1a 기반②: 작성자 서명/외부 요청 전에 현재 formValues 로 렌더한 PDF 스냅샷을 업로드하는 콜백. */
+  buildSnapshot?: (planId: number) => Promise<void>;
   /** 5개 사인 모두 완료 여부 — WorkPlanCreatePage 가 submit 게이트로 사용. */
   onAllSignedChange?: (allSigned: boolean) => void;
   /** 1명 이상 SIGNED 여부 — 워크시트 변경 시 무효화 다이얼로그 트리거에 사용. */
@@ -56,7 +58,7 @@ const STATUS_CHIP: Record<SignatureStatus, { label: string; cls: string }> = {
 
 /** 작업계획서 5개 사인 카드 — 작성자 본인 + 4명 이메일 요청. */
 export const SignaturePanel = forwardRef<SignaturePanelHandle, SignaturePanelProps>(function SignaturePanel(
-  { workPlanId, onAllSignedChange, onAnySignedChange, onSignaturesChange },
+  { workPlanId, buildSnapshot, onAllSignedChange, onAnySignedChange, onSignaturesChange },
   ref
 ) {
   const { user } = useAuth();
@@ -179,6 +181,7 @@ export const SignaturePanel = forwardRef<SignaturePanelHandle, SignaturePanelPro
     if (!workPlanId) return;
     setBusy('AUTHOR');
     try {
+      await buildSnapshot?.(workPlanId);
       await api.post(`/api/work-plans/${workPlanId}/signatures/author`, { pngBase64 });
       setPadOpen(false);
       await refresh();
@@ -198,6 +201,7 @@ export const SignaturePanel = forwardRef<SignaturePanelHandle, SignaturePanelPro
     }
     setBusy(role);
     try {
+      await buildSnapshot?.(workPlanId);
       await api.post(`/api/work-plans/${workPlanId}/signatures/request`, {
         [role]: { name: i.name?.trim() ?? '', email: i.email.trim() },
       });
@@ -229,6 +233,7 @@ export const SignaturePanel = forwardRef<SignaturePanelHandle, SignaturePanelPro
           sent++;
         }
         if (sent > 0) {
+          await buildSnapshot?.(workPlanId);
           await api.post(`/api/work-plans/${workPlanId}/signatures/request`, body);
           await refresh();
         }

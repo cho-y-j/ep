@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
 public record UpdateSiteRequest(
+        Long clientOrgId,
         @NotBlank @Size(max = 150) String name,
         @Size(max = 64) String code,
         @Size(max = 255) String address,

@@ -5,6 +5,16 @@ import CollapsibleSection from '../../components/ui/CollapsibleSection';
 import { api } from '../../lib/api';
 import { formatWon } from '../../lib/format';
 
+type OtBreakdown = {
+  contract_id?: number | null;
+  early_hours: number; early_amount: number;
+  lunch_hours: number; lunch_amount: number;
+  evening_hours: number; evening_amount: number;
+  night_hours: number; night_amount: number;
+  overnight_hours: number; overnight_amount: number;
+  total_ot_amount: number;
+  log_count: number;
+};
 type SettlementItem = {
   resource_type: 'EQUIPMENT' | 'PERSON';
   dispatch_id: number;
@@ -35,6 +45,8 @@ type SettlementItem = {
   derived_work_days?: number | null;
   derived_ot_days?: number | null;
   work_days_source?: 'MANUAL' | 'DERIVED' | null;
+  source_kind?: 'DISPATCH' | 'DEPLOYMENT' | null;
+  ot_breakdown?: OtBreakdown | null;
 };
 type OwnerSettlement = {
   owner_company_id: number;
@@ -177,7 +189,9 @@ function OwnerTable({ owner, onSave }: {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {owner.items.map((it) => <ItemRow key={it.dispatch_id} it={it} onSave={onSave} />)}
+          {owner.items.map((it) => (
+            <ItemRow key={`${it.source_kind ?? 'D'}:${it.resource_type}:${it.dispatch_id}`} it={it} onSave={onSave} />
+          ))}
         </tbody>
         <tfoot>
           <tr className="border-t border-slate-200 bg-slate-50">
@@ -190,6 +204,19 @@ function OwnerTable({ owner, onSave }: {
   );
 }
 
+/** OT 5분류 컬럼 — [시간키, 금액키, 라벨]. */
+const OT_COLS: Array<[keyof OtBreakdown, keyof OtBreakdown, string]> = [
+  ['early_hours', 'early_amount', '조출'],
+  ['lunch_hours', 'lunch_amount', '점심'],
+  ['evening_hours', 'evening_amount', '연장'],
+  ['night_hours', 'night_amount', '야간'],
+  ['overnight_hours', 'overnight_amount', '철야'],
+];
+
+function fmtHours(h?: number): string {
+  return String(Number(h ?? 0));
+}
+
 function ItemRow({ it, onSave }: {
   it: SettlementItem;
   onSave: (it: SettlementItem, wd: number | null, od: number | null) => Promise<void>;
@@ -199,7 +226,10 @@ function ItemRow({ it, onSave }: {
   const [wd, setWd] = useState(initWd);
   const [od, setOd] = useState(initOd);
   const [saving, setSaving] = useState(false);
+  const [showOt, setShowOt] = useState(false);
   const dirty = wd !== initWd || od !== initOd;
+  const isDeployment = it.source_kind === 'DEPLOYMENT';
+  const ot = it.ot_breakdown;
 
   const save = async () => {
     setSaving(true);
@@ -211,6 +241,7 @@ function ItemRow({ it, onSave }: {
   };
 
   return (
+    <>
     <tr>
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-1.5">
@@ -221,6 +252,9 @@ function ItemRow({ it, onSave }: {
           <span className="font-medium text-slate-900">{it.resource_label}</span>
           {it.dispatched_by_parent && (
             <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">부모 대행</span>
+          )}
+          {isDeployment && (
+            <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">투입요청</span>
           )}
         </div>
       </td>
@@ -245,23 +279,29 @@ function ItemRow({ it, onSave }: {
         {it.ot_daily_price != null && <div className="text-slate-400">OT일 {formatWon(it.ot_daily_price)}</div>}
       </td>
       <td className="px-3 py-2.5 text-center whitespace-nowrap">
-        <div className="flex items-center justify-center gap-1">
-          <input type="number" min={0} value={wd} onChange={(e) => setWd(e.target.value)} placeholder="근무"
-            className="w-14 rounded border border-slate-300 px-1.5 py-1 text-xs text-right" />
-          <span className="text-slate-300">/</span>
-          <input type="number" min={0} value={od} onChange={(e) => setOd(e.target.value)} placeholder="OT"
-            className="w-12 rounded border border-slate-300 px-1.5 py-1 text-xs text-right" />
-          {dirty && (
-            <button onClick={() => void save()} disabled={saving}
-              className="rounded bg-brand-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
-              {saving ? '…' : '저장'}
-            </button>
-          )}
-        </div>
-        {it.work_days_source === 'DERIVED' && (
-          <div className="mt-1 text-[10px] text-emerald-600">
-            자동 {it.derived_work_days}일{(it.derived_ot_days ?? 0) > 0 && ` · OT ${it.derived_ot_days}일`}
-          </div>
+        {isDeployment ? (
+          <span className="text-[11px] text-slate-400">현장 투입요청</span>
+        ) : (
+          <>
+            <div className="flex items-center justify-center gap-1">
+              <input type="number" min={0} value={wd} onChange={(e) => setWd(e.target.value)} placeholder="근무"
+                className="w-14 rounded border border-slate-300 px-1.5 py-1 text-xs text-right" />
+              <span className="text-slate-300">/</span>
+              <input type="number" min={0} value={od} onChange={(e) => setOd(e.target.value)} placeholder="OT"
+                className="w-12 rounded border border-slate-300 px-1.5 py-1 text-xs text-right" />
+              {dirty && (
+                <button onClick={() => void save()} disabled={saving}
+                  className="rounded bg-brand-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+                  {saving ? '…' : '저장'}
+                </button>
+              )}
+            </div>
+            {it.work_days_source === 'DERIVED' && (
+              <div className="mt-1 text-[10px] text-emerald-600">
+                자동 {it.derived_work_days}일{(it.derived_ot_days ?? 0) > 0 && ` · OT ${it.derived_ot_days}일`}
+              </div>
+            )}
+          </>
         )}
       </td>
       <td className="px-3 py-2.5 text-right font-semibold text-slate-900 tabular-nums whitespace-nowrap">
@@ -273,7 +313,30 @@ function ItemRow({ it, onSave }: {
             )}
           </>
         ) : <span className="text-slate-400 font-normal">근무일수 미입력</span>}
+        {ot && (
+          <button type="button" onClick={() => setShowOt((v) => !v)}
+            className="mt-1 block ml-auto text-[10px] font-semibold text-brand-600 hover:underline">
+            OT 5분류 {formatWon(ot.total_ot_amount)} {showOt ? '▴' : '▾'}
+          </button>
+        )}
       </td>
     </tr>
+    {showOt && ot && (
+      <tr className="bg-brand-50/40">
+        <td colSpan={6} className="px-3 py-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+            <span className="font-semibold text-slate-600">일일 확인서 OT (인정 {ot.log_count}건)</span>
+            {OT_COLS.map(([hk, ak, label]) => (
+              <span key={label} className="text-slate-500">
+                {label} <b className="text-slate-700">{fmtHours(ot[hk] as number)}h</b>
+                <span className="text-slate-400"> · {formatWon(ot[ak] as number)}</span>
+              </span>
+            ))}
+            <span className="ml-auto font-semibold text-slate-800">OT 합계 {formatWon(ot.total_ot_amount)}</span>
+          </div>
+        </td>
+      </tr>
+    )}
+    </>
   );
 }

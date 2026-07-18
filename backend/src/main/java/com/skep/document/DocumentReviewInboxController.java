@@ -31,6 +31,27 @@ public class DocumentReviewInboxController {
         service.markRead(id, actor);
     }
 
+    /** 봉투 상세 — 자원별 문서 목록(인라인 뷰어/승인 판단용). */
+    @GetMapping("/{id}/documents")
+    public List<Map<String, Object>> documents(@PathVariable Long id, @CurrentUser AuthenticatedUser actor) {
+        return service.listDocuments(id, actor);
+    }
+
+    /** 승인 — 수신 BP 만, 심사중에서만. */
+    @PostMapping("/{id}/approve")
+    public Map<String, Object> approve(@PathVariable Long id, @CurrentUser AuthenticatedUser actor) {
+        return service.approve(id, actor);
+    }
+
+    public record RejectRequest(String reason) {}
+
+    /** 반려 — 수신 BP 만, 심사중에서만. 사유 필수. */
+    @PostMapping("/{id}/reject")
+    public Map<String, Object> reject(@PathVariable Long id, @RequestBody RejectRequest req,
+                                      @CurrentUser AuthenticatedUser actor) {
+        return service.reject(id, req == null ? null : req.reason(), actor);
+    }
+
     /** 자원별 폴더로 묶은 서류 zip 다운로드. */
     @GetMapping("/{id}/download")
     public ResponseEntity<byte[]> download(@PathVariable Long id, @CurrentUser AuthenticatedUser actor) {

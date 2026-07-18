@@ -12,6 +12,8 @@ import com.skep.person.Person;
 import com.skep.person.PersonRepository;
 import com.skep.security.AuthenticatedUser;
 import com.skep.user.Role;
+import com.skep.user.User;
+import com.skep.user.UserRepository;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,11 +46,16 @@ public class DocumentReviewMailService {
     private final DocumentReviewItemRepository reviewItemRepo;
     private final CompanyRepository companyRepo;
     private final NotificationService notifications;
+    private final UserRepository userRepo;
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
 
     /** 네이버/지메일 SMTP 는 From 이 반드시 인증 계정 본인이어야 함. */
     @Value("${MAIL_USERNAME:}")
     private String defaultFrom;
+
+    /** 심사 메일 "웹에서 확인" 링크 base — 서명메일과 동일 프로퍼티(dev=http://localhost:5185). */
+    @Value("${SKEP_PUBLIC_BASE_URL:http://localhost:8082}")
+    private String publicBaseUrl;
 
     public record ReviewMailResult(int recipients, int resources, int totalDocs, boolean bpDelivered) {}
 
@@ -139,13 +146,27 @@ public class DocumentReviewMailService {
             if (mailSender == null) {
                 throw ApiException.badRequest("MAIL_DISABLED", "메일 발송이 설정되지 않았습니다");
             }
-            sendEmail(mailSender, emails, req.message(), resources, totalDocs);
+            // BP사 지정 시 그 회사 소속 사용자 이메일을 자동 CC.
+            List<String> ccEmails = hasBp ? bpCcEmails(req.bpCompanyId(), emails) : List.of();
+            sendEmail(mailSender, emails, ccEmails, req.message(), resources, totalDocs);
         }
 
         return new ReviewMailResult(emails.size(), resources.size(), totalDocs, bpDelivered);
     }
 
-    private void sendEmail(JavaMailSender mailSender, List<String> emails, String message,
+    /** BP 회사 소속 사용자 이메일 — 심사 메일 자동 CC 대상. to 에 이미 있는 주소는 제외. */
+    private List<String> bpCcEmails(Long bpCompanyId, List<String> to) {
+        if (bpCompanyId == null) return List.of();
+        return userRepo.findByCompanyIdOrderByIdAsc(bpCompanyId).stream()
+                .map(User::getEmail)
+                .filter(e -> e != null && isSafeHeader(e.trim()))
+                .map(String::trim)
+                .filter(e -> !to.contains(e))
+                .distinct()
+                .toList();
+    }
+
+    private void sendEmail(JavaMailSender mailSender, List<String> emails, List<String> ccEmails, String message,
                            List<Resource> resources, int totalDocs) {
         record Attachment(String name, byte[] bytes) {}
         List<Attachment> attachments = new ArrayList<>();
@@ -162,6 +183,7 @@ public class DocumentReviewMailService {
             MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
             if (defaultFrom != null && !defaultFrom.isBlank()) helper.setFrom(defaultFrom);
             helper.setTo(emails.toArray(new String[0]));
+            if (ccEmails != null && !ccEmails.isEmpty()) helper.setCc(ccEmails.toArray(new String[0]));
             helper.setSubject("[서류 검토] 자원 " + attachments.size() + "건 / 서류 " + totalDocs + "건");
             StringBuilder body = new StringBuilder();
             if (message != null && !message.isBlank()) {
@@ -171,6 +193,8 @@ public class DocumentReviewMailService {
             for (Resource r : resources) {
                 body.append(" - ").append(r.label()).append(" (서류 ").append(r.docCount()).append("건)\n");
             }
+            // 수신 BP 는 웹 수신함에서 인라인 열람·승인/반려 가능.
+            body.append("\n웹에서 바로 확인: ").append(publicBaseUrl).append("/document-reviews/received\n");
             helper.setText(body.toString());
             for (Attachment a : attachments) {
                 helper.addAttachment(a.name(), new ByteArrayResource(a.bytes()));

@@ -7,11 +7,13 @@ const SUPPLIER_TYPE_CHIP: Record<CompanyType, string> = {
   BP: 'bg-blue-100 text-blue-800 border-blue-200',
   EQUIPMENT: 'bg-emerald-100 text-emerald-800 border-emerald-200',
   MANPOWER: 'bg-amber-100 text-amber-800 border-amber-200',
+  SAFETY_INSPECTION: 'bg-indigo-100 text-indigo-800 border-indigo-200',
 };
 const SUPPLIER_TYPE_LABEL: Record<CompanyType, string> = {
   BP: 'BP',
   EQUIPMENT: '장비',
   MANPOWER: '인력',
+  SAFETY_INSPECTION: '점검',
 };
 
 type Props = {

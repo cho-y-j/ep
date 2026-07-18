@@ -82,6 +82,7 @@ public class SiteService {
 
         Site siteToSave = Site.builder()
                 .bpCompanyId(bpCompanyId)
+                .clientOrgId(req.clientOrgId())
                 .name(req.name())
                 .code(blankToNull(req.code()))
                 .address(blankToNull(req.address()))
@@ -115,6 +116,7 @@ public class SiteService {
         );
         site.updateMap(req.latitude(), req.longitude(), blankToNull(req.polygonGeojson()), req.mapZoom());
         site.updateSettlementDay(req.settlementDay());
+        site.updateClientOrg(req.clientOrgId());
         auditLog.record(actor, AuditAction.SITE_UPDATED, AuditTargetType.SITE,
                 site.getId(), site.getBpCompanyId(), site.getId(),
                 beforeJson,
@@ -127,7 +129,7 @@ public class SiteService {
         ensureCanManage(actor, site);
         Company company = companies.findById(req.companyId())
                 .orElseThrow(() -> ApiException.badRequest("PARTICIPANT_COMPANY_NOT_FOUND", "참여 업체를 찾을 수 없습니다"));
-        if (company.getType() == CompanyType.BP) {
+        if (company.getType() != CompanyType.EQUIPMENT && company.getType() != CompanyType.MANPOWER) {
             throw ApiException.badRequest("PARTICIPANT_MUST_BE_SUPPLIER", "현장 참여 업체는 장비공급사 또는 인력공급사여야 합니다");
         }
 

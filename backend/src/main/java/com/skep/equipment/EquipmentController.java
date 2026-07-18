@@ -32,13 +32,16 @@ public class EquipmentController {
     private final AssignmentService assignmentService;
     private final CompanyRepository companies;
     private final PersonRepository persons;
+    private final MaintenanceService maintenanceService;
 
     public EquipmentController(EquipmentService service, AssignmentService assignmentService,
-                               CompanyRepository companies, PersonRepository persons) {
+                               CompanyRepository companies, PersonRepository persons,
+                               MaintenanceService maintenanceService) {
         this.service = service;
         this.assignmentService = assignmentService;
         this.companies = companies;
         this.persons = persons;
+        this.maintenanceService = maintenanceService;
     }
 
     @GetMapping
@@ -58,12 +61,14 @@ public class EquipmentController {
                 ? Map.of()
                 : companies.findAllById(supplierIds).stream()
                         .collect(Collectors.toMap(Company::getId, Company::getName));
+        var maint = maintenanceService.viewByEquipment(list);
         return list.stream()
                 .map(e -> EquipmentResponse.from(
                         e,
                         counts.getOrDefault(e.getId(), 0L),
                         e.getCurrentSiteId() != null ? siteNames.get(e.getCurrentSiteId()) : null,
-                        e.getSupplierId() != null ? supplierNames.get(e.getSupplierId()) : null
+                        e.getSupplierId() != null ? supplierNames.get(e.getSupplierId()) : null,
+                        maint.get(e.getId())
                 ))
                 .toList();
     }
@@ -76,7 +81,8 @@ public class EquipmentController {
         String supplierName = e.getSupplierId() == null
                 ? null
                 : companies.findById(e.getSupplierId()).map(Company::getName).orElse(null);
-        return EquipmentResponse.from(e, expiring, siteName, supplierName);
+        return EquipmentResponse.from(e, expiring, siteName, supplierName,
+                maintenanceService.viewByEquipment(List.of(e)).get(e.getId()));
     }
 
     @PostMapping

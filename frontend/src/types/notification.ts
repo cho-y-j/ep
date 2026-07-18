@@ -22,6 +22,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<string, string> = {
   ASSIGNMENT_OVERRIDDEN: '강제 배치',
   SUB_SUPPLIER_SIGNUP: '하위 공급사 가입 신청',
   MONTHLY_STATEMENT_READY: '월 거래내역서',
+  SAFETY_ACK_MISSING: '안전알림 미확인',
 };
 
 export type ReviewItemResponse = {

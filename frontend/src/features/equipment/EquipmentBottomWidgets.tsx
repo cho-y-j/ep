@@ -8,7 +8,9 @@ type Props = {
 
 export default function EquipmentBottomWidgets({ equipment }: Props) {
   const expiringSoon = equipment
-    .filter((e) => e.expiring_count > 0 || (e.insurance_expiry && new Date(e.insurance_expiry).getTime() - Date.now() < 60 * 24 * 3600_000))
+    .filter((e) => e.maintenance_due || e.expiring_count > 0 || (e.insurance_expiry && new Date(e.insurance_expiry).getTime() - Date.now() < 60 * 24 * 3600_000))
+    // 정비 도래 건을 앞으로.
+    .sort((a, b) => Number(b.maintenance_due) - Number(a.maintenance_due))
     .slice(0, 3);
 
   const broken = equipment.filter((e) => (e.utilization_pct ?? 0) === 0).slice(0, 3);
@@ -19,9 +21,9 @@ export default function EquipmentBottomWidgets({ equipment }: Props) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Widget title="점검 만료 임박 장비">
+      <Widget title="점검·정비 임박 장비">
         {expiringSoon.length === 0 ? (
-          <Empty text="만료 임박 장비 없음" />
+          <Empty text="점검·정비 임박 장비 없음" />
         ) : (
           <ul className="divide-y divide-slate-100">
             {expiringSoon.map((e) => (
@@ -38,7 +40,9 @@ export default function EquipmentBottomWidgets({ equipment }: Props) {
                       {equipmentCategoryLabel(e.category)} {e.vehicle_no ?? ''} <span className="text-xs text-slate-500">({e.code ?? '-'})</span>
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      {e.expiring_count > 0
+                      {e.maintenance_due
+                        ? <>정비 도래 <span className="text-rose-600 font-semibold">누적 {e.cumulative_work_hours}h</span>{e.maintenance_interval_hours != null && <span className="text-slate-400"> / 주기 {e.maintenance_interval_hours}h</span>}</>
+                        : e.expiring_count > 0
                         ? <>위험 서류 <span className="text-rose-600 font-semibold">{e.expiring_count}건</span></>
                         : (e.insurance_expiry ? <>보험 만료 <span className="text-amber-600 font-semibold">{e.insurance_expiry}</span></> : '-')}
                     </div>

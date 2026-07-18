@@ -87,6 +87,10 @@ public class WorkPlan {
     @Column(name = "form_values", columnDefinition = "jsonb")
     private Map<String, Object> formValues;
 
+    /** P1a 기반②: 서명 시점 워크시트 전문 PDF 스냅샷의 FileStorage key. null 이면 셸 렌더 폴백. */
+    @Column(name = "sign_snapshot_key", length = 255)
+    private String signSnapshotKey;
+
     @Column(name = "equipment_supplier_company_id")
     private Long equipmentSupplierCompanyId;
 
@@ -95,6 +99,10 @@ public class WorkPlan {
 
     @Column(name = "current_equipment_id")
     private Long currentEquipmentId;
+
+    /** P1c: L2 자원 교체로 이 계획서가 원본을 대체해 생성됐을 때의 원본 id (이력 연결). */
+    @Column(name = "cloned_from_id")
+    private Long clonedFromId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -183,11 +191,21 @@ public class WorkPlan {
         this.formValues = values;
     }
 
+    /** P1a 기반②: 서명 스냅샷 key 저장/clear. */
+    public void setSignSnapshotKey(String key) {
+        this.signSnapshotKey = key;
+    }
+
     public void setSupplierContext(Long equipmentSupplierCompanyId,
                                     Long manpowerSupplierCompanyId,
                                     Long currentEquipmentId) {
         this.equipmentSupplierCompanyId = equipmentSupplierCompanyId;
         this.manpowerSupplierCompanyId = manpowerSupplierCompanyId;
         this.currentEquipmentId = currentEquipmentId;
+    }
+
+    /** P1c: 교체 이력 연결 — 이 계획서가 대체한 원본 id 기록. */
+    public void setClonedFrom(Long sourceId) {
+        this.clonedFromId = sourceId;
     }
 }

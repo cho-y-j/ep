@@ -115,6 +115,36 @@ export function Step2Equipment({ state, onPreview, showDocuments = true }: Step2
         />
       )}
 
+      {/* 조종원 주야 2인 자동 채움 미리보기 — 면허번호 원천(OCR 검증값 / 수기 qualification) 표시. */}
+      {state.operatorLicenseInfos.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-1.5">
+          <div className="text-[11px] font-semibold text-slate-700">조종원 자동 채움 (주야 2인)</div>
+          {state.operatorLicenseInfos.map((info, i) => (
+            <div key={info.personId} className="rounded-md border border-slate-100 bg-slate-50/70 px-2 py-1.5">
+              <div className="mb-0.5 flex items-center gap-1.5">
+                <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                  {i === 0 ? '주간' : '야간'}
+                </span>
+                <span className="text-[12px] font-semibold text-slate-900">{info.name}</span>
+                {info.source === 'ocr' ? (
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">OCR 검증값</span>
+                ) : info.source === 'qualification' ? (
+                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">수기(자격정보)</span>
+                ) : (
+                  <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">서류 없음</span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-slate-600">
+                <div>면허번호: <span className="font-medium text-slate-900">{info.licenseNo || '—'}</span></div>
+                <div>자격종류: <span className="font-medium text-slate-900">{info.licenseType || '—'}</span></div>
+                <div>취득일: <span className="font-medium text-slate-900">{info.licenseDate || '—'}</span></div>
+                <div>교육이수일: <span className="font-medium text-slate-900">{info.eduDate || '—'}</span></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {showDocuments && state.selectedEquipment && (
         <EquipDocsGroup
           equipment={state.selectedEquipment}

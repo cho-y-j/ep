@@ -37,6 +37,25 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   QUOTATION_RESPONDED: '견적 응답',
   QUOTATION_FINALIZED: '견적 확정',
   QUOTATION_CANCELLED: '견적 취소',
+  // 서류 심사
+  DOCUMENT_REVIEW_APPROVED: '서류 심사 승인',
+  DOCUMENT_REVIEW_REJECTED: '서류 심사 반려',
+  // 작업계획서 서명/교체
+  WORK_PLAN_SIGN_SNAPSHOT: '계획서 서명 스냅샷',
+  WORK_PLAN_SIGNATURES_INVALIDATED: '계획서 서명 전체 무효화',
+  WORK_PLAN_RESOURCE_REPLACED: '계획서 자원 교체',
+  RESOURCE_CHANGE_REQUEST_CREATED: '업체변경 신청서 작성',
+  // 계약
+  CONTRACT_CREATED: '계약 등록',
+  CONTRACT_UPDATED: '계약 수정',
+  // 기투입
+  RESOURCE_ONBOARDING_REQUESTED: '기투입 승인 요청',
+  RESOURCE_ONBOARDING_APPROVED: '기투입 소급 승인',
+  RESOURCE_ONBOARDING_VERBAL: '기투입 구두승인 기록',
+  // 일일 확인서
+  DAILY_WORK_LOG_CREATED: '일일 확인서 작성',
+  DAILY_WORK_LOG_SIGNED: '일일 확인서 서명',
+  DAILY_WORK_LOG_UPDATED: '일일 확인서 수정',
 };
 
 export const AUDIT_TARGET_LABEL: Record<string, string> = {
@@ -45,10 +64,15 @@ export const AUDIT_TARGET_LABEL: Record<string, string> = {
   EQUIPMENT: '장비',
   PERSON: '인원',
   DOCUMENT: '서류',
+  DOCUMENT_REVIEW: '서류 심사',
   WORK_PLAN: '작업계획서',
   WORK_PLAN_EQUIPMENT: '작업계획서-장비',
   WORK_PLAN_PERSON: '작업계획서-인원',
   QUOTATION_REQUEST: '견적 요청',
+  CONTRACT: '계약',
+  RESOURCE_ONBOARDING: '기투입 등록',
+  DAILY_WORK_LOG: '일일 확인서',
+  RESOURCE_CHANGE_REQUEST: '업체변경 신청서',
 };
 
 export const ROLE_LABEL: Record<string, string> = {

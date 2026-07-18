@@ -37,6 +37,10 @@ public class User {
     @Column(name = "company_id")
     private Long companyId;
 
+    /** CLIENT(원청) 역할 전용 — 소속 원청. 그 외 역할은 NULL. */
+    @Column(name = "client_org_id")
+    private Long clientOrgId;
+
     @Column(name = "is_company_admin", nullable = false)
     private boolean isCompanyAdmin;
 
@@ -61,13 +65,14 @@ public class User {
 
     @Builder
     private User(String email, String password, String name, String phone,
-                 Role role, Long companyId, boolean isCompanyAdmin, boolean enabled) {
+                 Role role, Long companyId, Long clientOrgId, boolean isCompanyAdmin, boolean enabled) {
         this.email = email;
         this.password = password;
         this.name = name;
         this.phone = phone;
         this.role = role;
         this.companyId = companyId;
+        this.clientOrgId = clientOrgId;
         this.isCompanyAdmin = isCompanyAdmin;
         this.enabled = enabled;
     }

@@ -6,6 +6,8 @@ import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyType;
+import com.skep.dailywork.DailyWorkLog;
+import com.skep.dailywork.DailyWorkLogService;
 import com.skep.equipment.EquipmentRepository;
 import com.skep.notification.NotificationService;
 import com.skep.person.Person;
@@ -56,6 +58,7 @@ public class FieldAuthController {
     private final UserRepository users;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     private final FieldTokenRateLimiter rateLimiter;
+    private final DailyWorkLogService dailyWorkLogService;
 
     @PostMapping("/auth")
     public Map<String, Object> auth(@RequestBody AuthRequest req, HttpServletRequest request) {
@@ -340,6 +343,43 @@ public class FieldAuthController {
         rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         return wcRepo.findByPersonIdOrderByWorkDateDescIdDesc(p.getId()).stream().map(this::wcMap).toList();
+    }
+
+    /** 본인 일일 작업확인서(§3.6.3) — 최근순 + 합계(근무일수·OT 시간). 작업자 '내 작업내역' 뷰. */
+    @GetMapping("/daily-work-logs")
+    public Map<String, Object> myDailyWorkLogs(@RequestHeader("X-Field-Token") String token, HttpServletRequest request) {
+        rateLimiter.check(request);
+        Person p = fieldAuth.authenticate(token);
+        List<DailyWorkLog> logs = dailyWorkLogService.listForPerson(p.getId());
+        java.math.BigDecimal otTotal = java.math.BigDecimal.ZERO;
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (DailyWorkLog l : logs) {
+            java.math.BigDecimal ot = l.getOtEarly().add(l.getOtLunch()).add(l.getOtEvening())
+                    .add(l.getOtNight()).add(l.getOtOvernight());
+            otTotal = otTotal.add(ot);
+            items.add(dwlMap(l, ot));
+        }
+        Map<String, Object> out = new HashMap<>();
+        out.put("logs", items);
+        out.put("work_days", logs.size());
+        out.put("ot_total_hours", otTotal);
+        return out;
+    }
+
+    private Map<String, Object> dwlMap(DailyWorkLog l, java.math.BigDecimal otTotal) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", l.getId());
+        m.put("work_date", l.getWorkDate());
+        m.put("work_content", l.getWorkContent());
+        m.put("site_name", l.getSiteName());
+        m.put("ot_early", l.getOtEarly());
+        m.put("ot_lunch", l.getOtLunch());
+        m.put("ot_evening", l.getOtEvening());
+        m.put("ot_night", l.getOtNight());
+        m.put("ot_overnight", l.getOtOvernight());
+        m.put("ot_total", otTotal);
+        m.put("sign_status", l.getSignStatus());
+        return m;
     }
 
     /** 본인 사인. totalHours 보정 + supplier_signature_png 저장. */

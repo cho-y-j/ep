@@ -3,9 +3,10 @@ export type Role =
   | 'BP'
   | 'EQUIPMENT_SUPPLIER'
   | 'MANPOWER_SUPPLIER'
-  | 'WORKER';
+  | 'WORKER'
+  | 'CLIENT';
 
-export type CompanyType = 'BP' | 'EQUIPMENT' | 'MANPOWER';
+export type CompanyType = 'BP' | 'EQUIPMENT' | 'MANPOWER' | 'SAFETY_INSPECTION';
 
 export type CompanyResponse = {
   id: number;
@@ -22,6 +23,7 @@ export type UserResponse = {
   phone?: string | null;
   role: Role;
   company_id?: number | null;
+  client_org_id?: number | null;
   is_company_admin: boolean;
   enabled: boolean;
   created_at: string;
@@ -45,12 +47,14 @@ export const ROLE_LABEL: Record<Role, string> = {
   EQUIPMENT_SUPPLIER: '장비공급사',
   MANPOWER_SUPPLIER: '인력공급사',
   WORKER: '작업자',
+  CLIENT: '원청(관제)',
 };
 
 export const COMPANY_TYPE_LABEL: Record<CompanyType, string> = {
   BP: 'BP사',
   EQUIPMENT: '장비공급사',
   MANPOWER: '인력공급사',
+  SAFETY_INSPECTION: '안전점검회사',
 };
 
 export const SIGNUP_ROLES: Role[] = ['BP', 'EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER'];

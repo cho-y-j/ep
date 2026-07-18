@@ -66,12 +66,36 @@ public class WorkPlanController {
         return service.get(id, actor);
     }
 
+    /** P1a 기반②: 서명 시점 워크시트 전문 PDF 스냅샷 업로드 — 공개 /sign pdf·메일 첨부가 이걸 우선 서빙. */
+    @PostMapping(value = "/{id}/sign-snapshot", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public java.util.Map<String, Object> uploadSignSnapshot(
+            @PathVariable Long id,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @CurrentUser AuthenticatedUser actor) throws java.io.IOException {
+        byte[] pdf = file.getBytes();
+        if (pdf.length < 5 || pdf.length > 30 * 1024 * 1024
+                || !(pdf[0] == '%' && pdf[1] == 'P' && pdf[2] == 'D' && pdf[3] == 'F')) {
+            throw com.skep.common.ApiException.badRequest("INVALID_PDF", "PDF 파일이 아니거나 크기가 유효하지 않습니다");
+        }
+        service.saveSignSnapshot(id, pdf, actor);
+        return java.util.Map.of("ok", true, "bytes", pdf.length);
+    }
+
     @PostMapping("/{id}/clone")
     @ResponseStatus(HttpStatus.CREATED)
     public WorkPlanResponse clone(@PathVariable Long id, @Valid @RequestBody(required = false) CloneWorkPlanRequest req,
                                   @CurrentUser AuthenticatedUser actor) {
         WorkPlan wp = service.clone(id, req != null ? req : new CloneWorkPlanRequest(null, null), actor);
         return service.get(wp.getId(), actor);
+    }
+
+    /** P1c: L2 자원 교체 — 새 계획서 대체 생성 + 원본 자동 종료. 응답 = 새 계획서 상세. */
+    @PostMapping("/{id}/replace-resource")
+    @ResponseStatus(HttpStatus.CREATED)
+    public WorkPlanResponse replaceResource(@PathVariable Long id, @RequestBody ReplaceResourceRequest req,
+                                            @CurrentUser AuthenticatedUser actor) {
+        WorkPlan neu = service.replaceResource(id, req, actor);
+        return service.get(neu.getId(), actor);
     }
 
     @PostMapping("/{id}/equipment")

@@ -7,6 +7,7 @@ import java.time.LocalDate;
 
 public record CreateSiteRequest(
         Long bpCompanyId,
+        Long clientOrgId,
         @NotBlank @Size(max = 150) String name,
         @Size(max = 64) String code,
         @Size(max = 255) String address,

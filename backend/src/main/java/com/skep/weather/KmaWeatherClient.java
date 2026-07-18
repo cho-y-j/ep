@@ -56,8 +56,8 @@ public class KmaWeatherClient {
         return apiKey != null && !apiKey.isBlank();
     }
 
-    /** 현재 기온/습도 + 체감온도/폭염단계. */
-    public record SiteWeather(double tempC, int humidity, double feelsLike, HeatStage stage) {}
+    /** 현재 기온/습도 + 체감온도/폭염단계 + 풍속(m/s, WSD). windMps=null=풍속 미제공. */
+    public record SiteWeather(double tempC, int humidity, double feelsLike, HeatStage stage, Double windMps) {}
 
     /** 위경도 기준 현재 실황 조회. 키 미설정/데이터 없음/오류 시 empty. */
     public Optional<SiteWeather> fetch(double lat, double lng) {
@@ -85,18 +85,20 @@ public class KmaWeatherClient {
             }
             Double t1h = null;
             Integer reh = null;
+            Double wsd = null; // 풍속(m/s) — S1 강풍 경보.
             for (JsonNode it : items) {
                 String cat = it.path("category").asText();
                 String val = it.path("obsrValue").asText();
                 if ("T1H".equals(cat)) t1h = parseDouble(val);
                 else if ("REH".equals(cat)) reh = parseInt(val);
+                else if ("WSD".equals(cat)) wsd = parseDouble(val);
             }
             if (t1h == null || reh == null) {
                 log.warn("KMA missing T1H/REH lat={} lng={}", lat, lng);
                 return Optional.empty();
             }
             double feels = HeatIndex.feelsLike(t1h, reh);
-            return Optional.of(new SiteWeather(t1h, reh, feels, HeatStage.of(feels)));
+            return Optional.of(new SiteWeather(t1h, reh, feels, HeatStage.of(feels), wsd));
         } catch (Exception e) {
             log.warn("KMA fetch failed lat={} lng={}: {}", lat, lng, e.getMessage());
             return Optional.empty();

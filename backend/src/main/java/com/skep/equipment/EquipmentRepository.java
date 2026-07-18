@@ -19,4 +19,10 @@ public interface EquipmentRepository extends JpaRepository<Equipment, Long> {
     List<Equipment> findBySupplierIdAndCategoryOrderByIdDesc(Long supplierId, String category);
     /** 후보 조회: 여러 공급사 자원 일괄 조회. */
     List<Equipment> findBySupplierIdInOrderByIdDesc(Collection<Long> supplierIds);
+
+    /** S4'(P3a): 정비 주기 설정된 현장에 배치된 장비 — 가동시간 정비 알림 스케줄러. */
+    List<Equipment> findByCurrentSiteIdIn(Collection<Long> siteIds);
+
+    /** S2′(P3c): 현재 현장에 배치된 장비 — 점검원 오늘 점검 대상. */
+    List<Equipment> findByCurrentSiteIdIsNotNullOrderByIdDesc();
 }

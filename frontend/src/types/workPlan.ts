@@ -70,9 +70,13 @@ export type WorkPlanResponse = {
   cancel_reason?: string | null;
   created_at: string;
   updated_at: string;
+  // P1c: L2 교체로 대체 생성된 계획서면 원본 id (이력 연결).
+  cloned_from_id?: number | null;
   equipment?: WorkPlanEquipmentResponse[] | null;
   persons?: WorkPlanPersonResponse[] | null;
   compliance_checks?: ComplianceCheckResponse[] | null;
+  // P1a 기반①: 저장된 워크시트 폼 상태 (132 필드 + roleAssign + 첨부 선택). 상세 응답만.
+  form_values?: Record<string, any> | null;
 };
 
 export type WorkPlanPage = {

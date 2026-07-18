@@ -55,7 +55,7 @@ export default function AuditLogWidget({ preloaded, limit = 10 }: Props) {
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-slate-900">
                   {labelAction(log.action)}
-                  <span className="ml-2 text-xs text-slate-400">{labelTarget(log.target_type)} #{log.target_id ?? '-'}</span>
+                  <span className="ml-2 text-xs text-slate-400 break-all">{labelTarget(log.target_type)} #{log.target_id ?? '-'}</span>
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
                   {labelRole(log.actor_role)}

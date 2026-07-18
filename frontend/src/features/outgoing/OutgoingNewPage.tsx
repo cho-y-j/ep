@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { EQUIPMENT_CATEGORY_LABEL, type EquipmentCategory } from '../../types/equipment';
 import { PERSON_ROLE_LABEL, type PersonRole } from '../../types/person';
 import MoneyInput from '../../components/MoneyInput';
+import { toast } from '../../lib/toast';
 
 type Mode = 'REGISTERED_BP' | 'EMAIL';
 
@@ -13,6 +14,24 @@ interface Equipment { id: number; vehicle_no?: string; model?: string; category:
 interface Person { id: number; name: string; roles: string[]; }
 interface User { id: number; name: string; email: string; company_id?: number; company_name?: string; role: string; }
 interface BpCompany { id: number; name: string; }
+interface QuoteTemplate { id: number; name: string; rows: Array<Record<string, any>>; }
+
+const OT_LABELS: Array<[string, string]> = [
+  ['rate_early', '조출'], ['rate_lunch', '점심'], ['rate_evening', '연장'], ['rate_night', '야간'], ['rate_overnight', '철야'],
+];
+
+/** 견적 템플릿(단가표) → 발송 메모에 삽입할 텍스트 표. */
+function formatTemplate(t: QuoteTemplate): string {
+  const won = (v: unknown) => (v != null && v !== '' && Number(v) > 0 ? Number(v).toLocaleString() + '원' : '-');
+  const lines = (t.rows ?? []).map((r, i) => {
+    const type = r.rate_type === 'MONTHLY' ? '월대' : '일대';
+    const ot = OT_LABELS.map(([k, l]) => `${l} ${won(r[k])}`).join(' · ');
+    const desc = r.equipment_desc || '(규격 미입력)';
+    const note = r.note ? ` (${r.note})` : '';
+    return `${i + 1}) ${desc} · ${type} ${won(r.base_rate)} | ${ot}${note}`;
+  });
+  return `[단가표: ${t.name}]\n${lines.join('\n')}`;
+}
 
 export default function OutgoingNewPage() {
   const { user } = useAuth();
@@ -42,6 +61,9 @@ export default function OutgoingNewPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   useEffect(() => {
     if (!user?.company_id) return;
@@ -94,6 +116,31 @@ export default function OutgoingNewPage() {
       }
     }).catch(() => {});
   }, [fromProposal]);
+
+  async function openTemplates() {
+    setShowTemplates((v) => !v);
+    if (templatesLoaded) return;
+    try {
+      const { data } = await api.get<QuoteTemplate[]>('/api/quote-templates');
+      setTemplates(data ?? []);
+    } catch {
+      setTemplates([]);
+    } finally {
+      setTemplatesLoaded(true);
+    }
+  }
+
+  function applyTemplate(t: QuoteTemplate) {
+    const block = formatTemplate(t);
+    setNote((prev) => (prev.trim() ? prev.trimEnd() + '\n\n' + block : block));
+    const first = (t.rows ?? [])[0];
+    if (first?.base_rate) {
+      if (first.rate_type === 'MONTHLY') setMonthlyRate(String(first.base_rate));
+      else setDailyRate(String(first.base_rate));
+    }
+    setShowTemplates(false);
+    toast.success(`템플릿 "${t.name}" 을(를) 발송 내용에 삽입했습니다`);
+  }
 
   function addCc() {
     const v = ccInput.trim().replace(/,$/, '');
@@ -216,10 +263,34 @@ export default function OutgoingNewPage() {
             </label>
           </div>
 
-          <label className="block">
-            <span className="text-xs text-slate-600 font-medium">메모</span>
-            <textarea rows={2} className="input mt-1" value={note} onChange={(e) => setNote(e.target.value)} />
-          </label>
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-600 font-medium">메모 / 단가표</span>
+              <button type="button" onClick={openTemplates} className="text-xs font-semibold text-brand-600 hover:underline">
+                📋 템플릿 불러오기
+              </button>
+            </div>
+            {showTemplates && (
+              <div className="mt-1 space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                {!templatesLoaded ? (
+                  <div className="px-1 py-1.5 text-xs text-slate-400">불러오는 중…</div>
+                ) : templates.length === 0 ? (
+                  <div className="px-1 py-1.5 text-xs text-slate-500">
+                    등록된 견적 템플릿이 없습니다.{' '}
+                    <button type="button" onClick={() => navigate('/quote-templates')}
+                            className="font-semibold text-brand-600 hover:underline">템플릿 만들기</button>
+                  </div>
+                ) : templates.map((t) => (
+                  <button key={t.id} type="button" onClick={() => applyTemplate(t)}
+                          className="block w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-left text-xs hover:border-brand-300">
+                    <span className="font-semibold text-slate-800">{t.name}</span>
+                    <span className="ml-1.5 text-slate-400">{(t.rows ?? []).length}개 라인</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <textarea rows={4} className="input mt-1" value={note} onChange={(e) => setNote(e.target.value)} />
+          </div>
 
           <div className="pt-3 border-t border-slate-200">
             <span className="text-xs text-slate-600 font-medium">수신 방식</span>

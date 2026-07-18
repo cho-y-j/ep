@@ -72,6 +72,7 @@ public class FieldSafetyController {
         a.setBpCompanyId(ctx.bpCompanyId);
         a.setKind(req.kind != null ? req.kind : "emergency");
         a.setLevel(req.level != null ? req.level : "danger");
+        a.setSeverity(SafetySeverity.EMERGENCY.name());   // S5': 워치 응급/낙상 = 긴급(관제 등급 표시용).
         a.setMessage(req.message);
         a.setHr(req.hr);
         a.setSpo2(req.spo2);
@@ -154,6 +155,31 @@ public class FieldSafetyController {
         return Map.of("ok", true);
     }
 
+    /**
+     * S5' 확인응답(ack) — 본인 대상 안전알림 [확인] 버튼. acknowledged_at·ack_person_id 기록(인지 증거).
+     * resolved(관제 처리완료)와 별개. 최초 확인만 기록(멱등) → 관제 WS 실시간 갱신.
+     */
+    @PostMapping("/safety-alerts/{id}/ack")
+    @Transactional
+    public Map<String, Object> ackSafetyAlert(@RequestHeader("X-Field-Token") String token,
+                                              @org.springframework.web.bind.annotation.PathVariable Long id,
+                                              HttpServletRequest request) {
+        rateLimiter.check(request);
+        Person p = fieldAuth.authenticate(token);
+        FieldSafetyAlert a = alertRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("ALERT_NOT_FOUND", "알림을 찾을 수 없습니다"));
+        if (!p.getId().equals(a.getPersonId())) {
+            throw ApiException.forbidden("NOT_OWN_ALERT", "본인 알림만 확인 가능합니다");
+        }
+        if (a.getAcknowledgedAt() == null) {   // 최초 확인만 기록(멱등).
+            a.setAcknowledgedAt(LocalDateTime.now());
+            a.setAckPersonId(p.getId());
+            alertRepo.save(a);
+            broadcaster.publishAcked(a);
+        }
+        return Map.of("ok", true, "acknowledged_at", a.getAcknowledgedAt());
+    }
+
     // ───────── 내부 헬퍼 ─────────
 
     /** person → 현재 open AttendanceSession 의 workPlan/site/bpCompany 캐시. */
@@ -177,10 +203,12 @@ public class FieldSafetyController {
         m.put("id", a.getId());
         m.put("kind", a.getKind());
         m.put("level", a.getLevel());
+        m.put("severity", a.getSeverity());
         m.put("message", a.getMessage());
         m.put("hr", a.getHr());
         m.put("spo2", a.getSpo2());
         m.put("resolved", a.isResolved());
+        m.put("acknowledged_at", a.getAcknowledgedAt());
         m.put("created_at", a.getCreatedAt());
         return m;
     }

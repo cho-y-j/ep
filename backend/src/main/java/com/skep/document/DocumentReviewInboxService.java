@@ -1,8 +1,12 @@
 package com.skep.document;
 
+import com.skep.audit.AuditAction;
+import com.skep.audit.AuditLogService;
+import com.skep.audit.AuditTargetType;
 import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
+import com.skep.notification.NotificationService;
 import com.skep.security.AuthenticatedUser;
 import com.skep.user.Role;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +32,10 @@ public class DocumentReviewInboxService {
     private final DocumentReviewItemRepository itemRepo;
     private final DocumentZipService zipService;
     private final CompanyRepository companyRepo;
+    private final DocumentRepository docRepo;
+    private final DocumentTypeRepository typeRepo;
+    private final NotificationService notifications;
+    private final AuditLogService auditLog;
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> listReceived(AuthenticatedUser actor) {
@@ -41,22 +49,100 @@ public class DocumentReviewInboxService {
         }
         if (list.isEmpty()) return List.of();
 
-        Map<Long, String> names = new HashMap<>();
+        Map<Long, Company> companies = new HashMap<>();
         for (Company c : companyRepo.findAllById(list.stream().map(DocumentReview::getSupplierCompanyId).distinct().toList())) {
-            names.put(c.getId(), c.getName());
+            companies.put(c.getId(), c);
         }
         Map<Long, List<DocumentReviewItem>> itemsByReview = new HashMap<>();
         for (DocumentReviewItem it : itemRepo.findByReviewIdInOrderByIdAsc(list.stream().map(DocumentReview::getId).toList())) {
             itemsByReview.computeIfAbsent(it.getReviewId(), k -> new ArrayList<>()).add(it);
         }
         return list.stream()
-                .map(r -> toMap(r, names.get(r.getSupplierCompanyId()), itemsByReview.getOrDefault(r.getId(), List.of())))
+                .map(r -> toMap(r, companies.get(r.getSupplierCompanyId()), itemsByReview.getOrDefault(r.getId(), List.of())))
                 .toList();
     }
 
     @Transactional
     public void markRead(Long id, AuthenticatedUser actor) {
         load(id, actor).markRead();
+    }
+
+    /** 봉투 상세 — 자원(item)별 문서 목록. 체인 헤드 기준. 수신 BP 본인(또는 ADMIN)만. */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> listDocuments(Long id, AuthenticatedUser actor) {
+        load(id, actor);
+        Map<Long, DocumentType> typeCache = new HashMap<>();
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (DocumentReviewItem item : itemRepo.findByReviewIdOrderByIdAsc(id)) {
+            Map<String, Object> im = new LinkedHashMap<>();
+            im.put("owner_type", item.getOwnerType().name());
+            im.put("owner_id", item.getOwnerId());
+            im.put("label", item.getLabel());
+            List<Map<String, Object>> docList = new ArrayList<>();
+            for (Document d : docRepo.findActiveHeadByOwner(item.getOwnerType(), item.getOwnerId())) {
+                DocumentType t = typeCache.computeIfAbsent(d.getDocumentTypeId(),
+                        k -> typeRepo.findById(k).orElse(null));
+                Map<String, Object> dm = new LinkedHashMap<>();
+                dm.put("id", d.getId());
+                dm.put("document_type_name", t != null ? t.getName() : "(삭제됨)");
+                dm.put("file_name", d.getFileName());
+                dm.put("expiry_date", d.getExpiryDate());
+                dm.put("has_expiry", t != null && t.isHasExpiry());
+                dm.put("verification_status", d.getVerificationStatus().name());
+                dm.put("verified", d.isVerified());
+                dm.put("rejected_reason", d.getRejectedReason());
+                docList.add(dm);
+            }
+            im.put("documents", docList);
+            out.add(im);
+        }
+        return out;
+    }
+
+    /** 수신 BP 가 봉투를 승인. PENDING 에서만 전이. 공급사에 인앱 알림. */
+    @Transactional
+    public Map<String, Object> approve(Long id, AuthenticatedUser actor) {
+        DocumentReview r = loadForAction(id, actor);
+        r.approve(actor.id());
+        auditLog.record(actor, AuditAction.DOCUMENT_REVIEW_APPROVED, AuditTargetType.DOCUMENT_REVIEW,
+                r.getId(), r.getSupplierCompanyId(), null, null, null);
+        notifications.sendToCompany(r.getSupplierCompanyId(),
+                "DOCUMENT_REVIEW_RESULT", "서류 심사 승인됨",
+                "보내신 서류 심사가 승인되었습니다.",
+                "DOCUMENT_REVIEW", r.getId(), null);
+        return toMapOne(r);
+    }
+
+    /** 수신 BP 가 봉투를 반려. PENDING 에서만 전이. 사유 필수. 공급사에 인앱 알림. */
+    @Transactional
+    public Map<String, Object> reject(Long id, String reason, AuthenticatedUser actor) {
+        if (reason == null || reason.isBlank()) {
+            throw ApiException.badRequest("REASON_REQUIRED", "반려 사유를 입력하세요");
+        }
+        DocumentReview r = loadForAction(id, actor);
+        String trimmed = reason.trim();
+        r.reject(actor.id(), trimmed);
+        auditLog.record(actor, AuditAction.DOCUMENT_REVIEW_REJECTED, AuditTargetType.DOCUMENT_REVIEW,
+                r.getId(), r.getSupplierCompanyId(), null, null,
+                "{\"reason\":\"" + trimmed.replace("\"", "\\\"") + "\"}");
+        notifications.sendToCompany(r.getSupplierCompanyId(),
+                "DOCUMENT_REVIEW_RESULT", "서류 심사 반려됨",
+                "반려 사유: " + trimmed,
+                "DOCUMENT_REVIEW", r.getId(), null);
+        return toMapOne(r);
+    }
+
+    private DocumentReview loadForAction(Long id, AuthenticatedUser actor) {
+        DocumentReview r = load(id, actor);
+        if (r.getStatus() != DocumentReviewStatus.PENDING) {
+            throw ApiException.badRequest("INVALID_STATE", "심사중 상태에서만 처리할 수 있습니다");
+        }
+        return r;
+    }
+
+    private Map<String, Object> toMapOne(DocumentReview r) {
+        Company supplier = companyRepo.findById(r.getSupplierCompanyId()).orElse(null);
+        return toMap(r, supplier, itemRepo.findByReviewIdOrderByIdAsc(r.getId()));
     }
 
     @Transactional(readOnly = true)
@@ -122,14 +208,19 @@ public class DocumentReviewInboxService {
         return r;
     }
 
-    private Map<String, Object> toMap(DocumentReview r, String supplierName, List<DocumentReviewItem> items) {
+    private Map<String, Object> toMap(DocumentReview r, Company supplier, List<DocumentReviewItem> items) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", r.getId());
         m.put("supplier_company_id", r.getSupplierCompanyId());
-        m.put("supplier_company_name", supplierName);
+        m.put("supplier_company_name", supplier == null ? null : supplier.getName());
+        m.put("supplier_company_type", supplier == null ? null : supplier.getType().name());
         m.put("message", r.getMessage());
         m.put("sent_at", r.getSentAt());
         m.put("read_at", r.getReadAt());
+        m.put("status", r.getStatus().name());
+        m.put("rejected_reason", r.getRejectedReason());
+        m.put("acted_by", r.getActedBy());
+        m.put("acted_at", r.getActedAt());
         m.put("total_docs", items.stream().mapToInt(DocumentReviewItem::getDocCount).sum());
         m.put("items", items.stream().map(i -> {
             Map<String, Object> im = new LinkedHashMap<>();

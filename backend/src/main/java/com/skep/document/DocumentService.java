@@ -109,6 +109,7 @@ public class DocumentService {
     private final AuditLogService auditLog;
     private final SiteRepository sites;
     private final SiteParticipantRepository participants;
+    private final DocumentReviewItemRepository reviewItemRepo;
     private final ApplicationEventPublisher events;
     /** S-11: 보완 요청 자동 RESOLVED 후크. @Lazy 로 순환 회피. */
     private final com.skep.supplement.DocumentSupplementService supplementService;
@@ -127,6 +128,7 @@ public class DocumentService {
                            com.skep.company.CompanyService companyService,
                            FileStorage storage, AuditLogService auditLog,
                            SiteRepository sites, SiteParticipantRepository participants,
+                           DocumentReviewItemRepository reviewItemRepo,
                            ApplicationEventPublisher events,
                            @org.springframework.context.annotation.Lazy
                            com.skep.supplement.DocumentSupplementService supplementService,
@@ -145,6 +147,7 @@ public class DocumentService {
         this.auditLog = auditLog;
         this.sites = sites;
         this.participants = participants;
+        this.reviewItemRepo = reviewItemRepo;
         this.events = events;
         this.supplementService = supplementService;
         this.renewalNotifier = renewalNotifier;
@@ -154,7 +157,7 @@ public class DocumentService {
     @Transactional(readOnly = true)
     public List<DocumentResponse> listForOwner(OwnerType ownerType, Long ownerId, AuthenticatedUser actor) {
         Long ownerSupplierId = ownerSupplierIdOrThrow(ownerType, ownerId);
-        ensureCanAccess(actor, ownerSupplierId);
+        ensureCanAccess(actor, ownerSupplierId, ownerType, ownerId);
 
         // V14 재등록 체인: chain head (가장 최신 갱신본) 만 노출. 옛 버전은 history endpoint 에서.
         List<Document> docs = docRepo.findActiveHeadByOwner(ownerType, ownerId);
@@ -566,7 +569,7 @@ public class DocumentService {
         Document head = docRepo.findById(documentId).orElseThrow(() ->
                 ApiException.notFound("DOCUMENT_NOT_FOUND", "document " + documentId + " not found"));
         Long supplierId = ownerSupplierIdOrThrow(head.getOwnerType(), head.getOwnerId());
-        ensureCanAccess(actor, supplierId);
+        ensureCanAccess(actor, supplierId, head.getOwnerType(), head.getOwnerId());
 
         DocumentType type = typeRepo.findById(head.getDocumentTypeId()).orElse(null);
         String name = type != null ? type.getName() : "(삭제됨)";
@@ -584,7 +587,7 @@ public class DocumentService {
         Document d = docRepo.findById(documentId).orElseThrow(() ->
                 ApiException.notFound("DOCUMENT_NOT_FOUND", "document " + documentId + " not found"));
         Long supplierId = ownerSupplierIdOrThrow(d.getOwnerType(), d.getOwnerId());
-        ensureCanAccess(actor, supplierId);
+        ensureCanAccess(actor, supplierId, d.getOwnerType(), d.getOwnerId());
         return d;
     }
 
@@ -653,7 +656,8 @@ public class DocumentService {
         return p.getSupplierId();
     }
 
-    private void ensureCanAccess(AuthenticatedUser actor, Long ownerSupplierId) {
+    private void ensureCanAccess(AuthenticatedUser actor, Long ownerSupplierId,
+                                 OwnerType ownerType, Long ownerId) {
         if (actor.role() == Role.ADMIN) return;
         if (actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER) {
             // V77: 읽기 본인 + 직속 자식 확장(부모→자식 단방향). 쓰기(ensureCanModify)도 공급사는 동일 확장(대행 전체 CRUD).
@@ -677,6 +681,8 @@ public class DocumentService {
                     return;
                 }
             }
+            // V96: 사이트 참여 전이라도 내 회사 앞으로 온 심사 봉투에 담긴 자원 서류는 열람 가능.
+            if (reviewItemRepo.existsForBpAndOwner(actor.companyId(), ownerType, ownerId)) return;
             throw ApiException.forbidden("DOCUMENT_ACCESS_DENIED",
                     "내 현장에 참여 중인 공급사의 서류만 확인할 수 있습니다");
         }

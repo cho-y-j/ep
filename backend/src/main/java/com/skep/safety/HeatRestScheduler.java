@@ -44,6 +44,7 @@ public class HeatRestScheduler {
     private final FieldSafetyAlertRepository alertRepo;
     private final KmaWeatherClient weather;
     private final SafetyAlertBroadcaster broadcaster;
+    private final SiteSafetySettingsRepository safetySettings;
 
     @Scheduled(cron = "0 45 * * * *")
     @Transactional
@@ -52,8 +53,8 @@ public class HeatRestScheduler {
         if (open.isEmpty()) return;
 
         LocalDateTime now = LocalDateTime.now();
-        boolean midday = now.getHour() >= 14 && now.getHour() < 17;
         Map<Long, KmaWeatherClient.SiteWeather> weatherCache = new HashMap<>(); // siteId → weather(or null)
+        Map<Long, SafetyThresholds> thresholdCache = new HashMap<>();           // siteId → 현장설정(or 법정기본)
         int sent = 0;
 
         for (AttendanceSession s : open) {
@@ -62,13 +63,16 @@ public class HeatRestScheduler {
             WorkPlan wp = workPlans.findById(s.getWorkPlanId()).orElse(null);
             if (wp == null) continue;
 
+            // 현장 설정 오버라이드(없으면 법정 기본 = HeatStage 하드코딩 그대로, 무회귀).
+            SafetyThresholds th = resolveThresholds(wp.getSiteId(), thresholdCache);
+            boolean midday = th.isMidday(now.getHour());
             KmaWeatherClient.SiteWeather w = resolveWeather(wp.getSiteId(), weatherCache);
-            HeatStage stage = w != null ? w.stage() : HeatStage.NONE;
+            HeatStage stage = w != null ? th.stageOf(w.feelsLike()) : HeatStage.NONE;
 
             // 휴식 타이머 기준: 마지막 휴식알림 > 지정 작업시작 > 출근시각. (작업시간 미지정 시 출근시각 fallback)
             LocalDateTime ref = s.getLastRestAlertAt() != null ? s.getLastRestAlertAt()
                     : (s.getWorkStartAt() != null ? s.getWorkStartAt() : s.getCheckInAt());
-            if (Duration.between(ref, now).toMinutes() < stage.intervalMinutes()) continue;
+            if (Duration.between(ref, now).toMinutes() < th.intervalMinutes(stage)) continue;
 
             Person p = persons.findById(s.getPersonId()).orElse(null);
             if (p == null) continue;
@@ -80,6 +84,8 @@ public class HeatRestScheduler {
             a.setBpCompanyId(wp.getBpCompanyId());
             a.setKind(stage == HeatStage.NONE ? "rest" : "heat");
             a.setLevel(stage.level());
+            // S5' 등급: 38℃(EXTREME=작업중지)=긴급, 그 외 폭염·휴식(31/33/35·근로기준법)=주의.
+            a.setSeverity(SafetyAlertClassifier.heatSeverity(stage).name());
             a.setMessage(stage.restMessage(w != null ? w.feelsLike() : null, midday));
             alertRepo.save(a);
             broadcaster.publishCreated(a, p);
@@ -87,6 +93,13 @@ public class HeatRestScheduler {
             sent++;
         }
         if (sent > 0) log.info("HeatRestScheduler: {} rest alerts sent ({} open sessions)", sent, open.size());
+    }
+
+    /** 현장 안전설정 1회만 조회해 캐시. 행 없으면 법정 기본값(무회귀). */
+    private SafetyThresholds resolveThresholds(Long siteId, Map<Long, SafetyThresholds> cache) {
+        if (siteId == null) return SafetyThresholds.legalDefault();
+        return cache.computeIfAbsent(siteId, id ->
+                safetySettings.findBySiteId(id).map(SafetyThresholds::from).orElseGet(SafetyThresholds::legalDefault));
     }
 
     /** 현장별 체감온도 1회만 조회해 캐시. 좌표 없거나 조회 실패 시 null (→ 비폭염 4시간 규칙 적용). */

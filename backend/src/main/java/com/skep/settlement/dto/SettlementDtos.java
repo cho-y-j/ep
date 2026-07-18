@@ -41,7 +41,24 @@ public class SettlementDtos {
             Integer siteSettlementDay,    // 현장 정산 기준일(1~31, null=미지정)
             Integer derivedWorkDays,      // 작업확인서(서명완료) 기준 자동 집계 근무일수(인력만, 없으면 null)
             Integer derivedOtDays,        // 자동 집계 OT일수(표시용, 인력 금액엔 미반영)
-            String workDaysSource         // MANUAL(수동입력) / DERIVED(자동집계) / null(둘 다 없음)
+            String workDaysSource,        // MANUAL(수동입력) / DERIVED(자동집계) / null(둘 다 없음)
+            String sourceKind,            // DISPATCH(견적/배차 원천) / DEPLOYMENT(현장 투입요청 원천, §3.2 디커플링)
+            OtBreakdown otBreakdown       // 일일 확인서 기반 OT 5분류 내역·금액(§3.6.3). 없으면 null. 기존 amount 엔 미반영.
+    ) {}
+
+    /**
+     * OT 5분류 내역(§3.6.3) — 일일 확인서(SIGNED/PHOTO) × 계약 분류별 단가.
+     * 기존 정산 amount 와 독립된 추가 정보. 계약 미연결/인정 로그 없으면 이 필드 자체가 null.
+     */
+    public record OtBreakdown(
+            Long contractId,
+            java.math.BigDecimal earlyHours, Long earlyAmount,
+            java.math.BigDecimal lunchHours, Long lunchAmount,
+            java.math.BigDecimal eveningHours, Long eveningAmount,
+            java.math.BigDecimal nightHours, Long nightAmount,
+            java.math.BigDecimal overnightHours, Long overnightAmount,
+            Long totalOtAmount,           // 5분류 금액 합계
+            int logCount                  // 인정된 일일 확인서 건수
     ) {}
 
     /** 소유자(본인 or 협력사) 단위 묶음. */

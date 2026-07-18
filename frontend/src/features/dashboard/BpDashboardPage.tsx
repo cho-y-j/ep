@@ -9,6 +9,7 @@ import { EmptyState, SectionCard, StatCard } from './widgets';
 import DocumentRiskWidget, { type DocumentRisk } from './DocumentRiskWidget';
 import BpPendingQueueWidget from './BpPendingQueueWidget';
 import BpSitePipelineWidget from './BpSitePipelineWidget';
+import MiniBarChart from './MiniBarChart';
 
 type BpSummary = {
   counts: Record<string, number>;
@@ -96,11 +97,21 @@ export default function BpDashboardPage() {
             </SectionCard>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <AuditLogWidget preloaded={summary?.recent_audit_logs ?? []} />
+              <MiniBarChart
+                title="현장별 배치 자원 (장비+인원)"
+                data={[...sites]
+                  .map((s) => ({ label: s.name, value: (s.equipment_count ?? 0) + (s.person_count ?? 0), tone: 'brand' as const }))
+                  .sort((a, b) => b.value - a.value)
+                  .slice(0, 6)}
+                emptyText="배치된 자원이 없습니다"
+              />
               <WorkPlanListWidget title="오늘/이번 주 작업계획서" items={summary?.today_work_plans ?? []} />
             </div>
 
-            <DocumentRiskWidget id="doc-risks" title="공급사 서류 위험" items={summary?.document_risks ?? []} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <AuditLogWidget preloaded={summary?.recent_audit_logs ?? []} />
+              <DocumentRiskWidget id="doc-risks" title="공급사 서류 위험" items={summary?.document_risks ?? []} />
+            </div>
           </>
         )}
       </div>

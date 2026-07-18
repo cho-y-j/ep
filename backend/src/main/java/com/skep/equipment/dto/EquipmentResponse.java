@@ -2,6 +2,7 @@ package com.skep.equipment.dto;
 
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentAssignmentStatus;
+import com.skep.equipment.MaintenanceService.MaintenanceView;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -44,21 +45,30 @@ public record EquipmentResponse(
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         // Phase4: 외부 장비 기사(조종원) Person 연결
-        Long operatorPersonId
+        Long operatorPersonId,
+        // S4'(P3a): 가동시간 기반 정비 — 누적 가동시간 / 현재 현장 정비주기(null=비활성) / 도래 여부.
+        int cumulativeWorkHours,
+        Integer maintenanceIntervalHours,
+        boolean maintenanceDue
 ) {
     public static EquipmentResponse from(Equipment e) {
-        return from(e, 0L, null, null);
+        return from(e, 0L, null, null, null);
     }
 
     public static EquipmentResponse from(Equipment e, long expiringCount) {
-        return from(e, expiringCount, null, null);
+        return from(e, expiringCount, null, null, null);
     }
 
     public static EquipmentResponse from(Equipment e, long expiringCount, String currentSiteName) {
-        return from(e, expiringCount, currentSiteName, null);
+        return from(e, expiringCount, currentSiteName, null, null);
     }
 
     public static EquipmentResponse from(Equipment e, long expiringCount, String currentSiteName, String supplierName) {
+        return from(e, expiringCount, currentSiteName, supplierName, null);
+    }
+
+    public static EquipmentResponse from(Equipment e, long expiringCount, String currentSiteName,
+                                         String supplierName, MaintenanceView mv) {
         int op = e.getOperatingHours();
         int idle = e.getIdleHours();
         int down = e.getDowntimeHours();
@@ -98,7 +108,10 @@ public record EquipmentResponse(
                 e.getLastAssignedAt(),
                 e.getCreatedAt(),
                 e.getUpdatedAt(),
-                e.getOperatorPersonId()
+                e.getOperatorPersonId(),
+                mv != null ? mv.cumulativeHours() : 0,
+                mv != null ? mv.intervalHours() : null,
+                mv != null && mv.due()
         );
     }
 }

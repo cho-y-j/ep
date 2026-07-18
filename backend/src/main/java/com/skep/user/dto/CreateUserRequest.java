@@ -13,6 +13,7 @@ public record CreateUserRequest(
         @Size(max = 32) String phone,
         @NotNull Role role,
         Long companyId,
+        Long clientOrgId,
         Boolean isCompanyAdmin
 ) {
 }

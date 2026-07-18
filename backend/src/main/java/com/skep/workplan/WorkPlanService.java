@@ -84,6 +84,10 @@ public class WorkPlanService {
     private final com.skep.signature.SignatureService signatureService;
     /** G-1: 작업 시작 시 자원별 안전점검 COMPLETED 여부 검증. */
     private final com.skep.safety.SafetyInspectionRepository safetyInspectionRepo;
+    /** S3(P3a): 현장 설정 일일점검 게이트 판정. */
+    private final com.skep.safety.SiteSafetySettingsRepository siteSafetySettingsRepo;
+    /** S3(P3a): 당일 조종원 일일점검 완료 조회. */
+    private final com.skep.equipment.DailyEquipmentInspectionRepository dailyInspectionRepo;
     /** Auto-Res: 견적 dispatched 자원을 wp 에 자동 추가. */
     private final com.skep.quotation.dispatch.DispatchedEquipmentRepository dispatchedEqRepo;
     private final com.skep.quotation.dispatch.DispatchedPersonRepository dispatchedPersonRepo;
@@ -91,6 +95,10 @@ public class WorkPlanService {
     private final com.skep.resourceCheck.ResourceCheckRequestRepository resourceCheckRepo;
     /** 누락 서류 endpoint — 이미 OPEN 인 보완요청 status 표시. */
     private final com.skep.supplement.DocumentSupplementRequestRepository supplementRepo;
+    /** P1a 기반②: 서명 스냅샷 PDF 저장/삭제. */
+    private final com.skep.storage.FileStorage fileStorage;
+    /** P1c: L2 자원 교체 시 원 계획서 관련 공급사/BP 통지. */
+    private final com.skep.notification.NotificationService notifications;
 
     public WorkPlanService(WorkPlanRepository wpRepo, WorkPlanEquipmentRepository wpeRepo,
                            WorkPlanPersonRepository wppRepo, WorkPlanComplianceCheckRepository wpccRepo,
@@ -109,12 +117,16 @@ public class WorkPlanService {
                            @org.springframework.context.annotation.Lazy
                            com.skep.signature.SignatureService signatureService,
                            com.skep.safety.SafetyInspectionRepository safetyInspectionRepo,
+                           com.skep.safety.SiteSafetySettingsRepository siteSafetySettingsRepo,
+                           com.skep.equipment.DailyEquipmentInspectionRepository dailyInspectionRepo,
                            @org.springframework.context.annotation.Lazy
                            com.skep.compliance.ComplianceOrderService complianceOrderService,
                            com.skep.quotation.dispatch.DispatchedEquipmentRepository dispatchedEqRepo,
                            com.skep.quotation.dispatch.DispatchedPersonRepository dispatchedPersonRepo,
                            com.skep.resourceCheck.ResourceCheckRequestRepository resourceCheckRepo,
-                           com.skep.supplement.DocumentSupplementRequestRepository supplementRepo) {
+                           com.skep.supplement.DocumentSupplementRequestRepository supplementRepo,
+                           com.skep.storage.FileStorage fileStorage,
+                           com.skep.notification.NotificationService notifications) {
         this.wpRepo = wpRepo;
         this.wpeRepo = wpeRepo;
         this.wppRepo = wppRepo;
@@ -134,11 +146,15 @@ public class WorkPlanService {
         this.bpBizCertGate = bpBizCertGate;
         this.signatureService = signatureService;
         this.safetyInspectionRepo = safetyInspectionRepo;
+        this.siteSafetySettingsRepo = siteSafetySettingsRepo;
+        this.dailyInspectionRepo = dailyInspectionRepo;
         this.complianceOrderService = complianceOrderService;
         this.dispatchedEqRepo = dispatchedEqRepo;
         this.dispatchedPersonRepo = dispatchedPersonRepo;
         this.resourceCheckRepo = resourceCheckRepo;
         this.supplementRepo = supplementRepo;
+        this.fileStorage = fileStorage;
+        this.notifications = notifications;
     }
 
     // ================== CRUD ==================
@@ -242,6 +258,8 @@ public class WorkPlanService {
                 req.equipmentSupplierCompanyId(),
                 req.manpowerSupplierCompanyId(),
                 req.currentEquipmentId());
+        // P1a 기반②: 내용 변경 시 서명 전원 재수집 강제 — 기존 서명(SIGNED/PENDING) 있으면 전체 무효화 + 스냅샷 clear.
+        enforceResignOnContentChange(wp, actor);
         auditLog.record(actor, AuditAction.WORK_PLAN_UPDATED, AuditTargetType.WORK_PLAN,
                 wp.getId(), wp.getBpCompanyId(), wp.getSiteId(), null,
                 "{\"formValuesUpdated\":true}");
@@ -392,6 +410,105 @@ public class WorkPlanService {
         return wp;
     }
 
+    /**
+     * P1c: L2 자원 교체 — 진행 중 자원(장비/조종원)을 새 자원으로 교체.
+     * 정책(§3.6): 전원 재서명(새 계획서=서명 0) · 1계획서=1장비 · 새 계획서 자동생성 + 원본 자동 종료.
+     *
+     * 절차:
+     *  1) 기존 clone 확장: 셸 + 장비/인원 행 복사 + formValues 원본 복사 + supplier context 복사 + cloned_from_id.
+     *  2) 장비/조종원 치환 — 새 장비는 기존 장비 대신 추가(컴플라이언스 게이트 미달이면 400).
+     *  3) 원본 자동 종료(cancel) — 사유에 신규 계획서 번호 명시. cancel 불허 상태면 400.
+     *  4) 감사로그 + 원 계획서 관련 공급사/BP 통지.
+     * 파생 워크시트 필드(장비 6필드·조종원 슬롯 등)는 FE 하이드레이트 시 자동채움 effect 가 재계산하므로 서버는 원본 복사만.
+     */
+    public WorkPlan replaceResource(Long sourceId, ReplaceResourceRequest req, AuthenticatedUser actor) {
+        WorkPlan src = getOrThrow(sourceId);
+        ensureCanManage(actor, src);
+
+        Long newEquipmentId = req.newEquipmentId();
+        List<Long> newOperatorIds = req.newOperatorPersonIds() == null ? List.of()
+                : req.newOperatorPersonIds().stream().filter(Objects::nonNull).distinct().toList();
+        if (newEquipmentId == null && newOperatorIds.isEmpty()) {
+            throw ApiException.badRequest("NOTHING_TO_REPLACE", "교체할 장비 또는 조종원을 선택하세요");
+        }
+        // 원본이 취소 가능한 상태인지 먼저 확인 — 새 계획서를 만든 뒤 종료 실패로 흐름이 어긋나지 않게.
+        if (src.getStatus() == WorkPlanStatus.CANCELLED || src.getStatus() == WorkPlanStatus.DONE) {
+            throw ApiException.badRequest("INVALID_TRANSITION",
+                    "이미 종료된 계획서는 교체할 수 없습니다: " + src.getStatus());
+        }
+
+        // 1) 기존 clone 확장 — 셸 + 자원 행 + 컴플라이언스 복사.
+        String newTitle = "[교체] " + src.getTitle();
+        if (newTitle.length() > 150) newTitle = newTitle.substring(0, 150);
+        WorkPlan neu = clone(sourceId, new CloneWorkPlanRequest(src.getWorkDate(), newTitle), actor);
+        // formValues 원본 복사 + cloned_from 연결.
+        neu.setFormValues(src.getFormValues());
+        neu.setClonedFrom(sourceId);
+
+        // 2) 장비 치환 — 기존 장비 제거 후 새 장비 추가(게이트 미달이면 addEquipment 가 400).
+        boolean equipReplaced = false;
+        if (newEquipmentId != null) {
+            for (WorkPlanEquipment wpe : wpeRepo.findByWorkPlanIdOrderByIdAsc(neu.getId())) {
+                removeEquipment(neu.getId(), wpe.getEquipmentId(), actor);
+            }
+            addEquipment(neu.getId(), new AddEquipmentRequest(newEquipmentId, null, null, null, null), actor);
+            equipReplaced = true;
+        }
+        // 현재 계획서의 장비(새 장비 또는 유지된 단일 장비).
+        Long currentEquipmentId = wpeRepo.findByWorkPlanIdOrderByIdAsc(neu.getId()).stream()
+                .findFirst().map(WorkPlanEquipment::getEquipmentId).orElse(null);
+
+        // 3) 조종원 치환 — 새 조종원 지정 또는 장비 교체(새 장비로 재매칭) 시 기존 조종원 행 교체.
+        if (!newOperatorIds.isEmpty() || equipReplaced) {
+            List<WorkPlanPerson> existingOps = wppRepo.findByWorkPlanIdOrderByIdAsc(neu.getId()).stream()
+                    .filter(w -> "OPERATOR".equalsIgnoreCase(w.getRole()))
+                    .toList();
+            List<Long> targetOps = !newOperatorIds.isEmpty()
+                    ? newOperatorIds
+                    : existingOps.stream().map(WorkPlanPerson::getPersonId).toList();
+            for (WorkPlanPerson w : existingOps) {
+                removePerson(neu.getId(), w.getPersonId(), actor);
+            }
+            for (Long pid : targetOps) {
+                addPerson(neu.getId(), new AddPersonRequest(pid, currentEquipmentId, "OPERATOR", null, null, null), actor);
+            }
+        }
+
+        // supplier context 복사 — 장비 교체 시 새 장비 기준으로 갱신(FE 첫 저장이 다시 덮지만 정합 유지).
+        Long eqSupplierId = currentEquipmentId != null
+                ? equipmentRepo.findById(currentEquipmentId).map(Equipment::getSupplierId)
+                        .orElse(src.getEquipmentSupplierCompanyId())
+                : src.getEquipmentSupplierCompanyId();
+        neu.setSupplierContext(eqSupplierId, src.getManpowerSupplierCompanyId(), currentEquipmentId);
+
+        // 4) 원본 자동 종료.
+        cancel(sourceId, new CancelRequest("자원 교체로 계획서 #" + neu.getId() + " 로 대체"), actor);
+
+        // 5) 감사로그 + 원 계획서 관련 공급사/BP 통지.
+        auditLog.record(actor, AuditAction.WORK_PLAN_RESOURCE_REPLACED, AuditTargetType.WORK_PLAN,
+                neu.getId(), neu.getBpCompanyId(), neu.getSiteId(), null,
+                "{\"source_id\":" + sourceId
+                        + ",\"new_equipment_id\":" + newEquipmentId
+                        + ",\"new_operator_count\":" + newOperatorIds.size() + "}");
+        notifyReplaceStakeholders(src, neu);
+        return neu;
+    }
+
+    /** 원 계획서 관련 공급사(장비/인원) + BP 회사에 교체 통지. */
+    private void notifyReplaceStakeholders(WorkPlan src, WorkPlan neu) {
+        Set<Long> companyIds = new LinkedHashSet<>();
+        wpeRepo.findByWorkPlanIdOrderByIdAsc(src.getId()).forEach(w -> companyIds.add(w.getSupplierCompanyId()));
+        wppRepo.findByWorkPlanIdOrderByIdAsc(src.getId()).forEach(w -> companyIds.add(w.getSupplierCompanyId()));
+        if (src.getBpCompanyId() != null) companyIds.add(src.getBpCompanyId());
+        String title = "작업계획서 자원 교체";
+        String msg = "계획서 #" + src.getId() + " 이(가) 자원 교체로 종료되고 #" + neu.getId() + " 로 대체되었습니다";
+        for (Long cid : companyIds) {
+            if (cid == null) continue;
+            notifications.sendToCompany(cid, com.skep.notification.NotificationType.WORK_PLAN_RESOURCE_REPLACED,
+                    title, msg, "WORK_PLAN", neu.getId(), neu.getSiteId());
+        }
+    }
+
     /** 복제 전용: 컴플라이언스 평가하되 BLOCKED 라도 throw 하지 않고 BLOCKED 결과만 반환. */
     private ComplianceResult evaluateForClone(OwnerType ownerType, Long ownerId) {
         List<DocumentType> blocking = docTypeRepo
@@ -519,6 +636,7 @@ public class WorkPlanService {
                 .note(req.note())
                 .build());
 
+        enforceResignOnContentChange(wp, actor);
         auditLog.record(actor, AuditAction.WORK_PLAN_EQUIPMENT_ADDED, AuditTargetType.WORK_PLAN_EQUIPMENT,
                 e.getId(), e.getSupplierId(), wp.getSiteId(), null,
                 "{\"work_plan_id\":" + workPlanId + ",\"compliance\":\"" + compliance.status.name() + "\"}");
@@ -536,6 +654,7 @@ public class WorkPlanService {
         WorkPlanEquipment row = wpeRepo.findByWorkPlanIdAndEquipmentId(workPlanId, equipmentId)
                 .orElseThrow(() -> ApiException.notFound("WP_EQUIPMENT_NOT_FOUND", "장비가 추가되어 있지 않습니다"));
         wpeRepo.delete(row);
+        enforceResignOnContentChange(wp, actor);
         auditLog.record(actor, AuditAction.WORK_PLAN_EQUIPMENT_REMOVED, AuditTargetType.WORK_PLAN_EQUIPMENT,
                 equipmentId, row.getSupplierCompanyId(), wp.getSiteId(),
                 "{\"work_plan_id\":" + workPlanId + "}", null);
@@ -582,6 +701,7 @@ public class WorkPlanService {
                 .note(req.note())
                 .build());
 
+        enforceResignOnContentChange(wp, actor);
         auditLog.record(actor, AuditAction.WORK_PLAN_PERSON_ADDED, AuditTargetType.WORK_PLAN_PERSON,
                 p.getId(), p.getSupplierId(), wp.getSiteId(), null,
                 "{\"work_plan_id\":" + workPlanId + ",\"compliance\":\"" + compliance.status.name() + "\"}");
@@ -599,6 +719,7 @@ public class WorkPlanService {
         WorkPlanPerson row = wppRepo.findByWorkPlanIdAndPersonId(workPlanId, personId)
                 .orElseThrow(() -> ApiException.notFound("WP_PERSON_NOT_FOUND", "인원이 추가되어 있지 않습니다"));
         wppRepo.delete(row);
+        enforceResignOnContentChange(wp, actor);
         auditLog.record(actor, AuditAction.WORK_PLAN_PERSON_REMOVED, AuditTargetType.WORK_PLAN_PERSON,
                 personId, row.getSupplierCompanyId(), wp.getSiteId(),
                 "{\"work_plan_id\":" + workPlanId + "}", null);
@@ -702,6 +823,66 @@ public class WorkPlanService {
         return blocking.stream().filter(t -> !validIds.contains(t.getId())).toList();
     }
 
+    /**
+     * L3 공개 래퍼 — 자원 1건의 미비 blocks_assignment 서류 목록. 원 게이트(missingBlockingTypes) 무수정 재사용.
+     * DeployCheckService 가 서류 blocks 합성에 사용.
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<DocumentType> missingBlockingDocTypes(OwnerType ownerType, Long ownerId) {
+        return missingBlockingTypes(ownerType, ownerId);
+    }
+
+    // ================== P1a 기반②: 서명 스냅샷 + 전원 재서명 강제 ==================
+
+    /** 작성자 서명/외부 서명요청 시점의 워크시트 전문 PDF 스냅샷 저장 (BP 본인/ADMIN). 기존 key 는 교체. */
+    public void saveSignSnapshot(Long id, byte[] pdf, AuthenticatedUser actor) {
+        WorkPlan wp = getOrThrow(id);
+        ensureCanManage(actor, wp);
+        String old = wp.getSignSnapshotKey();
+        String key = fileStorage.storeBytes(pdf, "pdf");
+        wp.setSignSnapshotKey(key);
+        if (old != null) {
+            try { fileStorage.delete(old); } catch (Exception ignore) {}
+        }
+        auditLog.record(actor, AuditAction.WORK_PLAN_SIGN_SNAPSHOT, AuditTargetType.WORK_PLAN,
+                wp.getId(), wp.getBpCompanyId(), wp.getSiteId(), null,
+                "{\"bytes\":" + pdf.length + "}");
+    }
+
+    /** 스냅샷 PDF 바이트 조회 — 공개 /sign pdf·서명요청 메일 첨부에서 스냅샷 우선 서빙용. 없으면 empty. */
+    @Transactional(readOnly = true)
+    public Optional<byte[]> loadSignSnapshot(Long id) {
+        WorkPlan wp = wpRepo.findById(id).orElse(null);
+        if (wp == null || wp.getSignSnapshotKey() == null) return Optional.empty();
+        try (var in = fileStorage.load(wp.getSignSnapshotKey()).getInputStream()) {
+            return Optional.of(in.readAllBytes());
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    /** 스냅샷 key clear + 파일 삭제. 호출자가 이미 권한 검증한 상태에서만 호출. */
+    private void clearSignSnapshot(WorkPlan wp) {
+        String key = wp.getSignSnapshotKey();
+        if (key == null) return;
+        wp.setSignSnapshotKey(null);
+        try { fileStorage.delete(key); } catch (Exception ignore) {}
+    }
+
+    /**
+     * 내용 변경(updateFormValues·자원 add/remove) 시 전원 재서명 강제.
+     * 기존 서명(SIGNED 또는 PENDING 요청)이 있으면 전체 무효화 + 스냅샷 clear + 감사로그.
+     * 서명이 하나도 없으면 no-op (작성 중 자동저장 UX 보호).
+     */
+    private void enforceResignOnContentChange(WorkPlan wp, AuthenticatedUser actor) {
+        if (signatureService == null || !signatureService.hasSignedOrPending(wp.getId())) return;
+        int invalidated = signatureService.invalidateAll(wp.getId(), actor);
+        clearSignSnapshot(wp);
+        auditLog.record(actor, AuditAction.WORK_PLAN_SIGNATURES_INVALIDATED, AuditTargetType.WORK_PLAN,
+                wp.getId(), wp.getBpCompanyId(), wp.getSiteId(), null,
+                "{\"reason\":\"content_changed\",\"invalidated\":" + invalidated + "}");
+    }
+
     public WorkPlan submit(Long id, AuthenticatedUser actor) {
         WorkPlan wp = getOrThrow(id);
         Site site = siteOrThrow(wp.getSiteId());
@@ -802,6 +983,13 @@ public class WorkPlanService {
      *   ADMIN 만 force=true + forceReason 로 우회 가능. force 시 자원은 그 자리에 두고 plan 만 IN_PROGRESS,
      *   audit WORK_PLAN_FORCE_STARTED + WORK_PLAN_RESOURCE_CONFLICT 양쪽에 사유 기록.
      */
+    /** S3(P3a) 순수 판정 — 당일 일일점검이 없는 계획서 장비 id. (게이트/경고 공통, 단위 테스트용) */
+    static List<Long> equipmentMissingDailyInspection(List<Long> planEquipmentIds, Set<Long> inspectedTodayEquipmentIds) {
+        return planEquipmentIds.stream()
+                .filter(eid -> !inspectedTodayEquipmentIds.contains(eid))
+                .toList();
+    }
+
     public WorkPlan start(Long id, StartWorkPlanRequest req, AuthenticatedUser actor) {
         WorkPlan wp = getOrThrow(id);
         Site site = siteOrThrow(wp.getSiteId());
@@ -834,6 +1022,31 @@ public class WorkPlanService {
             throw ApiException.badRequest("SAFETY_INSPECTION_INCOMPLETE",
                     "안전점검 미완료 자원: " + String.join(", ", safetyMisses)
                             + ". 안전점검을 완료한 후 시작할 수 있습니다.");
+        }
+
+        // S3 (P3a): 당일 조종원 일일점검 게이트 — 현장 설정 enforce=true 면 미점검 장비 차단, false 면 경고 1건.
+        List<Long> planEquipIds = wpeRepo.findByWorkPlanIdOrderByIdAsc(id).stream()
+                .map(WorkPlanEquipment::getEquipmentId).toList();
+        if (!planEquipIds.isEmpty()) {
+            Set<Long> inspectedToday = new HashSet<>();
+            for (var di : dailyInspectionRepo.findByEquipmentIdInAndInspectDate(planEquipIds, LocalDate.now())) {
+                inspectedToday.add(di.getEquipmentId());
+            }
+            List<Long> uninspected = equipmentMissingDailyInspection(planEquipIds, inspectedToday);
+            if (!uninspected.isEmpty()) {
+                boolean enforceGate = siteSafetySettingsRepo.findBySiteId(wp.getSiteId())
+                        .map(com.skep.safety.SiteSafetySettings::isEnforceDailyInspectionGate).orElse(false);
+                String list = uninspected.stream().map(x -> "장비#" + x).collect(java.util.stream.Collectors.joining(", "));
+                if (enforceGate && !force) {
+                    throw ApiException.badRequest("DAILY_INSPECTION_INCOMPLETE",
+                            "당일 조종원 일일점검 미완료: " + list + ". 조종원이 일일점검을 제출한 후 작업을 시작하세요.");
+                }
+                // 경고 모드(enforce=false 또는 ADMIN force) — 무언 금지: BP 인앱 알림 1건.
+                notifications.sendToCompany(wp.getBpCompanyId(),
+                        com.skep.notification.NotificationType.DAILY_INSPECTION_INCOMPLETE,
+                        "일일점검 미완 장비로 작업 시작", "일일점검 미완료 장비: " + list + " (경고 — 작업은 시작됨)",
+                        "WORK_PLAN", wp.getId(), wp.getSiteId());
+            }
         }
 
         // Compl-5: 이행지시(ComplianceOrder) 미승인/만료 자원 차단.

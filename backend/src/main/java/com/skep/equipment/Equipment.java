@@ -96,6 +96,10 @@ public class Equipment {
     @Column(name = "downtime_hours", nullable = false)
     private int downtimeHours;
 
+    /** S4'(P3a): 최근 정비 알림 발송 시점의 누적 가동시간. cumulative - 이 값 >= 주기 이면 정비 도래. */
+    @Column(name = "maintenance_alert_hours", nullable = false)
+    private int maintenanceAlertHours;
+
     // V11: 현재 배치 정보
     @Column(name = "current_site_id")
     private Long currentSiteId;
@@ -198,5 +202,10 @@ public class Equipment {
     /** 검사만료일(정기검사 유효기간) 단건 설정 — 장비 등록 시 폼/OCR 값 저장용(다른 due 는 보존). */
     public void setInspectionDueDate(java.time.LocalDate d) {
         this.inspectionDueDate = d;
+    }
+
+    /** S4'(P3a): 정비 알림 발송 후 기준 누적시간 갱신 — 다음 주기까지 재알림 없음. */
+    public void markMaintenanceAlerted(int cumulativeHours) {
+        this.maintenanceAlertHours = cumulativeHours;
     }
 }

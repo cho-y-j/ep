@@ -78,5 +78,7 @@ export function rolesAllowedFor(companyType: CompanyType): PersonRole[] {
     case 'EQUIPMENT': return ALL_PERSON_ROLES;
     case 'MANPOWER': return ['WORK_DIRECTOR', 'GUIDE', 'FIRE_WATCH', 'SIGNALER', 'INSPECTOR', 'SITE_MANAGER'];
     case 'BP': return ALL_PERSON_ROLES;
+    // 안전점검회사 — 점검원만.
+    case 'SAFETY_INSPECTION': return ['INSPECTOR'];
   }
 }

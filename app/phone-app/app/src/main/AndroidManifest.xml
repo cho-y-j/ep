@@ -156,6 +156,16 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.SkepField" />
 
+        <!-- S5' 안전알림 풀스크린 (TTS 읽어주기 + [확인] 확인응답, 잠금화면 위 + 화면 깨움) -->
+        <activity
+            android:name=".ui.SafetyAlertActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.SkepField" />
+
         <!-- 공지 FCM 수신 -->
         <service
             android:name=".service.FieldFcmService"

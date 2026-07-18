@@ -4,8 +4,16 @@ import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyService;
+import com.skep.contract.Contract;
+import com.skep.contract.ContractRepository;
+import com.skep.dailywork.DailyWorkLog;
+import com.skep.dailywork.DailyWorkLogRepository;
+import com.skep.document.OwnerType;
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentRepository;
+import com.skep.fieldDeployment.FieldDeploymentRepository;
+import com.skep.fieldDeployment.FieldDeploymentRequest;
+import com.skep.fieldDeployment.FieldDeploymentStatus;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
 import com.skep.quotation.QuotationRequest;
@@ -15,6 +23,7 @@ import com.skep.quotation.dispatch.DispatchedEquipmentRepository;
 import com.skep.quotation.dispatch.DispatchedPerson;
 import com.skep.quotation.dispatch.DispatchedPersonRepository;
 import com.skep.security.AuthenticatedUser;
+import com.skep.settlement.dto.SettlementDtos.OtBreakdown;
 import com.skep.settlement.dto.SettlementDtos.OwnerSettlement;
 import com.skep.settlement.dto.SettlementDtos.SettlementItem;
 import com.skep.settlement.dto.SettlementDtos.SettlementSummaryResponse;
@@ -60,6 +69,9 @@ public class SettlementService {
     private final PersonRepository persons;
     private final SiteRepository sites;
     private final WorkConfirmationRepository workConfirmations;
+    private final DailyWorkLogRepository dailyWorkLogs;
+    private final ContractRepository contracts;
+    private final FieldDeploymentRepository fieldDeployments;
 
     @Transactional(readOnly = true)
     public SettlementSummaryResponse summary(AuthenticatedUser actor, Long companyIdParam, LocalDate from, LocalDate to) {
@@ -96,20 +108,39 @@ public class SettlementService {
             ppRows = ppRows.stream().filter(d -> overlaps(qrMap.get(d.getQuotationRequestId()), from, to)).toList();
         }
 
-        // 자원 라벨.
-        Map<Long, Equipment> eqMap = equipments.findAllById(
-                        eqRows.stream().map(DispatchedEquipment::getEquipmentId).filter(Objects::nonNull).collect(Collectors.toSet()))
+        // §3.2 디커플링: 수락된 현장 투입요청(ACTIVE/COMPLETED)을 정산 두 번째 원천으로 추가.
+        // 기존 배차(견적) 원천 처리는 위에서 그대로 — 아래는 순수 추가분이라 기존 항목 출력 불변.
+        List<FieldDeploymentRequest> deployments = fieldDeployments.findBySupplierCompanyIdInAndStatusIn(
+                scope, List.of(FieldDeploymentStatus.ACTIVE, FieldDeploymentStatus.COMPLETED));
+        if (from != null || to != null) {
+            deployments = deployments.stream().filter(r -> deploymentInWindow(r, from, to)).toList();
+        }
+
+        // 자원 라벨 — 배차 + 투입요청 자원 통합 조회.
+        Set<Long> allEquipmentIds = new HashSet<>();
+        Set<Long> allPersonIds = new HashSet<>();
+        eqRows.forEach(d -> { if (d.getEquipmentId() != null) allEquipmentIds.add(d.getEquipmentId()); });
+        ppRows.forEach(d -> { if (d.getPersonId() != null) allPersonIds.add(d.getPersonId()); });
+        for (FieldDeploymentRequest r : deployments) {
+            if (r.getResourceType() == OwnerType.EQUIPMENT) allEquipmentIds.add(r.getResourceId());
+            else if (r.getResourceType() == OwnerType.PERSON) allPersonIds.add(r.getResourceId());
+        }
+        Map<Long, Equipment> eqMap = equipments.findAllById(allEquipmentIds)
                 .stream().collect(Collectors.toMap(Equipment::getId, e -> e));
-        Map<Long, Person> personMap = persons.findAllById(
-                        ppRows.stream().map(DispatchedPerson::getPersonId).filter(Objects::nonNull).collect(Collectors.toSet()))
+        Map<Long, Person> personMap = persons.findAllById(allPersonIds)
                 .stream().collect(Collectors.toMap(Person::getId, p -> p));
+
+        // §3.6.3 OT 5분류 — 자원별 일일 확인서(SIGNED/PHOTO)×계약 단가 내역(기간 [from,to]).
+        Map<String, OtBreakdown> otBreakdowns = computeOtBreakdowns(allEquipmentIds, allPersonIds, from, to);
 
         // 정산 근무일수 자동 파생 소스: 대상 인원들의 서명완료(COMPLETED) 작업확인서를
         // 인력 배차행 계약기간 전체 범위(min~max)로 한 번에 배치 조회. 행별 필터는 personItem 에서.
         Map<Long, List<WorkConfirmation>> completedByPerson = fetchCompletedConfirmations(ppRows, qrMap);
 
         // 사이트 이름 + 현장 정산일.
-        Set<Long> siteIds = qrMap.values().stream().map(QuotationRequest::getSiteId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> siteIds = qrMap.values().stream().map(QuotationRequest::getSiteId)
+                .filter(Objects::nonNull).collect(Collectors.toCollection(HashSet::new));
+        deployments.forEach(r -> { if (r.getTargetSiteId() != null) siteIds.add(r.getTargetSiteId()); });
         List<Site> siteList = sites.findAllById(siteIds);
         Map<Long, String> siteNames = siteList.stream().collect(Collectors.toMap(Site::getId, Site::getName));
         Map<Long, Integer> siteSettlementDays = siteList.stream()
@@ -121,6 +152,10 @@ public class SettlementService {
         for (DispatchedEquipment d : eqRows) companyIds.add(ownerOf(d.getSubSupplierCompanyId(), d.getSupplierCompanyId()));
         for (DispatchedPerson d : ppRows) companyIds.add(ownerOf(d.getSubSupplierCompanyId(), d.getSupplierCompanyId()));
         qrMap.values().forEach(q -> { Long bp = bpOf(q); if (bp != null) companyIds.add(bp); });
+        for (FieldDeploymentRequest r : deployments) {
+            companyIds.add(r.getSupplierCompanyId());
+            if (r.getBpCompanyId() != null) companyIds.add(r.getBpCompanyId());
+        }
         Map<Long, String> companyNames = companies.findAllById(companyIds).stream()
                 .collect(Collectors.toMap(Company::getId, Company::getName));
 
@@ -129,12 +164,17 @@ public class SettlementService {
         for (DispatchedEquipment d : eqRows) {
             Long ownerId = ownerOf(d.getSubSupplierCompanyId(), d.getSupplierCompanyId());
             byOwner.computeIfAbsent(ownerId, k -> new ArrayList<>())
-                    .add(equipmentItem(d, qrMap, eqMap, siteNames, siteSettlementDays, companyNames, companyId));
+                    .add(equipmentItem(d, qrMap, eqMap, siteNames, siteSettlementDays, companyNames, companyId, otBreakdowns));
         }
         for (DispatchedPerson d : ppRows) {
             Long ownerId = ownerOf(d.getSubSupplierCompanyId(), d.getSupplierCompanyId());
             byOwner.computeIfAbsent(ownerId, k -> new ArrayList<>())
-                    .add(personItem(d, qrMap, personMap, siteNames, siteSettlementDays, companyNames, companyId, completedByPerson));
+                    .add(personItem(d, qrMap, personMap, siteNames, siteSettlementDays, companyNames, companyId, completedByPerson, otBreakdowns));
+        }
+        // 디커플링 원천(투입요청 수락분) — 소유자 = supplierCompanyId(투입요청엔 하위귀속 개념 없음).
+        for (FieldDeploymentRequest r : deployments) {
+            byOwner.computeIfAbsent(r.getSupplierCompanyId(), k -> new ArrayList<>())
+                    .add(fieldDeploymentItem(r, eqMap, personMap, siteNames, siteSettlementDays, companyNames, otBreakdowns));
         }
 
         List<OwnerSettlement> owners = new ArrayList<>();
@@ -157,7 +197,8 @@ public class SettlementService {
     private SettlementItem equipmentItem(DispatchedEquipment d, Map<Long, QuotationRequest> qrMap,
                                          Map<Long, Equipment> eqMap, Map<Long, String> siteNames,
                                          Map<Long, Integer> siteSettlementDays,
-                                         Map<Long, String> companyNames, Long selfId) {
+                                         Map<Long, String> companyNames, Long selfId,
+                                         Map<String, OtBreakdown> otBreakdowns) {
         Equipment e = d.getEquipmentId() != null ? eqMap.get(d.getEquipmentId()) : null;
         String label = e != null
                 ? (e.getVehicleNo() != null ? e.getVehicleNo() : (e.getModel() != null ? e.getModel() : "#" + e.getId()))
@@ -185,14 +226,16 @@ public class SettlementService {
                 d.getSentAt(),
                 d.getSettlementWorkDays(), d.getSettlementOtDays(), p.baseAmount(), p.otAmount(), siteDay,
                 // 장비는 파생 소스 없음(무변경). source 는 수동 입력 여부만 표기.
-                null, null, d.getSettlementWorkDays() != null ? "MANUAL" : null);
+                null, null, d.getSettlementWorkDays() != null ? "MANUAL" : null,
+                "DISPATCH", d.getEquipmentId() != null ? otBreakdowns.get("EQUIPMENT:" + d.getEquipmentId()) : null);
     }
 
     private SettlementItem personItem(DispatchedPerson d, Map<Long, QuotationRequest> qrMap,
                                       Map<Long, Person> personMap, Map<Long, String> siteNames,
                                       Map<Long, Integer> siteSettlementDays,
                                       Map<Long, String> companyNames, Long selfId,
-                                      Map<Long, List<WorkConfirmation>> completedByPerson) {
+                                      Map<Long, List<WorkConfirmation>> completedByPerson,
+                                      Map<String, OtBreakdown> otBreakdowns) {
         Person p = personMap.get(d.getPersonId());
         String label = p != null ? p.getName() : "#" + d.getPersonId();
         QuotationRequest qr = qrMap.get(d.getQuotationRequestId());
@@ -232,7 +275,96 @@ public class SettlementService {
                 d.getSubSupplierCompanyId() != null && d.getSubSupplierCompanyId().equals(selfId),
                 d.getSentAt(),
                 d.getSettlementWorkDays(), d.getSettlementOtDays(), pr.baseAmount(), pr.otAmount(), siteDay,
-                derivedWorkDays, derivedOtDays, source);
+                derivedWorkDays, derivedOtDays, source,
+                "DISPATCH", d.getPersonId() != null ? otBreakdowns.get("PERSON:" + d.getPersonId()) : null);
+    }
+
+    /** §3.2 디커플링 — 수락된 투입요청 1건 = 정산 1건(DEPLOYMENT). 견적 무관, 근무일수 미입력 → 금액 basis 만. */
+    private SettlementItem fieldDeploymentItem(FieldDeploymentRequest r,
+                                               Map<Long, Equipment> eqMap, Map<Long, Person> personMap,
+                                               Map<Long, String> siteNames, Map<Long, Integer> siteSettlementDays,
+                                               Map<Long, String> companyNames, Map<String, OtBreakdown> otBreakdowns) {
+        boolean isEq = r.getResourceType() == OwnerType.EQUIPMENT;
+        String type = isEq ? "EQUIPMENT" : "PERSON";
+        Long resourceId = r.getResourceId();
+        String label;
+        if (isEq) {
+            Equipment e = eqMap.get(resourceId);
+            label = e != null
+                    ? (e.getVehicleNo() != null ? e.getVehicleNo() : (e.getModel() != null ? e.getModel() : "#" + resourceId))
+                    : "#" + resourceId;
+        } else {
+            Person p = personMap.get(resourceId);
+            label = p != null ? p.getName() : "#" + resourceId;
+        }
+        // 근무일수 미입력 → SettlementCalculator 는 basis 만(amount null). 기존 배차행과 동일 규칙.
+        SettlementCalculator.Result calc = SettlementCalculator.calc(
+                r.getMonthlyPrice(), r.getDailyPrice(), null, null, null, null);
+        Long siteId = r.getTargetSiteId();
+        Long bp = r.getBpCompanyId();
+        return new SettlementItem(
+                type, r.getId(), resourceId, label,
+                null,                               // quotationRequestId — 없음(디커플)
+                siteId, siteId != null ? siteNames.get(siteId) : null,
+                bp, bp != null ? companyNames.get(bp) : null,
+                r.getStartDate(), null,             // 시작일만(투입요청엔 종료일 없음)
+                0,
+                r.getDailyPrice(), null, r.getMonthlyPrice(), null,
+                calc.basis(), calc.amount(),
+                r.getSupplierCompanyId(),
+                false,
+                r.getRequestedAt(),
+                null, null, calc.baseAmount(), calc.otAmount(),
+                siteId != null ? siteSettlementDays.get(siteId) : null,
+                null, null, null,
+                "DEPLOYMENT", otBreakdowns.get(type + ":" + resourceId));
+    }
+
+    /** 자원별 OT 5분류 breakdown 산출 — 일일 확인서를 기본 자원(장비 우선)에 1회 귀속(이중집계 방지). */
+    private Map<String, OtBreakdown> computeOtBreakdowns(Set<Long> equipmentIds, Set<Long> personIds,
+                                                         LocalDate from, LocalDate to) {
+        Map<String, List<DailyWorkLog>> byResource = new HashMap<>();
+        if (!equipmentIds.isEmpty()) {
+            for (DailyWorkLog l : dailyWorkLogs.findByEquipmentIdIn(equipmentIds)) {
+                if (l.getEquipmentId() == null || !logInWindow(l, from, to)) continue;
+                byResource.computeIfAbsent("EQUIPMENT:" + l.getEquipmentId(), k -> new ArrayList<>()).add(l);
+            }
+        }
+        if (!personIds.isEmpty()) {
+            for (DailyWorkLog l : dailyWorkLogs.findByPersonIdIn(personIds)) {
+                if (l.getEquipmentId() != null) continue; // 장비 로그는 이미 장비에 귀속(이중집계 방지).
+                if (l.getPersonId() == null || !logInWindow(l, from, to)) continue;
+                byResource.computeIfAbsent("PERSON:" + l.getPersonId(), k -> new ArrayList<>()).add(l);
+            }
+        }
+        if (byResource.isEmpty()) return Map.of();
+        Set<Long> contractIds = new HashSet<>();
+        byResource.values().forEach(list -> list.forEach(l -> {
+            if (l.getContractId() != null) contractIds.add(l.getContractId());
+        }));
+        Map<Long, Contract> contractMap = contracts.findAllById(contractIds).stream()
+                .collect(Collectors.toMap(Contract::getId, c -> c));
+        Map<String, OtBreakdown> out = new HashMap<>();
+        for (var e : byResource.entrySet()) {
+            OtBreakdown b = OtBreakdownCalculator.compute(e.getValue(), contractMap);
+            if (b != null) out.put(e.getKey(), b);
+        }
+        return out;
+    }
+
+    private static boolean logInWindow(DailyWorkLog l, LocalDate from, LocalDate to) {
+        LocalDate d = l.getWorkDate();
+        if (d == null) return false;
+        if (from != null && d.isBefore(from)) return false;
+        if (to != null && d.isAfter(to)) return false;
+        return true;
+    }
+
+    /** 투입요청이 [from,to] 와 겹치나 — 시작일 기준(종료일 없어 from 하한 미적용, 진행중일 수 있음). */
+    private static boolean deploymentInWindow(FieldDeploymentRequest r, LocalDate from, LocalDate to) {
+        LocalDate s = r.getStartDate();
+        if (s == null) return true;
+        return to == null || !s.isAfter(to);
     }
 
     /** 소유자 = 자식 귀속이 있으면 자식, 없으면 대외 명의(supplier). */

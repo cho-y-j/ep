@@ -7,6 +7,7 @@ const ROUTE_BY_ROLE: Record<string, string> = {
   EQUIPMENT_SUPPLIER: '/equipment-supplier/dashboard',
   MANPOWER_SUPPLIER: '/manpower-supplier/dashboard',
   WORKER: '/worker/dashboard',
+  CLIENT: '/client/dashboard',
 };
 
 /**

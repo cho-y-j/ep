@@ -25,6 +25,10 @@ public final class AuditAction {
     public static final String DOCUMENT_RENEWED = "DOCUMENT_RENEWED";
     public static final String DOCUMENT_VERIFIED = "DOCUMENT_VERIFIED";
 
+    // V96: BP 서류 심사 봉투 승인/반려.
+    public static final String DOCUMENT_REVIEW_APPROVED = "DOCUMENT_REVIEW_APPROVED";
+    public static final String DOCUMENT_REVIEW_REJECTED = "DOCUMENT_REVIEW_REJECTED";
+
     public static final String EQUIPMENT_STATUS_CHANGED = "EQUIPMENT_STATUS_CHANGED";
 
     // Phase S-5: 작업계획서
@@ -40,10 +44,31 @@ public final class AuditAction {
     public static final String WORK_PLAN_EQUIPMENT_REMOVED = "WORK_PLAN_EQUIPMENT_REMOVED";
     public static final String WORK_PLAN_PERSON_ADDED = "WORK_PLAN_PERSON_ADDED";
     public static final String WORK_PLAN_PERSON_REMOVED = "WORK_PLAN_PERSON_REMOVED";
+    // P1a 기반②: 서명 스냅샷 저장 / 내용변경 시 서명 전원 무효화.
+    public static final String WORK_PLAN_SIGN_SNAPSHOT = "WORK_PLAN_SIGN_SNAPSHOT";
+    public static final String WORK_PLAN_SIGNATURES_INVALIDATED = "WORK_PLAN_SIGNATURES_INVALIDATED";
+    // P1c: L2 자원 교체 — 새 계획서 대체 생성 + 원본 자동 종료.
+    public static final String WORK_PLAN_RESOURCE_REPLACED = "WORK_PLAN_RESOURCE_REPLACED";
+    // P1c: L2a 업체변경 신청서 v0.
+    public static final String RESOURCE_CHANGE_REQUEST_CREATED = "RESOURCE_CHANGE_REQUEST_CREATED";
 
     // S-10: 견적 요청
     public static final String QUOTATION_CREATED = "QUOTATION_CREATED";
     public static final String QUOTATION_RESPONDED = "QUOTATION_RESPONDED";
     public static final String QUOTATION_FINALIZED = "QUOTATION_FINALIZED";
     public static final String QUOTATION_CANCELLED = "QUOTATION_CANCELLED";
+
+    // P0.5a: 계약(단가 원천).
+    public static final String CONTRACT_CREATED = "CONTRACT_CREATED";
+    public static final String CONTRACT_UPDATED = "CONTRACT_UPDATED";
+
+    // P0.5a: 기통과 소급 + 구두승인.
+    public static final String RESOURCE_ONBOARDING_REQUESTED = "RESOURCE_ONBOARDING_REQUESTED";
+    public static final String RESOURCE_ONBOARDING_APPROVED = "RESOURCE_ONBOARDING_APPROVED";
+    public static final String RESOURCE_ONBOARDING_VERBAL = "RESOURCE_ONBOARDING_VERBAL";
+
+    // P0.5b: 일일 작업확인서.
+    public static final String DAILY_WORK_LOG_CREATED = "DAILY_WORK_LOG_CREATED";
+    public static final String DAILY_WORK_LOG_UPDATED = "DAILY_WORK_LOG_UPDATED";
+    public static final String DAILY_WORK_LOG_SIGNED = "DAILY_WORK_LOG_SIGNED";
 }

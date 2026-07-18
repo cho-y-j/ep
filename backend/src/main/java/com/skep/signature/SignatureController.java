@@ -4,6 +4,7 @@ import com.skep.docx.WorkPlanPdfService;
 import com.skep.signature.dto.SignatureResponse;
 import com.skep.workplan.WorkPlan;
 import com.skep.workplan.WorkPlanRepository;
+import com.skep.workplan.WorkPlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
@@ -28,6 +29,8 @@ public class SignatureController {
     private final SignatureService signatureService;
     private final WorkPlanRepository workPlanRepo;
     private final WorkPlanPdfService pdfService;
+    /** P1a 기반②: 스냅샷 우선 서빙. */
+    private final WorkPlanService workPlanService;
 
     /** 사인 페이지 진입 — 토큰 검증 + 작업계획서 메타 반환. */
     @GetMapping("/{token}")
@@ -68,7 +71,9 @@ public class SignatureController {
             return ResponseEntity.status(HttpStatus.GONE).body(Map.of("error", "만료된 사인 링크입니다"));
         }
         try {
-            byte[] pdf = pdfService.renderPdfPublic(sig.getWorkPlanId());
+            // P1a 기반②: 서명 시점 워크시트 전문 스냅샷을 우선 서빙, 없으면 기존 셸 렌더 폴백.
+            byte[] pdf = workPlanService.loadSignSnapshot(sig.getWorkPlanId())
+                    .orElseGet(() -> pdfService.renderPdfPublic(sig.getWorkPlanId()));
             WorkPlan wp = workPlanRepo.findById(sig.getWorkPlanId()).orElse(null);
             String baseName = com.skep.common.SafeText.sanitizeFileName(
                     wp != null && wp.getTitle() != null ? wp.getTitle() : "work-plan-" + sig.getWorkPlanId());

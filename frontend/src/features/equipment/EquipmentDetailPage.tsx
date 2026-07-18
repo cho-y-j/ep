@@ -17,6 +17,8 @@ import { equipmentCategoryLabel, type EquipmentResponse } from '../../types/equi
 import ClientOrgHistory from '../../components/ClientOrgHistory';
 import EquipmentDefaultOperators from './EquipmentDefaultOperators';
 import EquipmentDuePanel from './EquipmentDuePanel';
+import DeployCheckCard from '../readiness/DeployCheckCard';
+import OnboardingBadge from '../onboarding/OnboardingBadge';
 
 type TabId = 'overview' | 'inspection' | 'operation' | 'location' | 'maintenance' | 'note';
 
@@ -191,6 +193,7 @@ export default function EquipmentDetailPage() {
                     {equipment.assignment_status && (
                       <AssignmentBadge status={equipment.assignment_status} />
                     )}
+                    <OnboardingBadge ownerType="EQUIPMENT" ownerId={equipment.id} />
                   </h1>
                   <div className="mt-1 text-sm text-slate-500 flex items-center gap-2 flex-wrap">
                     <span className="font-mono">{equipment.code ?? '-'}</span>
@@ -319,6 +322,9 @@ export default function EquipmentDetailPage() {
 
         {/* P4: 차량 관리 — 검사·오일·등록 만료 + 일상점검 이력 */}
         <EquipmentDuePanel equipment={equipment} canEdit={canEdit} onSaved={() => void load()} />
+
+        {/* L3: 현장 투입가능 사전판정 */}
+        <DeployCheckCard ownerType="equipment" ownerId={equipment.id} />
 
         {/* 탭 */}
         <div className="rounded-xl border border-slate-200 bg-white">

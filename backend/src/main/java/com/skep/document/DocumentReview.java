@@ -36,6 +36,20 @@ public class DocumentReview {
     @Column(name = "read_at")
     private LocalDateTime readAt;
 
+    /** V96: 심사 상태머신 — PENDING(심사중) → APPROVED/REJECTED. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private DocumentReviewStatus status = DocumentReviewStatus.PENDING;
+
+    @Column(name = "rejected_reason", length = 255)
+    private String rejectedReason;
+
+    @Column(name = "acted_by")
+    private Long actedBy;
+
+    @Column(name = "acted_at")
+    private LocalDateTime actedAt;
+
     public DocumentReview(Long supplierCompanyId, Long bpCompanyId, String message, Long sentBy) {
         this.supplierCompanyId = supplierCompanyId;
         this.bpCompanyId = bpCompanyId;
@@ -45,5 +59,21 @@ public class DocumentReview {
 
     public void markRead() {
         if (readAt == null) readAt = LocalDateTime.now();
+    }
+
+    public void approve(Long userId) {
+        this.status = DocumentReviewStatus.APPROVED;
+        this.actedBy = userId;
+        this.actedAt = LocalDateTime.now();
+        this.rejectedReason = null;
+        markRead();
+    }
+
+    public void reject(Long userId, String reason) {
+        this.status = DocumentReviewStatus.REJECTED;
+        this.actedBy = userId;
+        this.actedAt = LocalDateTime.now();
+        this.rejectedReason = reason;
+        markRead();
     }
 }

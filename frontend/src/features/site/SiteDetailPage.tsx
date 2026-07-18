@@ -44,6 +44,8 @@ export default function SiteDetailPage() {
   const [participantBusy, setParticipantBusy] = useState(false);
   const [participantError, setParticipantError] = useState<string | null>(null);
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
+  // 원청(client_org) 연결 — ADMIN 만 편집. 목록은 공개 GET.
+  const [clientOrgs, setClientOrgs] = useState<{ id: number; name: string; code: string }[]>([]);
 
   const canManage = !!site && (user?.role === 'ADMIN' || (user?.role === 'BP' && user.company_id === site.bp_company_id));
   const activeParticipants = useMemo(
@@ -81,6 +83,13 @@ export default function SiteDetailPage() {
   }, [canManage, supplierType]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (user?.role !== 'ADMIN') return;
+    api.get<{ id: number; name: string; code: string }[]>('/api/client-orgs')
+      .then((r) => setClientOrgs(r.data))
+      .catch(() => setClientOrgs([]));
+  }, [user?.role]);
 
   // 오늘 출퇴근 현황 — 이 현장에 배정된 인원/장비 + today_attended.
   useEffect(() => {
@@ -239,6 +248,21 @@ export default function SiteDetailPage() {
                   className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </label>
+              {user?.role === 'ADMIN' && (
+                <label className="block text-sm">
+                  <span className="text-slate-600">원청 (관제 연결)</span>
+                  <select
+                    value={form.client_org_id ?? ''}
+                    onChange={(e) => setForm((prev) => prev && ({ ...prev, client_org_id: e.target.value === '' ? null : Number(e.target.value) }))}
+                    className="input mt-1 bg-white"
+                  >
+                    <option value="">미지정</option>
+                    {clientOrgs.map((o) => (
+                      <option key={o.id} value={o.id}>{o.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="block">
                 <span className="text-xs font-semibold text-slate-500">상태</span>
                 <select
@@ -432,6 +456,7 @@ function toForm(site: SiteResponse): UpdateSitePayload {
     polygon_geojson: site.polygon_geojson ?? null,
     map_zoom: site.map_zoom ?? null,
     settlement_day: site.settlement_day ?? null,
+    client_org_id: site.client_org_id ?? null,
   };
 }
 

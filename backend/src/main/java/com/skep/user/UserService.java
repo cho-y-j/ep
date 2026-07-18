@@ -47,6 +47,7 @@ public class UserService {
                 .phone(req.phone())
                 .role(req.role())
                 .companyId(req.companyId())
+                .clientOrgId(req.clientOrgId())
                 .isCompanyAdmin(Boolean.TRUE.equals(req.isCompanyAdmin()))
                 .enabled(true)
                 .build();

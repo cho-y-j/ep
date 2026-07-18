@@ -210,6 +210,26 @@ export default function PersonPage() {
           )}
         </div>
 
+        {/* BP 범위 전환 — 내 인원/공급사 인원 통합 화면의 화면 내 필터. */}
+        {selfSupplierType === 'BP' && (
+          <div className="flex flex-wrap gap-2">
+            {([['', '배치 인원'], ['own', '내 인원'], ['external', '공급사 인원']] as const).map(([val, label]) => (
+              <button
+                key={val || 'all'}
+                type="button"
+                onClick={() => navigate(val ? `/persons?scope=${val}` : '/persons')}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                  (scope ?? '') === val
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {creating && canEdit && (
           <PersonCreateForm
             suppliers={isAdmin ? supplierCompanies : undefined}

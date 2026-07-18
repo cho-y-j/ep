@@ -7,6 +7,8 @@ import type { PersonResponse } from '../../../../types/person';
 import type { DocumentResponse } from '../../../../types/document';
 import type { CompanyResponse } from '../../../../types/auth';
 import { buildDefaultValues } from '../../../../lib/worksheet/schema';
+import { extractOperatorLicense, type OperatorLicenseInfo } from '../../../../lib/worksheet/operatorLicense';
+import { buildAttachmentOrder } from '../../../../lib/worksheet/attachmentOrder';
 import { EMPTY_ROLE_ASSIGN, REQUIRED_ROLES, type RoleAssign, type RoleKey } from '../types';
 
 interface UseWorkPlanCreateState {
@@ -86,6 +88,9 @@ interface UseWorkPlanCreateState {
   attachmentOrder: number[];
   moveAttachment: (docId: number, dir: -1 | 1) => void;
   swapAttachment: (aId: number, bId: number) => void;
+
+  // 조종원 주야 2인 슬롯의 면허·자격 자동 채움 정보 (원천 표시용 — Step2 뱃지).
+  operatorLicenseInfos: OperatorLicenseInfo[];
 
   // S-9-B: 워크시트 132 필드 + 작업배치도 키
   values: Record<string, any>;
@@ -204,8 +209,12 @@ export function useWorkPlanCreate(): UseWorkPlanCreateState {
   const [workLocation, setWorkLocation] = useState('');
   const [description, setDescription] = useState('');
   const [attachmentOrder, setAttachmentOrder] = useState<number[]>([]);
+  // 첨부 순서 자동 조립 ON — 사용자가 수동 재정렬하면 OFF 되어 자동 재계산을 멈춘다.
+  const [autoAttachmentOrder, setAutoAttachmentOrder] = useState(true);
+  const [operatorLicenseInfos, setOperatorLicenseInfos] = useState<OperatorLicenseInfo[]>([]);
 
   const moveAttachment = (docId: number, dir: -1 | 1) => {
+    setAutoAttachmentOrder(false);
     setAttachmentOrder((prev) => {
       const idx = prev.indexOf(docId);
       const arr = idx === -1 ? [...prev, docId] : prev.slice();
@@ -219,6 +228,7 @@ export function useWorkPlanCreate(): UseWorkPlanCreateState {
 
   /** 같은 그룹 내에서 두 첨부 위치를 교환. 둘 다 attachmentOrder에 없으면 추가 후 교환. */
   const swapAttachment = (aId: number, bId: number) => {
+    setAutoAttachmentOrder(false);
     setAttachmentOrder((prev) => {
       const arr = prev.slice();
       if (!arr.includes(aId)) arr.push(aId);
@@ -439,7 +449,8 @@ export function useWorkPlanCreate(): UseWorkPlanCreateState {
     }));
   }, [workDate, workEndDate]);
 
-  // 역할 인력 선택 시 워크시트 schema 자동 채움 (조종원 이름/면허, 작업지휘자 등)
+  // 역할 인력 선택 시 워크시트 schema 자동 채움.
+  // 조종원 = 주야 2인 슬롯(1·2)에 각각 면허번호(OCR 검증값)·자격종류·취득일·교육이수일 자동 배선.
   useEffect(() => {
     const ops = roleAssign.operator
       .map((id) => equipPersons.find((p) => p.id === id))
@@ -448,15 +459,37 @@ export function useWorkPlanCreate(): UseWorkPlanCreateState {
       .map((id) => manpowerPersons.find((p) => p.id === id))
       .filter(Boolean) as PersonResponse[];
     const join = (arr: string[]) => arr.filter(Boolean).join(' / ');
+
+    // 조종원 앞 2인 = 주간(슬롯1)·야간(슬롯2). 각자 서류 extracted_data 에서 면허·자격 파싱(폴백=qualification).
+    const infos = ops.slice(0, 2).map((p) => extractOperatorLicense(p, personDocs[p.id] ?? []));
+    setOperatorLicenseInfos(infos);
+    const s1 = infos[0];
+    const s2 = infos[1];
+
     setValues((v) => ({
       ...v,
-      operatorName: join(ops.map((p) => p.name)),
-      operatorLicenseNo: join(ops.map((p) => p.qualification || '')),
+      // 주간 (슬롯1)
+      operatorName: s1?.name ?? '',
+      operatorLicense: s1?.licenseType ?? '',
+      operatorLicenseNo: s1?.licenseNo ?? '',
+      operatorLicenseDate: s1?.licenseDate ?? '',
+      operatorEduDate: s1?.eduDate ?? '',
+      // 야간 (슬롯2 · 선택)
+      operatorName2: s2?.name ?? '',
+      operatorLicense2: s2?.licenseType ?? '',
+      operatorLicenseNo2: s2?.licenseNo ?? '',
+      operatorLicenseDate2: s2?.licenseDate ?? '',
+      operatorEduDate2: s2?.eduDate ?? '',
+      // 작업지휘자
       supervisor_name: join(sups.map((p) => p.name)),
       supervisor_position: sups.length > 0 ? '작업지휘자' : v.supervisor_position || '',
+      // 소속 = 작업지휘자의 공급사명. 기존 저장본(로드된 값)은 덮지 않음(하위호환).
+      supervisor_company: v.supervisor_company?.trim()
+        ? v.supervisor_company
+        : join(sups.map((p) => p.supplier_name ?? '')),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roleAssign, equipPersons, manpowerPersons]);
+  }, [roleAssign, equipPersons, manpowerPersons, personDocs]);
 
   // 역할 배정 변경 시 — 배정된 인원의 서류 로드 + 기본 전체 선택
   useEffect(() => {
@@ -487,6 +520,27 @@ export function useWorkPlanCreate(): UseWorkPlanCreateState {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roleAssign]);
+
+  // 첨부 자동 조립 — 선택 서류가 바뀌면 표지 체크리스트 순서(§3.6.2)로 attachmentOrder 자동 산출.
+  // 사용자가 수동 재정렬(move/swap)하면 autoAttachmentOrder=false 로 멈춘다(기존 수동 UI 유지).
+  useEffect(() => {
+    if (!autoAttachmentOrder) return;
+    const orderedPersonIds: number[] = [];
+    (['operator', 'supervisor', 'signalman', 'firewatch', 'signaler'] as RoleKey[]).forEach((k) => {
+      roleAssign[k].forEach((id) => { if (!orderedPersonIds.includes(id)) orderedPersonIds.push(id); });
+    });
+    const order = buildAttachmentOrder({
+      equipDocs,
+      selectedEquipDocIds,
+      orderedPersonIds,
+      personDocs,
+      selectedPersonDocIds,
+    });
+    setAttachmentOrder((prev) =>
+      prev.length === order.length && prev.every((x, i) => x === order[i]) ? prev : order
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAttachmentOrder, equipDocs, selectedEquipDocIds, roleAssign, personDocs, selectedPersonDocIds]);
 
   const selectedEquipment = useMemo(
     () => equipmentList.find((e) => e.id === equipmentId) ?? null,
@@ -564,6 +618,7 @@ export function useWorkPlanCreate(): UseWorkPlanCreateState {
     attachmentOrder,
     moveAttachment,
     swapAttachment,
+    operatorLicenseInfos,
     workLocation,
     setWorkLocation,
     description,

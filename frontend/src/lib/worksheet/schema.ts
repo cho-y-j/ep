@@ -49,8 +49,8 @@ const P1 = {
   site: {
     id: 'p1_site', page: 'p1', title: '현장/업체/기간', essential: true,
     fields: [
-      { key: 'siteName', label: '현장명', type: 'text', defaultValue: '용인 Cluster 1기 구축공사(IBL)' },
-      { key: 'submitCompany', label: '업체명', type: 'text', defaultValue: '(주)스켑중기' },
+      { key: 'siteName', label: '현장명', type: 'text' },
+      { key: 'submitCompany', label: '업체명', type: 'text' },
       { key: 'workPeriodStart', label: '작업기간 시작', type: 'date', defaultValue: '2025-11-11' },
       { key: 'workPeriodEnd', label: '작업기간 종료', type: 'date', defaultValue: '2025-11-30' },
     ],
@@ -103,7 +103,7 @@ const P2 = {
   equipmentDetail: {
     id: 'p2_equipmentDetail', page: 'p2', title: '장비 상세 (장비 선택 시 자동 채움)',
     fields: [
-      { key: 'equipmentCapacity', label: '성능(적재하중)', type: 'text', defaultValue: '45m' },
+      { key: 'equipmentCapacity', label: '성능(적재하중)', type: 'text' },
       { key: 'manufactureYear', label: '장비 출고 년수', type: 'text', linkedTo: 'equipment.upperPartYear' },
       { key: 'equipmentSerialNo', label: '기기 고유번호', type: 'text', linkedTo: 'equipment.serialNo' },
       { key: 'manufacturer', label: '제조일자', type: 'text', linkedTo: 'equipment.manufacturer' },
@@ -112,13 +112,20 @@ const P2 = {
   } as TemplateSection,
 
   operator: {
-    id: 'p2_operator', page: 'p2', title: '조종원 (인력 선택 시 자동 채움)', essential: true,
+    id: 'p2_operator', page: 'p2', title: '조종원 (주야 2인 · 인력 선택 시 자동 채움)', essential: true,
     fields: [
-      { key: 'operatorName', label: '조종원 성명', type: 'text', linkedTo: 'person.operator.name' },
-      { key: 'operatorLicense', label: '자격·면허', type: 'text', defaultValue: '화물운송종사 자격증' },
-      { key: 'operatorLicenseNo', label: '면허번호', type: 'text', linkedTo: 'person.operator.licenseNo' },
-      { key: 'operatorLicenseDate', label: '면허 취득일', type: 'date', defaultValue: '2013-01-17' },
-      { key: 'operatorEduDate', label: '교육 이수일', type: 'date', defaultValue: '2025-09-10' },
+      // 주간 (슬롯1) — 조종원 1번
+      { key: 'operatorName', label: '조종원 성명 (주간)', type: 'text', linkedTo: 'person.operator.name' },
+      { key: 'operatorLicense', label: '자격·면허 (주간)', type: 'text' },
+      { key: 'operatorLicenseNo', label: '면허번호 (주간)', type: 'text', linkedTo: 'person.operator.licenseNo' },
+      { key: 'operatorLicenseDate', label: '면허 취득일 (주간)', type: 'date' },
+      { key: 'operatorEduDate', label: '교육 이수일 (주간)', type: 'date' },
+      // 야간 (슬롯2) — 조종원 2번 (선택)
+      { key: 'operatorName2', label: '조종원 성명 (야간)', type: 'text', linkedTo: 'person.operator2.name' },
+      { key: 'operatorLicense2', label: '자격·면허 (야간)', type: 'text' },
+      { key: 'operatorLicenseNo2', label: '면허번호 (야간)', type: 'text', linkedTo: 'person.operator2.licenseNo' },
+      { key: 'operatorLicenseDate2', label: '면허 취득일 (야간)', type: 'date' },
+      { key: 'operatorEduDate2', label: '교육 이수일 (야간)', type: 'date' },
     ],
   } as TemplateSection,
 
@@ -279,7 +286,7 @@ const P4 = {
   supervisor: {
     id: 'p4_supervisor', page: 'p4', title: '작업지휘자', essential: true,
     fields: [
-      { key: 'supervisor_company', label: '소속', type: 'text', defaultValue: '(주)스켑중기' },
+      { key: 'supervisor_company', label: '소속', type: 'text', defaultValue: '' },
       { key: 'supervisor_position', label: '직책', type: 'text', defaultValue: '부장' },
       { key: 'supervisor_name', label: '성명', type: 'text', linkedTo: 'person.supervisor.name' },
     ],

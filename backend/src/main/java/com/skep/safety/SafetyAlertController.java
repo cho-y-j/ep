@@ -260,6 +260,7 @@ public class SafetyAlertController {
         m.put("person_has_photo", p != null && p.getPhotoKey() != null);
         m.put("kind", a.getKind());
         m.put("level", a.getLevel());
+        m.put("severity", a.getSeverity());
         m.put("message", a.getMessage());
         m.put("hr", a.getHr());
         m.put("spo2", a.getSpo2());
@@ -270,6 +271,10 @@ public class SafetyAlertController {
         m.put("work_plan_id", a.getWorkPlanId());
         m.put("resolved", a.isResolved());
         m.put("resolved_at", a.getResolvedAt());
+        // S5' 확인응답 상태 — 관제 ack 컬럼·미확인 필터.
+        m.put("acknowledged_at", a.getAcknowledgedAt());
+        m.put("ack_person_id", a.getAckPersonId());
+        m.put("escalated_at", a.getEscalatedAt());
         m.put("created_at", a.getCreatedAt());
         return m;
     }

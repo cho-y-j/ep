@@ -18,6 +18,8 @@ public enum PersonRole {
             // 장비공급사·BP 는 자체 인력을 모든 역할로 등록 가능(조종원 외 신호수·유도원 등). 인력공급사는 인력역할만(조종원 제외).
             case EQUIPMENT, BP -> true;
             case MANPOWER -> this != OPERATOR;
+            // 안전점검회사는 점검원(INSPECTOR)만 — S2′ 법정점검 수행 주체.
+            case SAFETY_INSPECTION -> this == INSPECTOR;
         };
     }
 
@@ -26,6 +28,8 @@ public enum PersonRole {
             case MANPOWER -> Set.of(WORK_DIRECTOR, GUIDE, FIRE_WATCH, SIGNALER, INSPECTOR, SITE_MANAGER);
             // 장비공급사·BP — 모든 역할 허용
             case EQUIPMENT, BP -> Set.of(OPERATOR, WORK_DIRECTOR, GUIDE, FIRE_WATCH, SIGNALER, INSPECTOR, SITE_MANAGER);
+            // 안전점검회사 — 점검원만.
+            case SAFETY_INSPECTION -> Set.of(INSPECTOR);
         };
     }
 }

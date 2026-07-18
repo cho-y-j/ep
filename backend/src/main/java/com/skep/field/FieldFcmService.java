@@ -16,6 +16,7 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -66,9 +67,22 @@ public class FieldFcmService {
         return doSend(fcmTokens, Map.of("type", "announcement", "title", title, "body", body), title);
     }
 
-    /** 임의 type(rest/heat/danger 등)으로 발송 — 워치/폰이 type별로 진동·표시 처리. */
-    public int sendTyped(List<String> fcmTokens, String type, String title, String body) {
-        return doSend(fcmTokens, Map.of("type", type, "title", title, "body", body), title);
+    /**
+     * S5' 안전 3등급 발송 — data 에 severity/tts_text/ack_required/alert_id 추가.
+     * 폰앱이 severity 로 채널·읽어주기(TTS)·진동을 분기하고, alert_id 로 [확인] 응답한다.
+     * 기존 필드(type/title/body)는 불변(하위호환). severity 미인지 폰은 NORMAL 취급.
+     */
+    public int sendSafety(List<String> fcmTokens, String type, String title, String body,
+                          String severity, String ttsText, boolean ackRequired, Long alertId) {
+        Map<String, String> data = new HashMap<>();
+        data.put("type", type);
+        data.put("title", title);
+        data.put("body", body != null ? body : "");
+        if (severity != null) data.put("severity", severity);
+        if (ttsText != null) data.put("tts_text", ttsText);
+        data.put("ack_required", String.valueOf(ackRequired));
+        if (alertId != null) data.put("alert_id", String.valueOf(alertId));
+        return doSend(fcmTokens, data, title);
     }
 
     private int doSend(List<String> fcmTokens, Map<String, String> data, String label) {

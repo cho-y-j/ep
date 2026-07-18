@@ -24,6 +24,9 @@ public interface WorkPlanRepository extends JpaRepository<WorkPlan, Long> {
     /** BP 회사의 작업계획서 중 특정 상태 — 투입 현황 board 용. 사인 완료된(SUBMITTED+) 것 가져오기. */
     List<WorkPlan> findByBpCompanyIdAndStatusInOrderByIdDesc(Long bpCompanyId, java.util.Collection<WorkPlanStatus> statuses);
 
+    /** 현장 단위 작업계획서(상태 필터) — 원청 관제 허브가 현장 투입 자원 집계에 사용. */
+    List<WorkPlan> findBySiteIdAndStatusInOrderByIdDesc(Long siteId, java.util.Collection<WorkPlanStatus> statuses);
+
     /**
      * 공급사 가시성: 자기 회사 자원이 포함된 작업계획서. WPE 또는 WPP 의 supplier_company_id 매칭.
      * 기본 정렬: 작업일 오름차순.
@@ -70,4 +73,7 @@ public interface WorkPlanRepository extends JpaRepository<WorkPlan, Long> {
 
     /** 현장 상황판 — 특정 현장의 특정일 작업계획서 전체(작업 진행/투입 자원 조립용). */
     List<WorkPlan> findBySiteIdAndWorkDateOrderByStartTimeAsc(Long siteId, LocalDate workDate);
+
+    /** P3d 이행 보고서 — 현장·기간 계획서 배치 조회(서명 완결 집계). */
+    List<WorkPlan> findBySiteIdAndWorkDateBetweenOrderByWorkDateAscIdAsc(Long siteId, LocalDate from, LocalDate to);
 }

@@ -10,6 +10,7 @@ import {
   KIND_LABEL,
   LEVEL_BADGE,
   LEVEL_LABEL,
+  ackState,
   type SafetyAlertResponse,
 } from '../../types/safetyAlert';
 import { PersonAvatar, SiteWeatherCard, TabButton, type SiteWeatherRow } from './atoms';
@@ -20,6 +21,22 @@ const ROW_CAP = 200;
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
+
+/** S5' 확인응답 상태 배지 — 확인됨(시각)/미확인/에스컬레이션됨. ack 대상 아니면 표시 안 함. */
+function AckBadge({ r }: { r: SafetyAlertResponse }) {
+  const st = ackState(r);
+  if (st === 'na') return <span className="text-xs text-slate-400">—</span>;
+  if (st === 'acknowledged') {
+    const t = r.acknowledged_at
+      ? new Date(r.acknowledged_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    return <span className="inline-block rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">확인됨 {t}</span>;
+  }
+  if (st === 'escalated') {
+    return <span className="inline-block rounded bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-300">에스컬레이션됨</span>;
+  }
+  return <span className="inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">미확인</span>;
+}
 type SiteRow = { id: number; name: string; latitude?: number | null; longitude?: number | null; geofenceRadiusM?: number | null };
 
 /** 작업자 안전알림 — ADMIN/BP. 현장 탭으로 분리 + 미해결 알람 지도 + 표(사진/전화 포함). */
@@ -28,6 +45,7 @@ export default function SafetyAlertsPage() {
   const allowed = user?.role === 'ADMIN' || user?.role === 'BP';
 
   const [unresolvedOnly, setUnresolvedOnly] = useState(true);
+  const [unackedOnly, setUnackedOnly] = useState(false);
   const [rows, setRows] = useState<SafetyAlertResponse[]>([]);
   const [liveCount, setLiveCount] = useState(0);
   const [sites, setSites] = useState<SiteRow[]>([]);
@@ -87,6 +105,16 @@ export default function SafetyAlertsPage() {
               );
               return;
             }
+            if (payload.event === 'acked') {
+              setRows((prev) =>
+                prev.map((r) =>
+                  r.id === payload.id
+                    ? { ...r, acknowledged_at: payload.acknowledged_at, ack_person_id: payload.ack_person_id }
+                    : r,
+                ),
+              );
+              return;
+            }
             setRows((prev) => [payload, ...prev.filter((r) => r.id !== payload.id)].slice(0, ROW_CAP));
             setLiveCount((n) => n + 1);
           } catch {
@@ -99,12 +127,15 @@ export default function SafetyAlertsPage() {
     return () => { client.deactivate(); };
   }, [allowed]);
 
-  // 탭으로 필터된 alert.
+  // 탭 + 미확인 필터된 alert.
   const filteredRows = useMemo(() => {
-    if (activeTab === null) return rows;
-    if (activeTab === 'none') return rows.filter((r) => r.site_id == null);
-    return rows.filter((r) => r.site_id === activeTab);
-  }, [rows, activeTab]);
+    let list = rows;
+    if (activeTab === 'none') list = list.filter((r) => r.site_id == null);
+    else if (activeTab !== null) list = list.filter((r) => r.site_id === activeTab);
+    // 미확인만 = ack 대상인데 아직 확인 안 됨(pending·escalated).
+    if (unackedOnly) list = list.filter((r) => ackState(r) === 'pending' || ackState(r) === 'escalated');
+    return list;
+  }, [rows, activeTab, unackedOnly]);
 
   // 미해결 + 좌표 있는 알람 마커. tooltipHtml 로 hover/클릭 시 상세 표시.
   const mapMarkers = useMemo<MapMarker[]>(() => {
@@ -250,6 +281,14 @@ export default function SafetyAlertsPage() {
               />
               미처리만
             </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={unackedOnly}
+                onChange={(e) => setUnackedOnly(e.target.checked)}
+              />
+              미확인만
+            </label>
             <button
               onClick={load}
               className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
@@ -318,6 +357,7 @@ export default function SafetyAlertsPage() {
                   <th className="px-3 py-2">연락처</th>
                   <th className="px-3 py-2">종류</th>
                   <th className="px-3 py-2">수준</th>
+                  <th className="px-3 py-2">확인</th>
                   <th className="px-3 py-2">바이탈</th>
                   <th className="px-3 py-2">위치</th>
                   <th className="px-3 py-2">처리</th>
@@ -358,6 +398,9 @@ export default function SafetyAlertsPage() {
                       >
                         {LEVEL_LABEL[r.level] ?? r.level}
                       </span>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <AckBadge r={r} />
                     </td>
                     <td className="px-3 py-2 text-slate-700 whitespace-nowrap">
                       {r.hr != null && <span className="mr-2">심박 {r.hr}</span>}

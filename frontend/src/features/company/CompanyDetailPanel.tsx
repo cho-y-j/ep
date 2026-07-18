@@ -3,7 +3,7 @@ import { AxiosError } from 'axios';
 import { Link } from 'react-router-dom';
 import SidePanel from '../../components/SidePanel';
 import { api } from '../../lib/api';
-import { COMPANY_TYPE_LABEL, type CompanyResponse } from '../../types/auth';
+import { COMPANY_TYPE_LABEL, type CompanyResponse, type CompanyType } from '../../types/auth';
 
 type Props = {
   company: CompanyResponse | null;
@@ -101,7 +101,7 @@ export default function CompanyDetailPanel({ company, onClose, onChange }: Props
 
 /** 회사 컨텍스트로 기존 페이지를 여는 바로가기 — 기존 디자인 그대로 활용. */
 function CompanyShortcuts({ companyId, companyType, companyName }:
-  { companyId: number; companyType: 'BP' | 'EQUIPMENT' | 'MANPOWER'; companyName: string }) {
+  { companyId: number; companyType: CompanyType; companyName: string }) {
   const showEquipment = companyType === 'EQUIPMENT';
   const showPersons = true; // 모든 회사 type 가 직속 인원 가질 수 있음
   return (

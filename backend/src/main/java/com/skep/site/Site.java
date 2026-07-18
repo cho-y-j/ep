@@ -22,6 +22,10 @@ public class Site {
     @Column(name = "bp_company_id", nullable = false)
     private Long bpCompanyId;
 
+    /** 원청(client_org). NULL=미지정. 원청 관제 허브가 이 값으로 자기 현장을 스코프. */
+    @Column(name = "client_org_id")
+    private Long clientOrgId;
+
     @Column(nullable = false, length = 150)
     private String name;
 
@@ -73,9 +77,10 @@ public class Site {
     private Integer settlementDay;
 
     @Builder
-    private Site(Long bpCompanyId, String name, String code, String address, String detailAddress,
+    private Site(Long bpCompanyId, Long clientOrgId, String name, String code, String address, String detailAddress,
                  LocalDate startDate, LocalDate endDate, SiteStatus status, Long createdBy) {
         this.bpCompanyId = bpCompanyId;
+        this.clientOrgId = clientOrgId;
         this.name = name;
         this.code = code;
         this.address = address;
@@ -118,5 +123,10 @@ public class Site {
     /** 현장 정산 기준일 지정/해제(NULL). */
     public void updateSettlementDay(Integer settlementDay) {
         this.settlementDay = settlementDay;
+    }
+
+    /** 원청(client_org) 지정/해제(NULL). */
+    public void updateClientOrg(Long clientOrgId) {
+        this.clientOrgId = clientOrgId;
     }
 }

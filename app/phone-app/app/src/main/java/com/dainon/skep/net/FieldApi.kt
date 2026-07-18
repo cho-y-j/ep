@@ -130,6 +130,20 @@ class FieldApi(private val baseUrl: String) {
         client.newCall(req).execute().use { resp -> return resp.isSuccessful }
     }
 
+    /** POST /api/field-auth/safety-alerts/{id}/ack (X-Field-Token) — S5' 안전알림 확인응답([확인] 버튼). */
+    fun ackSafetyAlert(token: String, alertId: Long): Boolean {
+        val req = Request.Builder()
+            .url("$baseUrl/api/field-auth/safety-alerts/$alertId/ack")
+            .header("X-Field-Token", token)
+            .post("".toRequestBody(jsonType))
+            .build()
+        client.newCall(req).execute().use { resp ->
+            val body = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) error("ack HTTP ${resp.code}: $body")
+            return true
+        }
+    }
+
     /** 현장 밖 체크인(서버 403 + code=OUT_OF_SITE) 예외. distance_m = 현장 중심까지 거리(m). */
     class OutOfSiteException(val distanceM: Int?) : RuntimeException("OUT_OF_SITE")
 

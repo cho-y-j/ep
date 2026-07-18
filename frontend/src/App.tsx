@@ -18,6 +18,8 @@ import DocumentTypeAdminPage from './features/admin/DocumentTypeAdminPage';
 import EquipmentTypeDocsPage from './features/admin/EquipmentTypeDocsPage';
 import PersonRoleDocsPage from './features/admin/PersonRoleDocsPage';
 import DocumentTypeRegionEditorPage from './features/admin/regionTemplate/DocumentTypeRegionEditorPage';
+import SafetyCheckTemplatesPage from './features/admin/SafetyCheckTemplatesPage';
+import InspectorPage from './features/inspector/InspectorPage';
 import OutgoingSentPage from './features/outgoing/OutgoingSentPage';
 import InboxPage from './features/outgoing/InboxPage';
 import EquipmentPage from './features/equipment/EquipmentPage';
@@ -28,6 +30,9 @@ import PersonDetailPage from './features/person/PersonDetailPage';
 import SitePage from './features/site/SitePage';
 import SiteDetailPage from './features/site/SiteDetailPage';
 import SafetyInspectionsPage from './features/safety/SafetyInspectionsPage';
+import SafetySettingsPage from './features/safety/SafetySettingsPage';
+import SafetyReportPage from './features/safety/SafetyReportPage';
+import SafetyReportPrintPage from './features/safety/SafetyReportPrintPage';
 import SafetyAlertsPage from './features/safetyAlerts/SafetyAlertsPage';
 import WorkPlanPage from './features/workPlan/WorkPlanPage';
 import WorkPlanPendingPage from './features/workPlan/WorkPlanPendingPage';
@@ -36,9 +41,18 @@ import WorkPlanPrintPage from './features/workPlan/WorkPlanPrintPage';
 import DocxTemplatesPage from './features/workPlan/DocxTemplatesPage';
 import WorkPlanEditPage from './features/workPlan/WorkPlanEditPage';
 import WorkPlanCreatePage from './features/workPlan/create/WorkPlanCreatePage';
+import ResourceChangeListPage from './features/resourceChange/ResourceChangeListPage';
+import ResourceChangeCreatePage from './features/resourceChange/ResourceChangeCreatePage';
+import ResourceChangeDetailPage from './features/resourceChange/ResourceChangeDetailPage';
 import MyCompanyPage from './features/company/MyCompanyPage';
 import SubSuppliersPage from './features/company/SubSuppliersPage';
 import OnboardingWizardPage from './features/onboarding/OnboardingWizardPage';
+import ContractsPage from './features/contract/ContractsPage';
+import QuoteTemplatesPage from './features/quotetemplate/QuoteTemplatesPage';
+import DailyWorkLogPage from './features/dailyWork/DailyWorkLogPage';
+import BpWorkLogLedgerPage from './features/dailyWork/BpWorkLogLedgerPage';
+import SupplierOnboardingPage from './features/onboarding/SupplierOnboardingPage';
+import BpOnboardingApprovalPage from './features/onboarding/BpOnboardingApprovalPage';
 import QuotationListPage from './features/quotation/QuotationListPage';
 import QuotationCreatePage from './features/quotation/QuotationCreatePage';
 import AlimTalkSendPage from './features/alimtalk/AlimTalkSendPage';
@@ -62,6 +76,7 @@ import BpDashboardPage from './features/dashboard/BpDashboardPage';
 import EquipmentSupplierDashboardPage from './features/dashboard/EquipmentSupplierDashboardPage';
 import ManpowerSupplierDashboardPage from './features/dashboard/ManpowerSupplierDashboardPage';
 import WorkerDashboardPage from './features/dashboard/WorkerDashboardPage';
+import ClientDashboardPage from './features/client/ClientDashboardPage';
 import AuditLogPage from './features/dashboard/AuditLogPage';
 import ReviewQueuePage from './features/document/ReviewQueuePage';
 import DocumentReviewSendPage from './features/document/DocumentReviewSendPage';
@@ -88,6 +103,8 @@ export default function App() {
         {/* S-12: 공개 전자서명 페이지 — 토큰만으로 접근 (인증 불필요) */}
         <Route path="/sign/:token" element={<SignaturePage />} />
         <Route path="/collect/:token" element={<CollectPublicPage />} />
+        {/* S2′ 안전점검원 모바일웹 — 점검원 자가로그인(X-Field-Token), JWT 불필요 공개 라우트 */}
+        <Route path="/inspector" element={<InspectorPage />} />
 
         {/* 루트 / 공통 dashboard 진입 — 역할별 dashboard 로 redirect */}
         <Route path="/" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
@@ -131,6 +148,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['WORKER']}>
               <WorkerDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/client/dashboard"
+          element={
+            <ProtectedRoute roles={['CLIENT']}>
+              <ClientDashboardPage />
             </ProtectedRoute>
           }
         />
@@ -230,6 +255,8 @@ export default function App() {
                element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'ADMIN']}><OutgoingSentPage /></ProtectedRoute>} />
         <Route path="/outgoing-quotations/new"
                element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'ADMIN']}><OutgoingNewPage /></ProtectedRoute>} />
+        <Route path="/quote-templates"
+               element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'ADMIN']}><QuoteTemplatesPage /></ProtectedRoute>} />
         <Route path="/inbox"
                element={<ProtectedRoute roles={['BP', 'ADMIN']}><InboxPage /></ProtectedRoute>} />
         <Route path="/dispatched-equipment"
@@ -240,6 +267,18 @@ export default function App() {
                element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'ADMIN']}><FieldDeploymentSupplierPage /></ProtectedRoute>} />
         <Route path="/field-deployments/bp"
                element={<ProtectedRoute roles={['BP', 'ADMIN']}><FieldDeploymentBpInbox /></ProtectedRoute>} />
+
+        {/* P0.5a: 계약(단가 원천) + 기통과 소급/구두승인 */}
+        <Route path="/contracts"
+               element={<ProtectedRoute roles={['BP', 'EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'ADMIN']}><ContractsPage /></ProtectedRoute>} />
+        <Route path="/daily-work-logs"
+               element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><DailyWorkLogPage /></ProtectedRoute>} />
+        <Route path="/daily-work-logs/bp"
+               element={<ProtectedRoute roles={['BP', 'ADMIN']}><BpWorkLogLedgerPage /></ProtectedRoute>} />
+        <Route path="/resource-onboardings"
+               element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><SupplierOnboardingPage /></ProtectedRoute>} />
+        <Route path="/resource-onboardings/bp"
+               element={<ProtectedRoute roles={['BP', 'ADMIN']}><BpOnboardingApprovalPage /></ProtectedRoute>} />
 
         {/* 도메인 페이지 — 권한은 페이지/API 단에서 강제 */}
         <Route
@@ -278,6 +317,9 @@ export default function App() {
         <Route path="/sites/:id" element={<ProtectedRoute><SiteDetailPage /></ProtectedRoute>} />
         <Route path="/safety-inspections" element={<ProtectedRoute><SafetyInspectionsPage /></ProtectedRoute>} />
         <Route path="/safety-alerts" element={<ProtectedRoute roles={['ADMIN','BP']}><SafetyAlertsPage /></ProtectedRoute>} />
+        <Route path="/safety-settings" element={<ProtectedRoute roles={['ADMIN','BP']}><SafetySettingsPage /></ProtectedRoute>} />
+        <Route path="/safety-reports" element={<ProtectedRoute roles={['ADMIN','BP','CLIENT']}><SafetyReportPage /></ProtectedRoute>} />
+        <Route path="/safety-reports/print" element={<ProtectedRoute roles={['ADMIN','BP','CLIENT']}><SafetyReportPrintPage /></ProtectedRoute>} />
         <Route path="/equipment" element={<ProtectedRoute><EquipmentPage /></ProtectedRoute>} />
         <Route path="/equipment/:id" element={<ProtectedRoute><EquipmentDetailPage /></ProtectedRoute>} />
         <Route path="/equipment-stats" element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER','ADMIN']}><EquipmentDeploymentStatsPage /></ProtectedRoute>} />
@@ -291,6 +333,9 @@ export default function App() {
         <Route path="/work-plans/new" element={<ProtectedRoute><WorkPlanCreatePage /></ProtectedRoute>} />
         <Route path="/work-plans/:id" element={<ProtectedRoute><WorkPlanDetailPage /></ProtectedRoute>} />
         <Route path="/work-plans/:id/print" element={<ProtectedRoute><WorkPlanPrintPage /></ProtectedRoute>} />
+        <Route path="/resource-change-requests" element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'BP', 'ADMIN']}><ResourceChangeListPage /></ProtectedRoute>} />
+        <Route path="/resource-change-requests/new" element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'BP', 'ADMIN']}><ResourceChangeCreatePage /></ProtectedRoute>} />
+        <Route path="/resource-change-requests/:id" element={<ProtectedRoute><ResourceChangeDetailPage /></ProtectedRoute>} />
         <Route path="/work-confirmations/monthly"
                element={<ProtectedRoute roles={['ADMIN', 'BP', 'EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><MonthlyWorkConfirmationPage /></ProtectedRoute>} />
         <Route path="/settlements"
@@ -312,6 +357,10 @@ export default function App() {
         <Route
           path="/admin/person-role-docs"
           element={<ProtectedRoute roles={['ADMIN']}><PersonRoleDocsPage /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/safety-check-templates"
+          element={<ProtectedRoute roles={['ADMIN']}><SafetyCheckTemplatesPage /></ProtectedRoute>}
         />
         <Route
           path="/admin/document-types/:id/regions"

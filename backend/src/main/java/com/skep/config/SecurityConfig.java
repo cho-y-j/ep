@@ -4,10 +4,13 @@ import com.skep.security.JwtAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -64,7 +67,23 @@ public class SecurityConfig {
                         // STOMP WebSocket — HTTP 핸드셰이크는 permitAll. 인증/인가는 STOMP CONNECT·SUBSCRIBE
                         // 프레임에서 StompAuthChannelInterceptor 가 JWT 로 수행 (안전알림 토픽 보호).
                         .requestMatchers("/ws/**", "/ws-raw/**").permitAll()
-                        .anyRequest().authenticated()
+                        // P2c: 원청(CLIENT) 읽기전용 관제 API — CLIENT 전용.
+                        .requestMatchers("/api/client/**").hasRole("CLIENT")
+                        // P3d: 안전관리 이행 보고서 — BP·ADMIN·CLIENT 공용(서비스에서 현장 스코프 재검증). CLIENT 전역 차단의 예외.
+                        .requestMatchers(HttpMethod.GET, "/api/safety-reports").hasAnyRole("ADMIN", "BP", "CLIENT")
+                        // CLIENT 도 접근 가능한 공용(본인 스코프) 엔드포인트 — 로그인 세션·알림.
+                        .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
+                        .requestMatchers("/api/notifications/**").authenticated()
+                        // 그 외 모든 /api/** : 인증 필수 + CLIENT 차단(기존 도메인 컨트롤러 접근 불가 — §1.1 격리).
+                        // 기존 역할(ADMIN/BP/공급사/WORKER)의 인가 동작은 종전과 동일.
+                        .anyRequest().access((authentication, context) -> {
+                            Authentication a = authentication.get();
+                            boolean authed = a != null && a.isAuthenticated()
+                                    && !(a instanceof AnonymousAuthenticationToken);
+                            boolean isClient = authed && a.getAuthorities().stream()
+                                    .anyMatch(g -> "ROLE_CLIENT".equals(g.getAuthority()));
+                            return new AuthorizationDecision(authed && !isClient);
+                        })
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

@@ -9,6 +9,8 @@ import { EmptyState, SectionCard, StatCard } from './widgets';
 import DocumentRiskWidget, { type DocumentRisk } from './DocumentRiskWidget';
 import IncomingRequestsWidget from './IncomingRequestsWidget';
 import ReadinessWidget from './ReadinessWidget';
+import SupplierTodayTasksWidget from './SupplierTodayTasksWidget';
+import MiniBarChart from './MiniBarChart';
 
 type Summary = {
   counts: Record<string, number>;
@@ -46,6 +48,8 @@ export default function ManpowerSupplierDashboardPage() {
           </p>
         </div>
 
+        <SupplierTodayTasksWidget role="MANPOWER_SUPPLIER" companyId={user?.company_id} expiringDocsCount={c.documents_expiring30d ?? 0} />
+
         {loading ? (
           <p className="text-slate-400">불러오는 중...</p>
         ) : (
@@ -72,6 +76,15 @@ export default function ManpowerSupplierDashboardPage() {
             <IncomingRequestsWidget />
 
             <ReadinessWidget />
+
+            <MiniBarChart
+              title="인원 배치 현황"
+              data={[
+                { label: '배치 중', value: c.persons_on_duty ?? 0, tone: 'emerald' },
+                { label: '대기', value: Math.max(0, (c.my_persons ?? 0) - (c.persons_on_duty ?? 0)), tone: 'slate' },
+              ]}
+              emptyText="등록된 인원이 없습니다"
+            />
 
             <SectionCard title="참여 현장" action={
               <Link to="/sites" className="text-xs text-slate-500 hover:text-slate-900">전체 보기 ›</Link>

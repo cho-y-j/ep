@@ -5,6 +5,7 @@ import AppShell from '../../components/layout/AppShell';
 import AuditLogWidget from './AuditLogWidget';
 import WorkPlanListWidget, { type DashboardWorkPlan } from './WorkPlanListWidget';
 import { SectionCard, StatCard, TodoBanner } from './widgets';
+import TodayTasksRow from './TodayTasksRow';
 
 type AdminSummary = {
   counts: Record<string, number>;
@@ -38,6 +39,14 @@ export default function AdminDashboardPage() {
             {user?.name}님, 전체 시스템 현황과 위험 관제를 확인하세요.
           </p>
         </div>
+
+        <TodayTasksRow
+          loading={loading}
+          tasks={[
+            { label: '승인 대기 사용자', count: c.users_pending ?? 0, to: '/admin/users' },
+            { label: '만료 임박 서류', count: c.documents_expiring30d ?? 0, to: '/admin/expiring-documents' },
+          ]}
+        />
 
         {loading ? (
           <p className="text-slate-400">불러오는 중...</p>

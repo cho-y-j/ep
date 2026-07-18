@@ -40,4 +40,18 @@ public final class NotificationType {
 
     /** B1: 매월 1일 배차행 보유 공급사에게 전월 거래내역서 준비 통지(월마감). */
     public static final String MONTHLY_STATEMENT_READY = "MONTHLY_STATEMENT_READY";
+
+    /** P1c: L2 자원 교체로 새 계획서가 원 계획서를 대체 → 원 계획서 관련 공급사/BP 통지. */
+    public static final String WORK_PLAN_RESOURCE_REPLACED = "WORK_PLAN_RESOURCE_REPLACED";
+
+    /** P3a S1: 강풍 작업중지 경보(임계 초과) → 작업자 소속 공급사·BP. */
+    public static final String WIND_STOP = "WIND_STOP";
+    /** P3a S1: 강풍 해제(임계 이하 복귀) → 작업자 소속 공급사·BP. */
+    public static final String WIND_CLEARED = "WIND_CLEARED";
+    /** P3a S3: 일일점검 미완 장비로 작업 시작(경고 모드) → BP. */
+    public static final String DAILY_INSPECTION_INCOMPLETE = "DAILY_INSPECTION_INCOMPLETE";
+    /** P3a S4': 가동시간 누적이 정비 주기 도달 → 장비 공급사. */
+    public static final String EQUIPMENT_MAINTENANCE_DUE = "EQUIPMENT_MAINTENANCE_DUE";
+    /** P3b S5': 안전알림 5분 미확인 → BP·공급사 관리자("○○○ 미확인"). */
+    public static final String SAFETY_ACK_MISSING = "SAFETY_ACK_MISSING";
 }

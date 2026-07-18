@@ -57,6 +57,10 @@ export type EquipmentResponse = {
   idle_hours: number;
   downtime_hours: number;
   utilization_pct?: number | null;
+  // S4'(P3a) 가동시간 기반 정비 — 누적 가동시간 / 현재 현장 정비주기(null=비활성) / 도래 여부.
+  cumulative_work_hours: number;
+  maintenance_interval_hours?: number | null;
+  maintenance_due: boolean;
   // V11 배치 정보
   current_site_id?: number | null;
   current_site_name?: string | null;

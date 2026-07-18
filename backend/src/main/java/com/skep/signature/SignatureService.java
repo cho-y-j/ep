@@ -40,6 +40,8 @@ public class SignatureService {
     private final WorkPlanRepository workPlanRepo;
     private final SignatureMailService mailService;
     private final com.skep.docx.WorkPlanPdfService pdfService;
+    /** P1a 기반②: 서명요청 메일 첨부에 스냅샷 PDF 우선 사용. */
+    private final com.skep.storage.FileStorage fileStorage;
 
     /** 작업계획서 모든 사인 슬롯 조회 (없으면 빈 슬롯 5개 반환). */
     @Transactional(readOnly = true)
@@ -52,6 +54,13 @@ public class SignatureService {
     public boolean allSigned(Long workPlanId) {
         long signed = repo.countByWorkPlanIdAndStatus(workPlanId, SignatureStatus.SIGNED);
         return signed >= 5;
+    }
+
+    /** P1a 기반②: 서명(완료 SIGNED 또는 요청 대기 PENDING)이 하나라도 있는지 — 내용변경 시 전원 재서명 발동 조건. */
+    @Transactional(readOnly = true)
+    public boolean hasSignedOrPending(Long workPlanId) {
+        return repo.countByWorkPlanIdAndStatus(workPlanId, SignatureStatus.SIGNED) > 0
+                || repo.countByWorkPlanIdAndStatus(workPlanId, SignatureStatus.PENDING) > 0;
     }
 
     /** 작성자 본인 사인 — BP 사용자가 로그인 상태에서 그 자리에서 PNG 저장. */
@@ -113,14 +122,24 @@ public class SignatureService {
         }
 
         // PDF 한 번 생성 (5명 공유). 실패하면 첨부 없이 진행.
+        // P1a 기반②: 워크시트 전문 스냅샷이 있으면 우선 첨부(셸 렌더 아님). 없을 때만 attachPdf 로 셸 렌더 폴백.
         byte[] pdfBytes = null;
         String pdfFilename = null;
-        if (attachPdf) {
+        String base = wp.getTitle() != null ? wp.getTitle() : ("work-plan-" + workPlanId);
+        if (wp.getSignSnapshotKey() != null) {
+            try (var in = fileStorage.load(wp.getSignSnapshotKey()).getInputStream()) {
+                pdfBytes = in.readAllBytes();
+                pdfFilename = com.skep.common.SafeText.sanitizeFileName(base) + ".pdf";
+            } catch (Exception ex) {
+                log.warn("스냅샷 첨부 로드 실패 — 폴백 검토: workPlanId={} reason={}", workPlanId, ex.getMessage());
+                pdfBytes = null;
+            }
+        }
+        if (pdfBytes == null && attachPdf) {
             try {
                 Long tid = templateId != null ? templateId : pdfService.defaultTemplateId(actor);
                 if (tid != null) {
                     pdfBytes = pdfService.renderPdf(workPlanId, tid, actor);
-                    String base = wp.getTitle() != null ? wp.getTitle() : ("work-plan-" + workPlanId);
                     pdfFilename = com.skep.common.SafeText.sanitizeFileName(base) + ".pdf";
                 } else {
                     log.info("PDF 첨부 건너뜀: 사용 가능한 WORK_PLAN 템플릿 없음");
@@ -199,7 +218,10 @@ public class SignatureService {
         return repo.save(sig);
     }
 
-    /** 워크시트 수정 시 모든 사인 무효화 (사용자가 다이얼로그에서 동의한 경우만 호출). */
+    /**
+     * 워크시트 내용 변경 시 사인 전원 무효화 — 전원 재서명 정책.
+     * 완료된 SIGNED 뿐 아니라 요청 대기 PENDING(발급된 토큰) 도 무효화해 옛 내용 서명을 원천 차단.
+     */
     @Transactional
     public int invalidateAll(Long workPlanId, AuthenticatedUser actor) {
         WorkPlan wp = workPlanRepo.findById(workPlanId)
@@ -211,7 +233,7 @@ public class SignatureService {
         List<WorksheetSignature> all = repo.findByWorkPlanIdOrderById(workPlanId);
         int count = 0;
         for (WorksheetSignature sig : all) {
-            if (sig.getStatus() == SignatureStatus.SIGNED) {
+            if (sig.getStatus() == SignatureStatus.SIGNED || sig.getStatus() == SignatureStatus.PENDING) {
                 sig.setStatus(SignatureStatus.INVALIDATED);
                 repo.save(sig);
                 count++;

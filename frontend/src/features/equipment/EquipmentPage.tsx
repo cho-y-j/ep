@@ -149,6 +149,26 @@ export default function EquipmentPage() {
           ) : null}
         />
 
+        {/* BP 범위 전환 — 내 장비/공급사 장비 통합 화면의 화면 내 필터. */}
+        {isBp && (
+          <div className="flex flex-wrap gap-2">
+            {([['', '배치 장비'], ['own', '내 장비'], ['external', '공급사 장비']] as const).map(([val, label]) => (
+              <button
+                key={val || 'all'}
+                type="button"
+                onClick={() => navigate(val ? `/equipment?scope=${val}` : '/equipment')}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                  scope === val
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {creating && canEdit && (
           <EquipmentCreateForm
             equipmentSuppliers={isAdmin ? equipmentSuppliers : undefined}

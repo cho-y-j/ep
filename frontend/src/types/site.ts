@@ -19,6 +19,7 @@ export type SiteResponse = {
   id: number;
   bp_company_id: number;
   bp_company_name?: string | null;
+  client_org_id?: number | null;
   name: string;
   code?: string | null;
   address?: string | null;
@@ -39,6 +40,7 @@ export type SiteResponse = {
 
 export type CreateSitePayload = {
   bp_company_id?: number;
+  client_org_id?: number | null;
   name: string;
   code?: string;
   address?: string;

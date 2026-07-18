@@ -7,6 +7,7 @@ import { toast } from '../../lib/toast';
 import type { InspectionResponse } from '../../types/safety';
 import { KIND_LABEL, STATUS_CHIP, STATUS_LABEL } from '../../types/safety';
 import InspectionCreateDialog from './InspectionCreateDialog';
+import LegalInspectionStatusCard from './LegalInspectionStatusCard';
 
 /**
  * 안전점검 일정 관리 페이지.
@@ -118,6 +119,9 @@ export default function SafetyInspectionsPage() {
             </select>
           </div>
         )}
+
+        {/* S2′ 법정점검(안전점검원 NFC) 현황 — BP/ADMIN */}
+        {(isAdmin || isBP) && siteId && <LegalInspectionStatusCard siteId={siteId} />}
 
         {loading ? (
           <p className="text-sm text-slate-400">로딩...</p>

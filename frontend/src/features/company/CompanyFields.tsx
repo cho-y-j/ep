@@ -14,7 +14,7 @@ type Props = {
   disabled?: boolean;
 };
 
-const TYPES: CompanyType[] = ['BP', 'EQUIPMENT', 'MANPOWER'];
+const TYPES: CompanyType[] = ['BP', 'EQUIPMENT', 'MANPOWER', 'SAFETY_INSPECTION'];
 
 /**
  * 회사 등록 / 가입 시 회사 입력에서 공통으로 쓰는 필드 묶음.
