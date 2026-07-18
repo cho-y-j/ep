@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
@@ -13,6 +13,7 @@ import OcrUploadDialog from '../document/OcrUploadDialog';
 import type { DocumentTypeResponse } from '../../types/document';
 import { formatOwnerSubLabel } from '../../lib/format';
 import { useSubSuppliers } from '../company/useSubSuppliers';
+import { useEquipmentTypes } from '../equipment/useEquipmentTypes';
 
 /**
  * S-11: 작업계획서 작성 직전 단계의 "서류관리" 통합 dashboard.
@@ -203,16 +204,26 @@ function ownerCardTitle(r: ResourceCompliance): string {
   return `${r.owner_name}${sl ? ` · ${sl}` : ''}`;
 }
 
+type StatusFilter = 'all' | 'verified' | 'review' | 'soon' | 'expired' | 'valid';
+
 function MyDocsExpiryView() {
   const { company } = useAuth();
+  const { labelOf: equipLabelOf } = useEquipmentTypes();
+  // P4d: 필터 조합을 URL 쿼리에 동기화 → 공유·새로고침 유지.
+  const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState<DocRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'expired' | 'soon' | 'valid'>('all');
-  const [ownerFilter, setOwnerFilter] = useState<'all' | 'EQUIPMENT' | 'PERSON' | 'COMPANY'>('all');
-  const [sourcingFilter, setSourcingFilter] = useState<'all' | 'internal' | 'external'>('all');
+  const [filter, setFilter] = useState<StatusFilter>((searchParams.get('status') as StatusFilter) || 'all');
+  const [ownerFilter, setOwnerFilter] = useState<'all' | 'EQUIPMENT' | 'PERSON' | 'COMPANY'>(
+    (searchParams.get('owner') as 'all' | 'EQUIPMENT' | 'PERSON' | 'COMPANY') || 'all');
+  const [sourcingFilter, setSourcingFilter] = useState<'all' | 'internal' | 'external'>(
+    (searchParams.get('sourcing') as 'all' | 'internal' | 'external') || 'all');
   // 협력사(external) 선택 시 특정 소유 협력사로 좁히는 서브필터. 값은 owner_business_name.
-  const [companyFilter, setCompanyFilter] = useState<string>('');
-  const [q, setQ] = useState('');
+  const [companyFilter, setCompanyFilter] = useState<string>(searchParams.get('company') || '');
+  // P4d: 장비종류(equipment_type code)·서류종류(document_type_id) 필터.
+  const [equipType, setEquipType] = useState<string>(searchParams.get('equip') || '');
+  const [docTypeId, setDocTypeId] = useState<number>(Number(searchParams.get('doc')) || 0);
+  const [q, setQ] = useState(searchParams.get('q') || '');
   const [addDialog, setAddDialog] = useState<null | 'EQUIPMENT' | 'PERSON'>(null);
   type GroupSortKey = 'type' | 'name' | 'docs' | 'status';
   const [sortKey, setSortKey] = useState<GroupSortKey | null>(null);
@@ -290,17 +301,58 @@ function MyDocsExpiryView() {
     [rows],
   );
 
+  // P4d: 실제 보유한 장비종류(code) — 있는 것만 옵션으로. 라벨은 equipment_type 마스터에서.
+  const equipCategories = useMemo(
+    () => Array.from(new Set(
+      rows.filter((r) => r.owner_type === 'EQUIPMENT' && !!r.owner_sub_label)
+        .map((r) => r.owner_sub_label as string),
+    )).sort((a, b) => equipLabelOf(a).localeCompare(equipLabelOf(b), 'ko')),
+    [rows, equipLabelOf],
+  );
+
+  // P4d: 실제 보유한 서류종류(id,name) distinct.
+  const docTypeOptions = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const r of rows) if (!m.has(r.document_type_id)) m.set(r.document_type_id, r.document_type_name ?? `#${r.document_type_id}`);
+    return Array.from(m.entries()).map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }, [rows]);
+
+  // P4d: 필터 → URL 쿼리 동기화(공유 링크). 빈 값은 파라미터 제거.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    const setOrDel = (k: string, v: string) => { if (v) next.set(k, v); else next.delete(k); };
+    setOrDel('owner', ownerFilter === 'all' ? '' : ownerFilter);
+    setOrDel('status', filter === 'all' ? '' : filter);
+    setOrDel('sourcing', sourcingFilter === 'all' ? '' : sourcingFilter);
+    setOrDel('company', companyFilter);
+    setOrDel('equip', equipType);
+    setOrDel('doc', docTypeId ? String(docTypeId) : '');
+    setOrDel('q', q);
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerFilter, filter, sourcingFilter, companyFilter, equipType, docTypeId, q]);
+
   const qLower = q.trim().toLowerCase();
   const filtered = rows.filter((r) => {
     if (ownerFilter !== 'all' && r.owner_type !== ownerFilter) return false;
+    if (equipType && r.owner_sub_label !== equipType) return false;
+    if (docTypeId && r.document_type_id !== docTypeId) return false;
     if (sourcingFilter === 'external' && r.owner_external !== true) return false;
     if (sourcingFilter === 'external' && companyFilter && r.owner_business_name !== companyFilter) return false;
     if (sourcingFilter === 'internal' && r.owner_external === true) return false;
     if (filter !== 'all') {
       const d = daysFrom(r.expiry_date);
-      if (filter === 'expired' && !(r.expiry_date && d < 0)) return false;
+      const expired = !!r.expiry_date && d < 0;
+      const verified = r.verification_status === 'VERIFIED';
+      const needsReview = r.verification_status === 'REJECTED'
+        || r.verification_status === 'OCR_REVIEW_REQUIRED'
+        || (verifyableMap.get(r.document_type_id) === true && !verified);
+      if (filter === 'expired' && !expired) return false;
       if (filter === 'soon' && !(r.expiry_date && d >= 0 && d <= 60)) return false;
       if (filter === 'valid' && !(!r.expiry_date || d > 60)) return false;
+      if (filter === 'verified' && !(verified && !expired)) return false;
+      if (filter === 'review' && !needsReview) return false;
     }
     if (qLower) {
       const hay = `${r.owner_name ?? ''} ${r.document_type_name ?? ''}`.toLowerCase();
@@ -440,7 +492,8 @@ function MyDocsExpiryView() {
       {/* 인력/차량 구분 탭 */}
       <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden">
         {([['all', '전체'], ['EQUIPMENT', '장비'], ['PERSON', '인원'], ['COMPANY', '회사']] as const).map(([v, label]) => (
-          <button key={v} type="button" onClick={() => setOwnerFilter(v)}
+          <button key={v} type="button"
+                  onClick={() => { setOwnerFilter(v); if (v === 'PERSON' || v === 'COMPANY') setEquipType(''); }}
                   className={`px-4 py-2 text-sm font-semibold border-r border-slate-200 last:border-r-0 transition ${
                     ownerFilter === v ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'
                   }`}>
@@ -450,13 +503,33 @@ function MyDocsExpiryView() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}
+        <select value={filter} onChange={(e) => setFilter(e.target.value as StatusFilter)}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
           <option value="all">상태 전체</option>
+          <option value="verified">검증완료</option>
+          <option value="review">검토필요</option>
+          <option value="soon">만료임박</option>
           <option value="expired">만료</option>
-          <option value="soon">임박</option>
           <option value="valid">정상</option>
         </select>
+        {(ownerFilter === 'all' || ownerFilter === 'EQUIPMENT') && equipCategories.length > 0 && (
+          <select value={equipType} onChange={(e) => setEquipType(e.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+            <option value="">장비종류 전체</option>
+            {equipCategories.map((code) => (
+              <option key={code} value={code}>{equipLabelOf(code)}</option>
+            ))}
+          </select>
+        )}
+        {docTypeOptions.length > 0 && (
+          <select value={docTypeId ? String(docTypeId) : ''} onChange={(e) => setDocTypeId(Number(e.target.value) || 0)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+            <option value="">서류종류 전체</option>
+            {docTypeOptions.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        )}
         <select value={sourcingFilter} onChange={(e) => { setSourcingFilter(e.target.value as typeof sourcingFilter); setCompanyFilter(''); }}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
           <option value="all">사업자 전체</option>
@@ -477,7 +550,7 @@ function MyDocsExpiryView() {
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="자원 이름 또는 서류 종류 검색"
+            placeholder="차량번호·이름 또는 서류 종류 검색"
             className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm"
           />
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>

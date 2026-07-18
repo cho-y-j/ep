@@ -108,7 +108,7 @@ public class ExpiringDocumentScheduler {
                     id -> documentTypes.findById(id).map(DocumentType::getName).orElse("서류"));
             String msg = ownerLabel + " " + typeName + " 만료 " + days + "일 남음 (만료일 " + d.getExpiryDate() + ")";
             notifications.sendToCompany(supplierId, NotificationType.DOCUMENT_EXPIRING,
-                    "서류 만료 임박", msg, linkType, d.getOwnerId(), null);
+                    "서류 만료 임박", msg, linkType, d.getOwnerId(), null, "시스템 (서류 만료 임박)");
             // B2: 외부발송 게이트(기본 OFF). ON 일 때만 in-app dedup 통과 건을 자원 소유 공급사 마스터 phone 으로 SMS.
             if (expiryNotifyEnabled) {
                 for (User u : users.findByCompanyIdAndIsCompanyAdminTrue(supplierId)) {

@@ -109,7 +109,7 @@ public class DocumentReviewInboxService {
         notifications.sendToCompany(r.getSupplierCompanyId(),
                 "DOCUMENT_REVIEW_RESULT", "서류 심사 승인됨",
                 "보내신 서류 심사가 승인되었습니다.",
-                "DOCUMENT_REVIEW", r.getId(), null);
+                "DOCUMENT_REVIEW", r.getId(), null, notifications.senderLabelOf(actor));
         return toMapOne(r);
     }
 
@@ -128,7 +128,7 @@ public class DocumentReviewInboxService {
         notifications.sendToCompany(r.getSupplierCompanyId(),
                 "DOCUMENT_REVIEW_RESULT", "서류 심사 반려됨",
                 "반려 사유: " + trimmed,
-                "DOCUMENT_REVIEW", r.getId(), null);
+                "DOCUMENT_REVIEW", r.getId(), null, notifications.senderLabelOf(actor));
         return toMapOne(r);
     }
 

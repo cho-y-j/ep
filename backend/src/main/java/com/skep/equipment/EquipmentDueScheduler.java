@@ -40,6 +40,6 @@ public class EquipmentDueScheduler {
                 : (e.getModel() != null ? e.getModel() : "장비#" + e.getId());
         String msg = days == 0 ? name + " " + label + " 오늘" : name + " " + label + " " + days + "일 남음";
         notifications.sendToCompany(e.getSupplierId(), NotificationType.EQUIPMENT_DUE,
-                label + " 임박", msg, "EQUIPMENT", e.getId(), null);
+                label + " 임박", msg, "EQUIPMENT", e.getId(), null, "시스템 (장비 만료)");
     }
 }

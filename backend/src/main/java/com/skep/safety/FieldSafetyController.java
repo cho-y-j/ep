@@ -33,8 +33,13 @@ public class FieldSafetyController {
     private final FieldBaselineRepository baselineRepo;
     private final SafetyAlertBroadcaster broadcaster;
     private final FieldTokenRateLimiter rateLimiter;
+    private final WorkerWatchStateRepository watchStateRepo;
+    private final WatchPolicyService watchPolicyService;
 
-    /** 5분 주기 센서 데이터. raw 저장만 (분석/그래프용). */
+    /**
+     * 센서 데이터 수신 — raw 저장(그래프용) + 워치 상태 upsert(P5-W0 데드맨·관제 타일).
+     * P5-W0: 배치 records[](폰이 10~5분 묶음 중계) 또는 단건(하위호환·워치 직접 폴백) 둘 다 수용.
+     */
     @PostMapping("/sensor")
     @Transactional
     public Map<String, Object> sensor(@RequestHeader("X-Field-Token") String token,
@@ -42,19 +47,71 @@ public class FieldSafetyController {
         rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
         var ctx = openContext(p);
-        FieldSensorReading r = new FieldSensorReading();
-        r.setPersonId(p.getId());
-        r.setWorkPlanId(ctx.workPlanId);
-        r.setSiteId(ctx.siteId);
-        r.setHr(req.hr);
-        r.setSpo2(req.spo2);
-        r.setBodyTemp(req.bodyTemp);
-        r.setStress(req.stress);
-        r.setState(req.state);
-        r.setLat(req.lat);
-        r.setLng(req.lng);
-        sensorRepo.save(r);
-        return Map.of("ok", true, "id", r.getId());
+
+        List<SensorRecord> records = (req.records != null && !req.records.isEmpty())
+                ? req.records : List.of(SensorRecord.of(req));
+        FieldSensorReading last = null;
+        for (SensorRecord rec : records) {
+            FieldSensorReading r = new FieldSensorReading();
+            r.setPersonId(p.getId());
+            r.setWorkPlanId(ctx.workPlanId);
+            r.setSiteId(ctx.siteId);
+            r.setHr(rec.hr);
+            r.setSpo2(rec.spo2);
+            r.setBodyTemp(rec.bodyTemp);
+            r.setStress(rec.stress);
+            r.setState(rec.state);
+            r.setLat(rec.lat);
+            r.setLng(rec.lng);
+            sensorRepo.save(r);
+            last = r;
+        }
+
+        upsertWatchState(p, ctx, req, last);   // 데드맨 last_seen 갱신 + 수신 재개 시 자동 해소.
+        return Map.of("ok", true, "id", last != null ? last.getId() : null);
+    }
+
+    /** P5-W0 워치 원격 정책 — 현장 폭염/강풍 맥락으로 전송주기·심박 듀티 가변(폰이 워치로 전달). */
+    @GetMapping("/watch-policy")
+    public WatchPolicyService.WatchPolicy watchPolicy(@RequestHeader("X-Field-Token") String token,
+                                                      HttpServletRequest request) {
+        rateLimiter.check(request);
+        Person p = fieldAuth.authenticate(token);
+        return watchPolicyService.policyForSite(openContext(p).siteId);
+    }
+
+    /**
+     * 워커 워치 상태 upsert(1인 1행). battery/worn 은 보고됐을 때만 갱신(직접 폴백 경로 미포함 보존).
+     * deadman_alert_id 가 있으면 수신 재개로 보고 열린 데드맨 경보를 자동 resolve.
+     */
+    private void upsertWatchState(Person p, OpenContext ctx, SensorRequest req, FieldSensorReading last) {
+        WorkerWatchState ws = watchStateRepo.findById(p.getId()).orElseGet(() -> {
+            WorkerWatchState nw = new WorkerWatchState();
+            nw.setPersonId(p.getId());
+            return nw;
+        });
+        ws.setLastSeenAt(LocalDateTime.now());
+        if (req.battery != null) ws.setBattery(req.battery);
+        if (req.worn != null) ws.setWorn(req.worn);
+        if (ctx.siteId != null) ws.setSiteId(ctx.siteId);
+        if (ctx.bpCompanyId != null) ws.setBpCompanyId(ctx.bpCompanyId);
+        if (last != null) {
+            ws.setHr(last.getHr());
+            ws.setSpo2(last.getSpo2());
+            ws.setBodyTemp(last.getBodyTemp());
+            ws.setState(WatchPolicyService.colorOf(last.getState()));
+        }
+        if (ws.getDeadmanAlertId() != null) {
+            FieldSafetyAlert open = alertRepo.findById(ws.getDeadmanAlertId()).orElse(null);
+            if (open != null && !open.isResolved()) {
+                open.setResolved(true);
+                open.setResolvedAt(LocalDateTime.now());
+                alertRepo.save(open);
+                broadcaster.publishResolved(open);
+            }
+            ws.setDeadmanAlertId(null);
+        }
+        watchStateRepo.save(ws);
     }
 
     /** 긴급 알림 — 워치 6단계 상태머신의 EMERGENCY/FALL_DETECTED 등. */
@@ -246,6 +303,29 @@ public class FieldSafetyController {
         public String state;
         public Double lat;
         public Double lng;
+        // P5-W0: 워치 상태 요약(묶음 전송 시 상단 현재값).
+        public Integer battery;
+        public Boolean worn;
+        // P5-W0: 평상 10분·주의 5분 로컬 버퍼 묶음. 없으면 상단 단건(하위호환).
+        public List<SensorRecord> records;
+    }
+
+    /** P5-W0 묶음 전송 1건(로컬 버퍼 샘플). raw 저장은 record 단위, 상태 요약은 마지막 값. */
+    public static class SensorRecord {
+        public Integer hr;
+        public Integer spo2;
+        public BigDecimal bodyTemp;
+        public Integer stress;
+        public String state;
+        public Double lat;
+        public Double lng;
+
+        static SensorRecord of(SensorRequest req) {
+            SensorRecord r = new SensorRecord();
+            r.hr = req.hr; r.spo2 = req.spo2; r.bodyTemp = req.bodyTemp;
+            r.stress = req.stress; r.state = req.state; r.lat = req.lat; r.lng = req.lng;
+            return r;
+        }
     }
 
     public static class EmergencyRequest {

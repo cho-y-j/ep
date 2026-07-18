@@ -6,6 +6,10 @@ import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/notifications")
 public class NotificationController {
@@ -20,10 +24,26 @@ public class NotificationController {
     public PageResponse<NotificationResponse> list(
             @CurrentUser AuthenticatedUser actor,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Boolean unread,
+            @RequestParam(required = false) String types,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String q
     ) {
-        var pg = service.list(actor, page, size);
+        List<String> typeList = (types == null || types.isBlank()) ? null
+                : Arrays.stream(types.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+        LocalDate from = parseDate(fromDate);
+        var pg = service.list(actor, page, size, unread, typeList, from, q);
         return PageResponse.of(pg, NotificationResponse::from);
+    }
+
+    private static LocalDate parseDate(String s) {
+        if (s == null || s.isBlank()) return null;
+        try {
+            return LocalDate.parse(s.trim());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @GetMapping("/unread-count")

@@ -1,5 +1,9 @@
 package com.skep.field;
 
+import com.skep.announcement.Announcement;
+import com.skep.announcement.AnnouncementRecipient;
+import com.skep.announcement.AnnouncementRecipientRepository;
+import com.skep.announcement.AnnouncementRepository;
 import com.skep.common.ApiException;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
@@ -30,6 +34,8 @@ public class AnnouncementController {
     private final FieldFcmService fcm;
     private final WorkPlanRepository workPlans;
     private final WorkPlanPersonRepository workPlanPersons;
+    private final AnnouncementRepository announcements;
+    private final AnnouncementRecipientRepository announcementRecipients;
 
     @PostMapping("/broadcast")
     @PreAuthorize("hasAnyRole('ADMIN','BP')")
@@ -71,12 +77,41 @@ public class AnnouncementController {
         java.util.Set<Long> uniqueTargetIds = new java.util.HashSet<>();
         phoneTargets.forEach(p -> uniqueTargetIds.add(p.getId()));
         watchTargets.forEach(p -> uniqueTargetIds.add(p.getId()));
+
+        // 확인 추적: 발송 공지를 영속화하고 수신 audience(토큰 유무 무관) 를 수신자로 기록 → 발송자 확인율.
+        List<Person> recipientPersons = resolveRecipients(req);
+        Announcement ann = announcements.save(Announcement.builder()
+                .siteId(req.siteId)
+                .title(req.title.trim())
+                .body(req.body.trim())
+                .senderUserId(actor.id())
+                .senderCompanyId(actor.companyId())
+                .target(req.target)
+                .build());
+        announcementRecipients.saveAll(recipientPersons.stream()
+                .map(p -> AnnouncementRecipient.builder()
+                        .announcementId(ann.getId()).personId(p.getId()).build())
+                .toList());
+
         return Map.of(
                 "attempted", phoneSent + watchSent,
                 "phone_sent", phoneSent,
                 "watch_sent", watchSent,
-                "targets", uniqueTargetIds.size()
+                "targets", uniqueTargetIds.size(),
+                "announcement_id", ann.getId(),
+                "recipients", recipientPersons.size()
         );
+    }
+
+    /** 확인 추적용 수신자 audience — broadcast 스코프와 동일하되 토큰 필터는 제외(확인은 폰토큰 없어도 가능). */
+    private List<Person> resolveRecipients(BroadcastRequest req) {
+        if (req.personIds != null && !req.personIds.isEmpty()) {
+            return persons.findAllById(req.personIds);
+        }
+        if (req.supplierId != null) {
+            return persons.findBySupplierIdInOrderByIdDesc(List.of(req.supplierId));
+        }
+        return persons.findAll(); // 전체(ADMIN 전용 — broadcast 에서 이미 스코프 가드).
     }
 
     /** BP 는 자기 회사 작업계획서에 배정된 작업자에게만 발송 가능. 스코프 밖 person 포함 시 403. */
@@ -106,6 +141,8 @@ public class AnnouncementController {
         public String body;
         public List<Long> personIds;
         public Long supplierId;
+        /** 현장 스코프(선택) — 안전 상황판 [공지] 탭·요약이 이 값으로 현장별 확인율 집계. */
+        public Long siteId;
         /** "phone"(기본) — 폰만. "all"/"watch" — 워치도 포함. */
         public String target;
     }

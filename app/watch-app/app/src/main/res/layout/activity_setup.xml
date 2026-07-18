@@ -61,7 +61,7 @@
             android:id="@+id/etServerUrl"
             android:layout_width="match_parent"
             android:layout_height="36dp"
-            android:hint="http://192.168.0.10:4000"
+            android:hint="https://skep.on1.kr"
             android:textSize="11sp"
             android:textColor="#E0E6ED"
             android:textColorHint="#5A7A96"

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
+import SubNav from './SubNav';
 import type { BreadcrumbItem } from './TopBar';
 
 type Props = {
@@ -28,7 +29,10 @@ export default function AppShell({ children, breadcrumb }: Props) {
       <div className="flex-1 min-w-0 flex flex-col">
         <TopBar breadcrumb={breadcrumb} onMenuClick={() => setMobileOpen(true)} />
         <main className="flex-1 px-4 md:px-6 py-4 md:py-5">
-          <div className="max-w-[1440px] w-full mx-auto">{children}</div>
+          <div className="max-w-[1440px] w-full mx-auto">
+            <SubNav />
+            {children}
+          </div>
         </main>
       </div>
     </div>

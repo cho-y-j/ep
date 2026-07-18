@@ -1,13 +1,11 @@
 package com.dainon.skep.service
 
 import android.content.Intent
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
+import com.dainon.skep.net.FieldApi
 import com.dainon.skep.net.Prefs
 import com.google.android.gms.wearable.MessageEvent
+import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,14 +18,15 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 /**
- * Wearable Data Layer 수신 — 워치 → 폰 메시지 처리 + 백엔드 중계.
+ * Wearable Data Layer 수신 — 워치 상태(/skep/status) → 백엔드 중계.
  *
- * Paths:
- *  - /skep/sensor, /skep/status → POST /api/field-auth/sensor
- *  - /skep/alert                → POST /api/field-auth/emergency (+ 폰 강한 진동)
+ * Path:
+ *  - /skep/status → POST /api/field-auth/sensor (+ UI 브로드캐스트) + P5-W0 정책 회신(/skep/policy)
  *
- * 워치 측 (data/ServerClient) 가 우리 백엔드 wire 형식 (hr/spo2/bodyTemp/...) 을 사용하므로
- * 폰은 받은 JSON 을 그대로 forward 한다.
+ * 안전알림(/skep/safety)은 WatchSafetyListenerService 가 전담(중계 + 폰 로컬 경보).
+ * 워치 측 (data/ServerClient) 가 우리 백엔드 wire 형식 (hr/spo2/body_temp/records[]/...) 을 사용하므로
+ * 폰은 받은 JSON 을 그대로 forward 한다. P5-W0: 워치 하트비트(10~5분)마다 서버 정책을 받아 워치로 전달
+ * (별도 폴링 없이 하트비트 응답 방식 — 저전력).
  */
 class SkepWatchListenerService : WearableListenerService() {
 
@@ -44,15 +43,30 @@ class SkepWatchListenerService : WearableListenerService() {
         val data = String(event.data, Charsets.UTF_8)
         Log.d(TAG, "watch → ${event.path}: $data")
         when (event.path) {
-            "/skep/sensor", "/skep/status" -> {
+            // 구경로 /skep/sensor·/skep/alert 는 워치가 더 이상 보내지 않아 제거.
+            // 안전알림 /skep/safety 는 WatchSafetyListenerService 가 전담(중계 + 폰 로컬 경보).
+            "/skep/status" -> {
                 postAuthed("/api/field-auth/sensor", data)
                 broadcastUiUpdate(data)
+                fetchAndPushPolicy()   // P5-W0: 하트비트 응답으로 현재 정책을 워치에 전달.
             }
-            "/skep/alert" -> {
-                Log.w(TAG, "EMERGENCY from watch")
-                vibrateAlarm()
-                postAuthed("/api/field-auth/emergency", data)
-                broadcastUiUpdate(data)
+        }
+    }
+
+    /** 서버 정책(폭염/강풍→YELLOW) 조회 후 원문 그대로 워치 /skep/policy 로 전달. */
+    private fun fetchAndPushPolicy() {
+        val token = Prefs.token(this) ?: return
+        scope.launch {
+            try {
+                val json = FieldApi(Prefs.serverUrl(this@SkepWatchListenerService)).watchPolicyJson(token)
+                val bytes = json.toByteArray(Charsets.UTF_8)
+                Wearable.getNodeClient(this@SkepWatchListenerService).connectedNodes
+                    .addOnSuccessListener { nodes ->
+                        val mc = Wearable.getMessageClient(this@SkepWatchListenerService)
+                        for (n in nodes) runCatching { mc.sendMessage(n.id, "/skep/policy", bytes) }
+                    }
+            } catch (e: Exception) {
+                Log.w(TAG, "policy fetch/push failed: ${e.message}")
             }
         }
     }
@@ -82,15 +96,6 @@ class SkepWatchListenerService : WearableListenerService() {
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
-    }
-
-    private fun vibrateAlarm() {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-        } else {
-            @Suppress("DEPRECATION") getSystemService(VIBRATOR_SERVICE) as Vibrator
-        }
-        vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500, 200, 1000), -1))
     }
 
     private fun broadcastUiUpdate(json: String) {

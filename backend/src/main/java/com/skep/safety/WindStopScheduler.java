@@ -139,7 +139,7 @@ public class WindStopScheduler {
         // BP + 현장 참여 공급사 관리자 인앱 알림.
         for (Long companyId : notifyCompanies(site.getId(), bpCompanyId)) {
             notifications.sendToCompany(companyId, NotificationType.WIND_STOP,
-                    "강풍 작업중지 경보", msg, "SITE", site.getId(), site.getId());
+                    "강풍 작업중지 경보", msg, "SITE", site.getId(), site.getId(), "시스템 (강풍 경보)");
         }
         log.warn("WindStopScheduler ENTER site={} wind={} threshold={} alerts={}",
                 site.getId(), wind, threshold, created.size());
@@ -161,7 +161,7 @@ public class WindStopScheduler {
                 wind, fmt(threshold), site.getName());
         for (Long companyId : notifyCompanies(site.getId(), bpCompanyId)) {
             notifications.sendToCompany(companyId, NotificationType.WIND_CLEARED,
-                    "강풍 해제", msg, "SITE", site.getId(), site.getId());
+                    "강풍 해제", msg, "SITE", site.getId(), site.getId(), "시스템 (강풍 해제)");
         }
         log.info("WindStopScheduler CLEAR site={} wind={} resolved={}", site.getId(), wind, resolved);
     }

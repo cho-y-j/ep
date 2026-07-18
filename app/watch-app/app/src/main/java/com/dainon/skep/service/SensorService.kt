@@ -208,6 +208,13 @@ class SensorService : Service(), SensorEventListener {
 
     private var serverSendCounter = 0
 
+    // ──── P5-W0 저전력 예외보고: 로컬 버퍼 묶음 전송(폰 게이트웨이) + 배터리/오프바디 ────
+    private val telemetryPolicy = WatchTelemetryPolicy()   // GREEN 10분 / YELLOW 5분 (서버 정책).
+    private val telemetryBuffer = mutableListOf<Map<String, Any>>()
+    private var lastBufferAppendAt = 0L
+    private var lastPhoneSendAt = 0L
+    private var onBody: Boolean? = null   // 오프바디 센서(TYPE_LOW_LATENCY_OFFBODY_DETECT). null=미보고→HR 폴백.
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
@@ -302,7 +309,7 @@ class SensorService : Service(), SensorEventListener {
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         registerSensors()
         startHealthServices()
-        startGPS()
+        // P5-W0: 워치 GPS 평상시 미사용(위치=폰 담당) — 긴급 진입 시에만 startGPS(). 전력 절감.
         lastMovementTime = System.currentTimeMillis()
         startMonitoringLoop()
 
@@ -342,6 +349,7 @@ class SensorService : Service(), SensorEventListener {
                 .addListener { event ->
                     when (event.path) {
                         "/skep/worker_id" -> handleWorkerIdFromPhone(event.data)
+                        "/skep/policy" -> handlePolicyFromPhone(event.data)
                         "/skep/phone_ack" -> {
                             Log.d(TAG, "📱 Phone ACK received → acknowledging")
                             onAcknowledge()
@@ -355,6 +363,25 @@ class SensorService : Service(), SensorEventListener {
             Log.d(TAG, "✅ Phone listener registered")
         } catch (e: Exception) {
             Log.w(TAG, "Phone listener failed: ${e.message}")
+        }
+    }
+
+    /**
+     * P5-W0 서버 원격 정책 적용 (폰이 /api/field-auth/watch-policy 조회 후 전달).
+     * payload(JSON): {"state":"GREEN|YELLOW", "send_interval_sec":600, "hr_duty_sec":60}
+     */
+    private fun handlePolicyFromPhone(data: ByteArray) {
+        try {
+            val json = String(data, Charsets.UTF_8)
+            val map = com.google.gson.Gson().fromJson(json, Map::class.java)
+            telemetryPolicy.apply(
+                (map["state"] as? String)?.trim(),
+                (map["send_interval_sec"] as? Number)?.toInt(),
+                (map["hr_duty_sec"] as? Number)?.toInt(),
+            )
+            Log.d(TAG, "📱 policy: ${telemetryPolicy.state}, send=${telemetryPolicy.sendIntervalMs / 1000}s, duty=${telemetryPolicy.hrDutyMs / 1000}s")
+        } catch (e: Exception) {
+            Log.w(TAG, "policy parse failed: ${e.message}")
         }
     }
 
@@ -473,6 +500,15 @@ class SensorService : Service(), SensorEventListener {
             Log.d(TAG, "✅ Pressure registered (E_alt)")
         } else {
             Log.w(TAG, "⚠ Pressure sensor not found → E_alt fail-open")
+        }
+
+        // P5-W0 오프바디(착용) 감지 — 전력0. 없으면 심박 유무로 폴백(isWorn).
+        val offbody = sensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT)
+        if (offbody != null) {
+            sensorManager.registerListener(this, offbody, SensorManager.SENSOR_DELAY_NORMAL)
+            Log.d(TAG, "✅ Off-body sensor registered")
+        } else {
+            Log.w(TAG, "⚠ Off-body sensor not found → worn = heart-rate fallback")
         }
 
         // 사용 가능한 전체 센서 목록 로그
@@ -608,6 +644,10 @@ class SensorService : Service(), SensorEventListener {
             Sensor.TYPE_PRESSURE -> {
                 // E_alt 증거용 기압(hPa)
                 fallDetector.onPressure(System.currentTimeMillis(), event.values[0])
+            }
+            Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT -> {
+                // 1.0=착용(on-body), 0.0=벗음(off-body). P5-W0 데드맨 오경보 구분·착용률.
+                onBody = event.values[0] >= 0.5f
             }
         }
         // SpO₂
@@ -1095,6 +1135,9 @@ class SensorService : Service(), SensorEventListener {
                     isEmergencyAlarmActive = true
                     Log.w(TAG, "🚨 EMERGENCY START: HR=$heartRate, SpO2=$spo2")
 
+                    // P5-W0: 긴급 시에만 워치 GPS 켬(평상시 미사용). 폰 좌표가 우선, 못 잡으면 자체 GPS 보완.
+                    startGPS()
+
                     // ★ fullScreenIntent로 AckAlertActivity 시작
                     launchAlertActivity("EMERGENCY", "긴급 상황 — 주변에 경보 전파 중")
 
@@ -1211,6 +1254,7 @@ class SensorService : Service(), SensorEventListener {
         anomalyStartTime = System.currentTimeMillis()
         ackCooldownUntil = 0L
         monitorIntervalMs = getIntervalForLevel(MonitorLevel.ALERT_OVER)
+        startGPS()   // P5-W0: 긴급 시에만 워치 GPS 켬(평상시 미사용).
         // 즉시 P2P 경보 발동
         BleAlertService.broadcastEmergency(this, WORKER_ID)
         sendSafetyAlert("manual")
@@ -1433,23 +1477,78 @@ class SensorService : Service(), SensorEventListener {
             "학습 중 (${totalSamples}샘플) | $WORKER_ID"
         nm.notify(NOTIFICATION_ID, buildStatusNotification(statusText))
 
-        // 폰으로 전송 (기존 BT 연결 활용)
+        // P5-W0: 폰으로 로컬 버퍼 묶음 전송 (평상 10분 / 주의 5분 / 경보 실시간). GPS 없음.
+        maybeSendTelemetry(stateKr)
+    }
+
+    // ════════════════════════════════════════
+    // P5-W0 저전력 예외보고 — 로컬 버퍼 묶음 전송 (폰 게이트웨이)
+    // ════════════════════════════════════════
+
+    /** 경보 계열 상태 = 실시간 전송(🔴). 그 외(🟢🟢🟡)는 버퍼 묶음. */
+    private fun isRealtimeState(): Boolean = when (currentState) {
+        WorkerState.MILD_ANOMALY, WorkerState.WAITING_ACK,
+        WorkerState.FALL_DETECTED, WorkerState.EMERGENCY, WorkerState.ACKNOWLEDGED -> true
+        else -> false
+    }
+
+    /** 착용 여부 — 오프바디 센서 우선, 없으면(null) 심박 유무로 폴백. */
+    private fun isWorn(): Boolean = onBody ?: (heartRate > 0)
+
+    /** 배터리 잔량 %. 못 읽으면 -1(payload 에서 제외). */
+    private fun readBatteryPct(): Int = try {
+        (getSystemService(BATTERY_SERVICE) as BatteryManager)
+            .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    } catch (_: Exception) { -1 }
+
+    /** 서버 wire 형식(snake_case) 샘플 1건. */
+    private fun sampleRecord(): Map<String, Any> = mapOf(
+        "hr" to heartRate,
+        "spo2" to (if (spo2 > 0) spo2 else 98),
+        "body_temp" to bodyTemp,
+        "stress" to calculateStress(),
+        "state" to currentState.name,
+        "ts" to System.currentTimeMillis(),
+    )
+
+    /** 샘플 적재(듀티 간격) + flush 판정(정책 주기·실시간). 매 틱 broadcastStatus 에서 호출. */
+    private fun maybeSendTelemetry(stateKr: String) {
+        val now = System.currentTimeMillis()
+        val realtime = isRealtimeState()
+        if (realtime || now - lastBufferAppendAt >= telemetryPolicy.hrDutyMs) {
+            telemetryBuffer.add(sampleRecord())
+            lastBufferAppendAt = now
+            if (telemetryBuffer.size > 240) telemetryBuffer.removeAt(0)   // 안전 상한.
+        }
+        if (telemetryPolicy.shouldFlush(realtime, telemetryBuffer.size, now - lastPhoneSendAt)) {
+            flushTelemetry(stateKr)
+            lastPhoneSendAt = now
+        }
+    }
+
+    /** 묶음 payload 전송 → 폰이 POST /api/field-auth/sensor 로 중계. battery/worn/records 포함. */
+    private fun flushTelemetry(stateKr: String) {
+        val records = ArrayList(telemetryBuffer)
+        telemetryBuffer.clear()
+        val payload = buildMap<String, Any> {
+            put("workerId", WORKER_ID)
+            val bat = readBatteryPct(); if (bat in 0..100) put("battery", bat)
+            put("worn", isWorn())
+            // 상단 현재값(폰 UI·하위호환) + 묶음 records.
+            put("hr", heartRate)
+            put("spo2", if (spo2 > 0) spo2 else 98)
+            put("body_temp", bodyTemp)
+            put("stress", calculateStress())
+            put("state", currentState.name)
+            put("stateKr", stateKr)
+            put("baselineReady", baselineReady)
+            put("restHrMean", restHrMean.toInt())
+            put("activeHrMean", activeHrMean.toInt())
+            put("monitorLevel", monitorLevel.name)
+            put("records", records)
+        }
         scope.launch {
-            try {
-                WearableCommService.sendStatus(this@SensorService, mapOf(
-                    "workerId" to WORKER_ID,
-                    "heartRate" to heartRate,
-                    "spo2" to (if (spo2 > 0) spo2 else 98),
-                    "bodyTemp" to bodyTemp,
-                    "stress" to calculateStress(),
-                    "state" to currentState.name,
-                    "stateKr" to stateKr,
-                    "baselineReady" to baselineReady,
-                    "restHrMean" to restHrMean.toInt(),
-                    "activeHrMean" to activeHrMean.toInt(),
-                    "monitorLevel" to monitorLevel.name,
-                ))
-            } catch (_: Exception) {}
+            try { WearableCommService.sendStatus(this@SensorService, payload) } catch (_: Exception) {}
         }
     }
 

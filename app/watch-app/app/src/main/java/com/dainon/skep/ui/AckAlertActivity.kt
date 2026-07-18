@@ -3,6 +3,7 @@ package com.dainon.skep.ui
 import android.app.NotificationManager
 import android.content.Intent
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.os.PowerManager
 import android.view.WindowManager
 import android.widget.Button
@@ -19,6 +20,7 @@ import com.dainon.skep.service.SensorService
 class AckAlertActivity : AppCompatActivity() {
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var countdown: CountDownTimer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,6 +56,8 @@ class AckAlertActivity : AppCompatActivity() {
             setTextColor(titleColor)
         }
 
+        startAckCountdown(state)
+
         // 괜찮아요 (학습 + 해제)
         findViewById<Button>(R.id.btnOk).setOnClickListener {
             startService(Intent(this, SensorService::class.java).apply {
@@ -78,13 +82,35 @@ class AckAlertActivity : AppCompatActivity() {
                 action = SensorService.ACTION_MANUAL_EMERGENCY
             })
             // ★ finish() 안 함 — EMERGENCY 중 화면 유지
-            // 제목을 "긴급 상황"으로 변경
+            // 제목을 "긴급 상황"으로 변경 + 카운트다운 중지(이미 경보 발신).
+            countdown?.cancel()
+            findViewById<TextView>(R.id.tvAckCountdown).text = "괜찮으시면 해제하세요"
             findViewById<TextView>(R.id.tvAckTitle).apply {
                 text = "긴급 상황"
                 setTextColor(0xFFE53935.toInt())
             }
         }
     }
+
+    /** "무응답 시 자동 경보" → 남은 초 실시간 카운트다운(낙상 45초 / 그 외 5분, 긴급은 카운트다운 없음). */
+    private fun startAckCountdown(state: String) {
+        val tv = findViewById<TextView>(R.id.tvAckCountdown)
+        val totalSec = when (state) {
+            "EMERGENCY" -> { tv.text = "괜찮으시면 해제하세요"; return }  // 이미 에스컬레이션됨.
+            "FALL_DETECTED" -> 45   // SensorService.FALL_ACK_TIMEOUT_SEC
+            else -> 300             // SensorService.ACK_TIMEOUT_SEC (5분)
+        }
+        countdown?.cancel()
+        countdown = object : CountDownTimer(totalSec * 1000L, 1000L) {
+            override fun onTick(msLeft: Long) {
+                tv.text = "${fmtRemain((msLeft / 1000).toInt())} 후 자동 경보"
+            }
+            override fun onFinish() { tv.text = "자동 경보 발신" }
+        }.start()
+    }
+
+    private fun fmtRemain(sec: Int): String =
+        if (sec >= 60) "%d:%02d".format(sec / 60, sec % 60) else "${sec}초"
 
     // ★ 뒤로가기 차단 — "괜찮아요"/"오작동 종료" 눌러야만 닫힘
     @Suppress("DEPRECATION")
@@ -97,6 +123,7 @@ class AckAlertActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        countdown?.cancel()
         wakeLock?.let { if (it.isHeld) it.release() }
         super.onDestroy()
     }

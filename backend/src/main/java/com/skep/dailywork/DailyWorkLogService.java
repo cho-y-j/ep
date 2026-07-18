@@ -13,6 +13,7 @@ import com.skep.contract.RateType;
 import com.skep.dailywork.dto.DailyWorkLogResponse;
 import com.skep.dailywork.dto.SaveDailyWorkLogRequest;
 import com.skep.dailywork.dto.WorkLogLedgerResponse;
+import com.skep.dailywork.dto.WorkerCalendarResponse;
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentRepository;
 import com.skep.notification.NotificationService;
@@ -228,7 +229,7 @@ public class DailyWorkLogService {
         notifications.sendToCompany(l.getSupplierCompanyId(),
                 "DAILY_WORK_LOG_SIGNED", "일일 확인서 서명 완료",
                 l.getWorkDate() + " " + resourceLabel(l) + " — BP 확인 서명",
-                "DAILY_WORK_LOG", l.getId(), l.getSiteId());
+                "DAILY_WORK_LOG", l.getId(), l.getSiteId(), notifications.senderLabelOf(actor));
         auditLog.record(actor, AuditAction.DAILY_WORK_LOG_SIGNED, AuditTargetType.DAILY_WORK_LOG,
                 l.getId(), l.getSupplierCompanyId(), l.getSiteId(), null,
                 "{\"work_date\":\"" + l.getWorkDate() + "\"}");
@@ -331,6 +332,80 @@ public class DailyWorkLogService {
     @Transactional(readOnly = true)
     public List<DailyWorkLog> listForPerson(Long personId) {
         return repo.findByPersonIdOrderByWorkDateDescIdDesc(personId);
+    }
+
+    /** 작업자 본인 "내 작업 달력"(§0-A #3) — 정산주기(현장정산일 26~25) 창 + 근무일 + 합계.
+     *  period(YYYY-MM) 미지정 시 오늘이 속한 주기. settlementDay 는 인원 로그의 현장에서 해석. */
+    @Transactional(readOnly = true)
+    public WorkerCalendarResponse personCalendar(Long personId, String period) {
+        List<DailyWorkLog> all = repo.findByPersonIdOrderByWorkDateDescIdDesc(personId);
+        Integer settlementDay = resolveSettlementDay(all);
+        YearMonth ym = (period == null || period.isBlank())
+                ? anchorForToday(settlementDay)
+                : parseMonth(period);
+        LocalDate[] range = settlementPeriod(ym, settlementDay);
+        LocalDate start = range[0], end = range[1];
+
+        BigDecimal earlyH = BigDecimal.ZERO, lunchH = BigDecimal.ZERO, eveningH = BigDecimal.ZERO,
+                nightH = BigDecimal.ZERO, overnightH = BigDecimal.ZERO, otTotalH = BigDecimal.ZERO;
+        int signed = 0, photo = 0, unsigned = 0;
+        List<WorkerCalendarResponse.Day> days = new java.util.ArrayList<>();
+        // 주기 내 로그만(오름차순 — 달력 표시 순).
+        List<DailyWorkLog> inCycle = all.stream()
+                .filter(l -> !l.getWorkDate().isBefore(start) && !l.getWorkDate().isAfter(end))
+                .sorted(java.util.Comparator.comparing(DailyWorkLog::getWorkDate)
+                        .thenComparing(DailyWorkLog::getId))
+                .toList();
+        for (DailyWorkLog l : inCycle) {
+            BigDecimal ot = l.getOtEarly().add(l.getOtLunch()).add(l.getOtEvening())
+                    .add(l.getOtNight()).add(l.getOtOvernight());
+            earlyH = earlyH.add(l.getOtEarly());
+            lunchH = lunchH.add(l.getOtLunch());
+            eveningH = eveningH.add(l.getOtEvening());
+            nightH = nightH.add(l.getOtNight());
+            overnightH = overnightH.add(l.getOtOvernight());
+            otTotalH = otTotalH.add(ot);
+            switch (l.getSignStatus()) {
+                case SIGNED -> signed++;
+                case PHOTO -> photo++;
+                default -> unsigned++;
+            }
+            days.add(new WorkerCalendarResponse.Day(
+                    l.getId(), l.getWorkDate(), l.getWorkContent(), l.getWorkLocation(),
+                    l.getSiteName(), l.getRateType(),
+                    l.getOtEarly(), l.getOtLunch(), l.getOtEvening(), l.getOtNight(), l.getOtOvernight(), ot,
+                    l.getStartTime(), l.getEndTime(),
+                    l.getSignStatus().name(), l.getMemo()));
+        }
+        return new WorkerCalendarResponse(ym.toString(), start, end, settlementDay, days,
+                new WorkerCalendarResponse.Totals(days.size(),
+                        earlyH, lunchH, eveningH, nightH, overnightH, otTotalH,
+                        signed, photo, unsigned));
+    }
+
+    /** 인원 로그의 현장 중 현장정산일이 설정된 가장 최근 현장의 값(없으면 null → 달력월). */
+    private Integer resolveSettlementDay(List<DailyWorkLog> logs) {
+        List<Long> siteIds = logs.stream().map(DailyWorkLog::getSiteId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        if (siteIds.isEmpty()) return null;
+        java.util.Map<Long, Integer> dayBySite = new java.util.HashMap<>();
+        sites.findAllById(siteIds).forEach(s -> dayBySite.put(s.getId(), s.getSettlementDay()));
+        for (DailyWorkLog l : logs) { // desc → 최근 현장 우선
+            if (l.getSiteId() != null) {
+                Integer d = dayBySite.get(l.getSiteId());
+                if (d != null) return d;
+            }
+        }
+        return null;
+    }
+
+    /** period 미지정 시 오늘이 속한 정산주기의 앵커 기준월. */
+    private static YearMonth anchorForToday(Integer settlementDay) {
+        LocalDate today = LocalDate.now();
+        if (settlementDay == null) return YearMonth.from(today);
+        return today.getDayOfMonth() > settlementDay
+                ? YearMonth.from(today).plusMonths(1)
+                : YearMonth.from(today);
     }
 
     // ── helpers ──────────────────────────────────────────────

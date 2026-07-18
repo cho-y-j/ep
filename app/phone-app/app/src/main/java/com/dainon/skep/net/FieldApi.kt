@@ -144,6 +144,18 @@ class FieldApi(private val baseUrl: String) {
         }
     }
 
+    /** GET /api/field-auth/watch-policy (X-Field-Token) — P5-W0 워치 전송 정책 JSON(원문 그대로 워치에 전달). */
+    fun watchPolicyJson(token: String): String {
+        val req = Request.Builder()
+            .url("$baseUrl/api/field-auth/watch-policy")
+            .header("X-Field-Token", token).get().build()
+        client.newCall(req).execute().use { resp ->
+            val body = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) error("watch-policy HTTP ${resp.code}: $body")
+            return body
+        }
+    }
+
     /** 현장 밖 체크인(서버 403 + code=OUT_OF_SITE) 예외. distance_m = 현장 중심까지 거리(m). */
     class OutOfSiteException(val distanceM: Int?) : RuntimeException("OUT_OF_SITE")
 

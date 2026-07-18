@@ -56,7 +56,7 @@ public class MonthlyStatementScheduler {
                 continue;
             }
             notifications.sendToCompany(companyId, NotificationType.MONTHLY_STATEMENT_READY,
-                    title, message, "SETTLEMENT_STATEMENT", null, null);
+                    title, message, "SETTLEMENT_STATEMENT", null, null, "시스템 (월 마감)");
         }
     }
 }

@@ -133,7 +133,7 @@ public class DocumentReviewMailService {
                 notifications.sendToCompany(req.bpCompanyId(),
                         "DOCUMENT_REVIEW", "서류 심사 도착",
                         "자원 " + resources.size() + "건 / 서류 " + totalDocs + "건",
-                        "DOCUMENT_REVIEW", review.getId(), null);
+                        "DOCUMENT_REVIEW", review.getId(), null, notifications.senderLabelOf(actor));
                 bpDelivered = true;
             } else {
                 log.warn("문서 심사 수신함 등록 불가 — 발신 회사를 특정할 수 없음");

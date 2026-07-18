@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.*
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.widget.*
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -65,6 +66,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvAckMessage: TextView
     private lateinit var tvAckTimer: TextView
     private lateinit var btnAckOk: Button
+    private var ackCountdown: CountDownTimer? = null
+    private var ackCountdownState: String? = null  // 현재 카운트다운이 도는 state (틱마다 재시작 방지)
 
     // P2P 수신 경보 오버레이
     private lateinit var p2pOverlay: LinearLayout
@@ -132,7 +135,7 @@ class MainActivity : AppCompatActivity() {
             if (state == "WAITING_ACK" || state == "FALL_DETECTED" || state == "EMERGENCY") {
                 showAckOverlay(state)
             } else {
-                ackOverlay.visibility = View.GONE
+                hideAckOverlay()
             }
 
             updateLearningUI(baselineReady, baselineHr, hr)
@@ -310,15 +313,15 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SetupActivity::class.java).putExtra("forceSetup", true))
         }
         btnAckOk.setOnClickListener {
-            ackOverlay.visibility = View.GONE
+            hideAckOverlay()
             startService(Intent(this, SensorService::class.java).apply { action = SensorService.ACTION_ACKNOWLEDGE })
         }
         findViewById<Button>(R.id.btnAckDismiss).setOnClickListener {
-            ackOverlay.visibility = View.GONE
+            hideAckOverlay()
             startService(Intent(this, SensorService::class.java).apply { action = SensorService.ACTION_DISMISS })
         }
         findViewById<Button>(R.id.btnAckEmergency).setOnClickListener {
-            ackOverlay.visibility = View.GONE
+            hideAckOverlay()
             startService(Intent(this, SensorService::class.java).apply { action = SensorService.ACTION_MANUAL_EMERGENCY })
         }
 
@@ -621,24 +624,51 @@ class MainActivity : AppCompatActivity() {
                 tvAckTitle.text = "넘어지셨나요?"
                 tvAckMessage.text = "낙상 감지"
                 tvAckTitle.setTextColor(0xFFE53935.toInt())
-                tvAckTimer.text = "무응답 시 자동 경보"
                 btnAckOk.text = "✅ 괜찮아요"
             }
             "EMERGENCY" -> {
                 tvAckTitle.text = "긴급 상황"
                 tvAckMessage.text = "주변에 경보 전파 중"
                 tvAckTitle.setTextColor(0xFFE53935.toInt())
-                tvAckTimer.text = "괜찮으시면 해제하세요"
                 btnAckOk.text = "✅ 괜찮아요 (경보 해제)"
             }
             else -> {
                 tvAckTitle.text = "괜찮으세요?"
                 tvAckMessage.text = "이상 징후 감지"
                 tvAckTitle.setTextColor(0xFFFF9800.toInt())
-                tvAckTimer.text = "무응답 5분 시 자동 경보"
                 btnAckOk.text = "✅ 괜찮아요"
             }
         }
+        startAckCountdown(state)
+    }
+
+    /** tvAckTimer 를 남은 초 실시간 카운트다운으로 갱신. 같은 state 재호출(매 틱)에는 재시작하지 않는다. */
+    private fun startAckCountdown(state: String) {
+        if (state == "EMERGENCY") {   // 이미 에스컬레이션됨 — 카운트다운 없음.
+            ackCountdown?.cancel(); ackCountdown = null; ackCountdownState = null
+            tvAckTimer.text = "괜찮으시면 해제하세요"
+            return
+        }
+        if (ackCountdownState == state) return   // 이미 이 state 로 진행 중 — 재시작 금지.
+        ackCountdown?.cancel()
+        ackCountdownState = state
+        val totalSec = if (state == "FALL_DETECTED") 45 else 300  // SensorService FALL_ACK_TIMEOUT_SEC / ACK_TIMEOUT_SEC.
+        ackCountdown = object : CountDownTimer(totalSec * 1000L, 1000L) {
+            override fun onTick(msLeft: Long) {
+                tvAckTimer.text = "${fmtRemain((msLeft / 1000).toInt())} 후 자동 경보"
+            }
+            override fun onFinish() { tvAckTimer.text = "자동 경보 발신" }
+        }.start()
+    }
+
+    private fun fmtRemain(sec: Int): String =
+        if (sec >= 60) "%d:%02d".format(sec / 60, sec % 60) else "${sec}초"
+
+    private fun hideAckOverlay() {
+        ackOverlay.visibility = View.GONE
+        ackCountdown?.cancel()
+        ackCountdown = null
+        ackCountdownState = null
     }
 
     // ═══════════════════════════════════════
@@ -724,5 +754,5 @@ class MainActivity : AppCompatActivity() {
         try { unregisterReceiver(watchBackOnReceiver) } catch (_: Exception) {}
     }
 
-    override fun onDestroy() { scope.cancel(); super.onDestroy() }
+    override fun onDestroy() { ackCountdown?.cancel(); scope.cancel(); super.onDestroy() }
 }

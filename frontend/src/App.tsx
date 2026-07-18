@@ -20,6 +20,7 @@ import PersonRoleDocsPage from './features/admin/PersonRoleDocsPage';
 import DocumentTypeRegionEditorPage from './features/admin/regionTemplate/DocumentTypeRegionEditorPage';
 import SafetyCheckTemplatesPage from './features/admin/SafetyCheckTemplatesPage';
 import InspectorPage from './features/inspector/InspectorPage';
+import WorkerCalendarPage from './features/worker/WorkerCalendarPage';
 import OutgoingSentPage from './features/outgoing/OutgoingSentPage';
 import InboxPage from './features/outgoing/InboxPage';
 import EquipmentPage from './features/equipment/EquipmentPage';
@@ -34,6 +35,7 @@ import SafetySettingsPage from './features/safety/SafetySettingsPage';
 import SafetyReportPage from './features/safety/SafetyReportPage';
 import SafetyReportPrintPage from './features/safety/SafetyReportPrintPage';
 import SafetyAlertsPage from './features/safetyAlerts/SafetyAlertsPage';
+import SafetyBoardPage from './features/safetyBoard/SafetyBoardPage';
 import WorkPlanPage from './features/workPlan/WorkPlanPage';
 import WorkPlanPendingPage from './features/workPlan/WorkPlanPendingPage';
 import WorkPlanDetailPage from './features/workPlan/WorkPlanDetailPage';
@@ -105,6 +107,8 @@ export default function App() {
         <Route path="/collect/:token" element={<CollectPublicPage />} />
         {/* S2′ 안전점검원 모바일웹 — 점검원 자가로그인(X-Field-Token), JWT 불필요 공개 라우트 */}
         <Route path="/inspector" element={<InspectorPage />} />
+        {/* P4e 작업자 "내 작업 달력" 모바일웹 — 출근코드 로그인(X-Field-Token), JWT 불필요 공개 라우트 */}
+        <Route path="/worker" element={<WorkerCalendarPage />} />
 
         {/* 루트 / 공통 dashboard 진입 — 역할별 dashboard 로 redirect */}
         <Route path="/" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
@@ -315,6 +319,7 @@ export default function App() {
         />
         <Route path="/sites" element={<ProtectedRoute><SitePage /></ProtectedRoute>} />
         <Route path="/sites/:id" element={<ProtectedRoute><SiteDetailPage /></ProtectedRoute>} />
+        <Route path="/safety-board" element={<ProtectedRoute roles={['ADMIN','BP','CLIENT']}><SafetyBoardPage /></ProtectedRoute>} />
         <Route path="/safety-inspections" element={<ProtectedRoute><SafetyInspectionsPage /></ProtectedRoute>} />
         <Route path="/safety-alerts" element={<ProtectedRoute roles={['ADMIN','BP']}><SafetyAlertsPage /></ProtectedRoute>} />
         <Route path="/safety-settings" element={<ProtectedRoute roles={['ADMIN','BP']}><SafetySettingsPage /></ProtectedRoute>} />

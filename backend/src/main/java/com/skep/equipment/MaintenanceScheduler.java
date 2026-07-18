@@ -51,7 +51,7 @@ public class MaintenanceScheduler {
             String msg = name + " 정비 도래 — 누적 가동 " + v.cumulativeHours() + "h (주기 " + v.intervalHours()
                     + "h). 점검·정비를 진행하세요.";
             notifications.sendToCompany(e.getSupplierId(), NotificationType.EQUIPMENT_MAINTENANCE_DUE,
-                    "정비 도래", msg, "EQUIPMENT", e.getId(), e.getCurrentSiteId());
+                    "정비 도래", msg, "EQUIPMENT", e.getId(), e.getCurrentSiteId(), "시스템 (정비 도래)");
             e.markMaintenanceAlerted(v.cumulativeHours());
             equipmentRepo.save(e);
             sent++;

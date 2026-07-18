@@ -11,6 +11,10 @@ public record ResourcePipelineResponse(
         String resourceType,   // "EQUIPMENT" | "PERSON"
         Long resourceId,
         String label,
+        Long supplierCompanyId,  // 소유 공급사/협력사 id — 업체 필터용
+        String supplierName,     // 〃 이름
+        Long siteId,             // 현재 배정 현장(current_site_id) — 현장 필터용, 미배정이면 null
+        String siteName,         // 〃 이름
         Stages stages
 ) {
     public record Stages(

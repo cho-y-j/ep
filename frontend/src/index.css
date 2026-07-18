@@ -74,3 +74,17 @@
 .tab-fade-in {
   animation: tab-fade-in 180ms ease-out;
 }
+
+/* 안전 상황판 — 미확인 경보 마커 강조(펄스 링). KakaoMap CustomOverlay content 에 부착. */
+@keyframes skep-map-pulse {
+  0%   { transform: scale(0.4); opacity: 0.75; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+.skep-map-pulse {
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  background: rgba(239, 68, 68, 0.5);
+  animation: skep-map-pulse 1.4s ease-out infinite;
+  pointer-events: none;
+}

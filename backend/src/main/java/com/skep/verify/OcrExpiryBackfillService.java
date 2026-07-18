@@ -101,7 +101,7 @@ public class OcrExpiryBackfillService {
             notifications.sendToCompany(ownerSupplierId, NotificationType.DOCUMENT_EXPIRY_EXTRACTED,
                     type.getName() + " 만료일 자동 입력됨",
                     type.getName() + " 의 만료일이 OCR 로 자동 입력되었습니다: " + expiry,
-                    "DOCUMENT", documentId, null);
+                    "DOCUMENT", documentId, null, "시스템 (OCR 자동추출)");
         }
         log.info("ocr expiry backfill done docId={} type={} expiry={} engine={}",
                 documentId, type.getName(), expiry, engine);

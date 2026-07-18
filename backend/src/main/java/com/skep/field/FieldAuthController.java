@@ -1,5 +1,9 @@
 package com.skep.field;
 
+import com.skep.announcement.Announcement;
+import com.skep.announcement.AnnouncementRecipient;
+import com.skep.announcement.AnnouncementRecipientRepository;
+import com.skep.announcement.AnnouncementRepository;
 import com.skep.attendance.AttendanceSession;
 import com.skep.attendance.AttendanceSessionRepository;
 import com.skep.common.ApiException;
@@ -59,6 +63,8 @@ public class FieldAuthController {
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     private final FieldTokenRateLimiter rateLimiter;
     private final DailyWorkLogService dailyWorkLogService;
+    private final AnnouncementRepository announcements;
+    private final AnnouncementRecipientRepository announcementRecipients;
 
     @PostMapping("/auth")
     public Map<String, Object> auth(@RequestBody AuthRequest req, HttpServletRequest request) {
@@ -366,6 +372,17 @@ public class FieldAuthController {
         return out;
     }
 
+    /** 작업자 본인 "내 작업 달력"(§0-A #3) — 정산주기(현장정산일 26~25) 창 + 근무일 + 합계.
+     *  period=YYYY-MM(미지정=오늘이 속한 주기). ◀▶ 주기 이동은 프론트가 period 변경으로. */
+    @GetMapping("/work-calendar")
+    public com.skep.dailywork.dto.WorkerCalendarResponse myWorkCalendar(
+            @RequestHeader("X-Field-Token") String token,
+            @RequestParam(required = false) String period, HttpServletRequest request) {
+        rateLimiter.check(request);
+        Person p = fieldAuth.authenticate(token);
+        return dailyWorkLogService.personCalendar(p.getId(), period);
+    }
+
     private Map<String, Object> dwlMap(DailyWorkLog l, java.math.BigDecimal otTotal) {
         Map<String, Object> m = new HashMap<>();
         m.put("id", l.getId());
@@ -380,6 +397,49 @@ public class FieldAuthController {
         m.put("ot_total", otTotal);
         m.put("sign_status", l.getSignStatus());
         return m;
+    }
+
+    /** 본인 수신 공지 목록 — 최신순 + 확인(읽음) 시각. 작업자 폰/웹 공지함. */
+    @GetMapping("/announcements")
+    public List<Map<String, Object>> myAnnouncements(@RequestHeader("X-Field-Token") String token,
+                                                     HttpServletRequest request) {
+        rateLimiter.check(request);
+        Person p = fieldAuth.authenticate(token);
+        List<AnnouncementRecipient> recs = announcementRecipients.findByPersonIdOrderByAnnouncementIdDesc(p.getId());
+        Map<Long, Announcement> byId = new HashMap<>();
+        announcements.findAllById(recs.stream().map(AnnouncementRecipient::getAnnouncementId).distinct().toList())
+                .forEach(a -> byId.put(a.getId(), a));
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (AnnouncementRecipient r : recs) {
+            Announcement a = byId.get(r.getAnnouncementId());
+            if (a == null) continue;
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", a.getId());
+            m.put("title", a.getTitle());
+            m.put("body", a.getBody());
+            m.put("created_at", a.getCreatedAt());
+            m.put("read_at", r.getReadAt());
+            out.add(m);
+        }
+        return out;
+    }
+
+    /** 공지 확인(읽음) 기록 — 본인 수신분만. 멱등. 발송자 확인율에 반영. */
+    @PostMapping("/announcements/{id}/read")
+    @Transactional
+    public Map<String, Object> readAnnouncement(@RequestHeader("X-Field-Token") String token,
+                                                @org.springframework.web.bind.annotation.PathVariable Long id,
+                                                HttpServletRequest request) {
+        rateLimiter.check(request);
+        Person p = fieldAuth.authenticate(token);
+        AnnouncementRecipient r = announcementRecipients.findByAnnouncementIdAndPersonId(id, p.getId())
+                .orElseThrow(() -> ApiException.notFound("NOT_A_RECIPIENT", "수신 대상이 아닌 공지입니다"));
+        r.markRead();
+        announcementRecipients.save(r);
+        Map<String, Object> out = new HashMap<>();
+        out.put("id", id);
+        out.put("read_at", r.getReadAt());
+        return out;
     }
 
     /** 본인 사인. totalHours 보정 + supplier_signature_png 저장. */

@@ -14,6 +14,7 @@ public record NotificationResponse(
         String message,
         String linkType,
         Long linkId,
+        String senderLabel,
         LocalDateTime readAt,
         LocalDateTime createdAt
 ) {
@@ -21,7 +22,7 @@ public record NotificationResponse(
         return new NotificationResponse(
                 n.getId(), n.getTargetUserId(), n.getTargetCompanyId(),
                 n.getSiteId(), n.getType(), n.getTitle(), n.getMessage(),
-                n.getLinkType(), n.getLinkId(), n.getReadAt(), n.getCreatedAt()
+                n.getLinkType(), n.getLinkId(), n.getSenderLabel(), n.getReadAt(), n.getCreatedAt()
         );
     }
 }

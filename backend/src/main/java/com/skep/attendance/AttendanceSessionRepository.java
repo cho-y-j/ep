@@ -25,6 +25,10 @@ public interface AttendanceSessionRepository extends JpaRepository<AttendanceSes
     List<AttendanceSession> findByPersonIdInAndCheckInAtGreaterThanEqualOrderByCheckInAtDesc(
             java.util.Collection<Long> personIds, LocalDateTime since);
 
+    /** 안전 상황판 — 현장 작업계획서들의 오늘 출근 세션(작업자 위치 마커). */
+    List<AttendanceSession> findByWorkPlanIdInAndCheckInAtGreaterThanEqual(
+            java.util.Collection<Long> workPlanIds, LocalDateTime since);
+
     List<AttendanceSession> findByPersonIdOrderByCheckInAtDesc(Long personId);
 
     List<AttendanceSession> findByWorkPlanIdOrderByCheckInAtDesc(Long workPlanId);

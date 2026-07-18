@@ -29,6 +29,8 @@ export type MapMarker = {
   onClick?: () => void;
   /** hover/클릭 시 띄울 InfoWindow HTML. 비어있으면 안 띄움. */
   tooltipHtml?: string;
+  /** true 면 마커 뒤에 펄스 링(강조) — 안전 상황판 미확인 경보. 기본 false. */
+  pulse?: boolean;
 };
 
 export type KakaoMapHandle = {
@@ -96,6 +98,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, Props>(function KakaoMap(
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
   const infoWindowsRef = useRef<Map<string, any>>(new Map());
+  const pulseOverlaysRef = useRef<Map<string, any>>(new Map());
   const openInfoWindowIdRef = useRef<string | null>(null);
   const circlesRef = useRef<Map<string, any>>(new Map());
   const polygonRef = useRef<any>(null);
@@ -284,6 +287,26 @@ const KakaoMap = forwardRef<KakaoMapHandle, Props>(function KakaoMap(
       } else if (existingIw) {
         existingIw.close();
         infoWindowsRef.current.delete(m.id);
+      }
+    }
+
+    // 펄스 링 reconcile — pulse=true 마커 뒤에 CustomOverlay(강조). 없어지면 제거.
+    const pulseIds = new Set(markers.filter((m) => m.pulse).map((m) => m.id));
+    for (const [id, ov] of pulseOverlaysRef.current) {
+      if (!pulseIds.has(id)) { ov.setMap(null); pulseOverlaysRef.current.delete(id); }
+    }
+    for (const m of markers) {
+      if (!m.pulse) continue;
+      const pos = new kakao.maps.LatLng(m.position.lat, m.position.lng);
+      const existing = pulseOverlaysRef.current.get(m.id);
+      if (existing) {
+        existing.setPosition(pos);
+      } else {
+        const el = document.createElement('div');
+        el.className = 'skep-map-pulse';
+        const ov = new kakao.maps.CustomOverlay({ position: pos, content: el, zIndex: 1 });
+        ov.setMap(mapRef.current);
+        pulseOverlaysRef.current.set(m.id, ov);
       }
     }
   }, [ready, markers]);

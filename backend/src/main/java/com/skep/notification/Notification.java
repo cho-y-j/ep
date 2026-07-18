@@ -50,6 +50,10 @@ public class Notification {
     @Column(name = "link_id")
     private Long linkId;
 
+    /** P4d: 발신자 표시용 라벨. 예 "시스템 (강풍 경보)"·"테스트 BP건설(주) 김소장"·"관리자". 기존 행은 NULL. */
+    @Column(name = "sender_label", length = 120)
+    private String senderLabel;
+
     @Column(name = "read_at")
     private LocalDateTime readAt;
 
@@ -59,7 +63,7 @@ public class Notification {
     @Builder
     private Notification(Long targetUserId, Long targetCompanyId, Long siteId,
                          String type, String title, String message,
-                         String linkType, Long linkId) {
+                         String linkType, Long linkId, String senderLabel) {
         this.targetUserId = targetUserId;
         this.targetCompanyId = targetCompanyId;
         this.siteId = siteId;
@@ -68,6 +72,7 @@ public class Notification {
         this.message = message;
         this.linkType = linkType;
         this.linkId = linkId;
+        this.senderLabel = senderLabel;
     }
 
     @PrePersist

@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.webkit.WebView
 import android.widget.Button
@@ -44,6 +45,7 @@ class CheckInActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_WORK_PLAN_ID = "work_plan_id"
         const val EXTRA_IS_CHECK_OUT = "is_check_out"
+        const val TAG = "CheckIn"
     }
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -245,7 +247,10 @@ class CheckInActivity : AppCompatActivity() {
                 btnAction.isEnabled = true
                 val msg = if (it is FieldApi.OutOfSiteException) {
                     it.distanceM?.let { d -> "현장 밖입니다 (거리 ${d}m)" } ?: "현장 밖입니다"
-                } else "실패: ${it.message}"
+                } else {
+                    Log.w(TAG, "check-in/out failed", it)
+                    "출석 처리에 실패했습니다 — 잠시 후 다시 시도해주세요"
+                }
                 Toast.makeText(this@CheckInActivity, msg, Toast.LENGTH_LONG).show()
             }
         }
@@ -281,7 +286,8 @@ class CheckInActivity : AppCompatActivity() {
                 Toast.makeText(this@CheckInActivity, "사진 첨부 완료", Toast.LENGTH_SHORT).show()
             }.onFailure {
                 btnTakePhoto.text = "다시 촬영"
-                Toast.makeText(this@CheckInActivity, "사진 업로드 실패: ${it.message}", Toast.LENGTH_LONG).show()
+                Log.w(TAG, "attendance photo upload failed", it)
+                Toast.makeText(this@CheckInActivity, "사진 업로드에 실패했습니다 — 다시 시도해주세요", Toast.LENGTH_LONG).show()
             }
         }
     }

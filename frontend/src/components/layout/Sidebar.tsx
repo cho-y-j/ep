@@ -35,7 +35,6 @@ type NavSection = {
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Props) {
   const { user } = useAuth();
   const role = user?.role;
-  const isMaster = !!user?.is_company_admin;
 
   const unread = useUnreadCount();
   const supplierCounts = useSupplierIncomingCounts(
@@ -50,12 +49,11 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
     : role === 'CLIENT' ? '/client/dashboard'
     : '/';
 
-  // 6허브 IA — 역할별 최상위 그룹은 정확히 6개(①대시보드 ②견적·계약 ③서류 ④현장 운영 ⑤정산 ⑥안전).
-  // 각 허브 = collapsible 그룹, 기존 라우트를 서브 항목으로 흡수. ADMIN 만 "시스템 관리" 별도 그룹(+α).
+  // P4b 메뉴 다이어트 — 좌측 사이드바 = 매일 쓰는 대표 링크만(역할당 ≤12).
+  // 형제 URL 은 SubNav 공유 탭바로, 저빈도 관리(내 회사·직원·하위공급사·DOCX·알림톡·공지·로그)는 우상단 ⚙ 로 이동.
   const home: NavItem[] = [
     { label: '대시보드', to: dashboardTo, icon: <IconGrid /> },
     { label: '알림', to: '/notifications', icon: <IconBell />, badge: unread > 0 ? unread : undefined },
-    { label: '로그', to: '/audit-logs', icon: <IconDoc /> },
   ];
 
   let hubSections: NavSection[];
@@ -64,16 +62,14 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
     hubSections = [
       { label: '대시보드', collapsible: true, defaultOpen: true, items: [
         ...home,
-        { label: '설정', to: '/settings', icon: <IconCog />, disabled: true },
       ]},
       { label: '견적·계약', collapsible: true, defaultOpen: false, items: [
         { label: '견적 관리', to: '/quotations', icon: <IconClipboard /> },
       ]},
       { label: '서류', collapsible: true, defaultOpen: false, items: [
         { label: '서류 검토', to: '/admin/document-review', icon: <IconShield /> },
-        { label: '서류관리', to: '/document-management', icon: <IconShield /> },
-        { label: '서류 수집 요청', to: '/document-collections', icon: <IconDoc /> },
-        { label: '이행지시', to: '/compliance-orders', icon: <IconShield /> },
+        // 서류관리·수집 요청·이행지시는 SubNav "서류함" 탭으로 통합 — 대표 1링크.
+        { label: '서류함', to: '/document-management', icon: <IconDoc /> },
       ]},
       { label: '현장 운영', collapsible: true, defaultOpen: true, items: [
         { label: '작업계획서', to: '/work-plans', icon: <IconClipboard /> },
@@ -84,72 +80,52 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       { label: '정산', collapsible: true, defaultOpen: false, items: [
         { label: '월별 작업확인서', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
       ]},
+      // 안전 조각(설정·점검·알림·보고서)은 안전 상황판 탭으로 흡수 — 대표 1링크. (기존 라우트는 유지 → 딥링크 무해)
       { label: '안전', collapsible: true, defaultOpen: false, items: [
-        { label: '안전 설정', to: '/safety-settings', icon: <IconCog /> },
-        { label: '안전점검', to: '/safety-inspections', icon: <IconShield /> },
-        { label: '작업자 안전알림', to: '/safety-alerts', icon: <IconBell /> },
-        { label: '이행 보고서', to: '/safety-reports', icon: <IconDoc /> },
-        { label: '알림톡 발송', to: '/alimtalk', icon: <IconBell /> },
+        { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
       ]},
+      // 관리자 특성상 시스템 관리는 좌측 유지(§4-B). 발송·템플릿·로그 유틸은 우상단 ⚙ 로.
       { label: '시스템 관리', collapsible: true, defaultOpen: false, items: [
         { label: 'BP사 관리', to: '/admin/bp', icon: <IconBriefcase /> },
         { label: '공급사 관리', to: '/admin/suppliers', icon: <IconTruck /> },
         { label: '원청기관', to: '/admin/client-orgs', icon: <IconBuilding /> },
         { label: '사용자 관리', to: '/admin/users', icon: <IconUserCheck /> },
-        { label: '공지사항 발송', to: '/admin/announcements', icon: <IconShield /> },
         { label: '서류종류 관리', to: '/admin/document-types', icon: <IconDoc /> },
         { label: '장비종류 서류', to: '/admin/equipment-type-docs', icon: <IconTruck /> },
         { label: '인력역할 서류', to: '/admin/person-role-docs', icon: <IconUsers /> },
         { label: '법정점검 템플릿', to: '/admin/safety-check-templates', icon: <IconShield /> },
-        { label: 'DOCX 템플릿', to: '/admin/docx-templates', icon: <IconDoc /> },
       ]},
     ];
   } else if (role === 'BP') {
     hubSections = [
       { label: '대시보드', collapsible: true, defaultOpen: true, items: [
         ...home,
-        { label: '내 회사', to: '/my-company', icon: <IconBriefcase /> },
-        ...(isMaster ? [{ label: '직원 관리', to: '/company/users', icon: <IconUserCheck /> } as NavItem] : []),
       ]},
+      // 견적: 공개입찰·수신함은 SubNav 탭으로. 계약 조회는 유지 1링크.
       { label: '견적·계약', collapsible: true, defaultOpen: false, items: [
-        { label: '장비 견적 공개 입찰', to: '/quotations', icon: <IconClipboard />, end: true },
-        { label: '수신함', to: '/inbox', icon: <IconClipboard /> },
+        { label: '견적', to: '/quotations', icon: <IconClipboard />, end: true },
         { label: '계약 조회', to: '/contracts', icon: <IconBriefcase /> },
       ]},
+      // 서류 심사(받은+소급 탭) / 서류함(관리+수집+이행 탭) 2링크.
       { label: '서류', collapsible: true, defaultOpen: false, items: [
-        { label: '받은 서류 심사', to: '/document-reviews/received', icon: <IconShield />,
+        { label: '서류 심사', to: '/document-reviews/received', icon: <IconShield />,
           badge: bpReviewCount || undefined },
-        { label: '서류관리', to: '/document-management', icon: <IconShield /> },
-        { label: '서류 수집 요청', to: '/document-collections', icon: <IconDoc /> },
-        { label: '이행지시', to: '/compliance-orders', icon: <IconShield /> },
-        { label: '소급 승인', to: '/resource-onboardings/bp', icon: <IconShield /> },
+        { label: '서류함', to: '/document-management', icon: <IconDoc /> },
       ]},
+      // 투입 관리(대기·현황·장비·인원·받은요청·보낸점검 탭) / 자원(장비·인원·업체변경 탭).
       { label: '현장 운영', collapsible: true, defaultOpen: true, items: [
         { label: '작업 계획서', to: '/work-plans', icon: <IconClipboard />, end: true },
-        { label: '투입 대기', to: '/work-plans/pending', icon: <IconClipboard /> },
-        { label: '받은 투입 요청', to: '/field-deployments/bp', icon: <IconClipboard /> },
-        { label: '투입 현황', to: '/work-plans/active', icon: <IconClipboard /> },
-        { label: '투입 장비', to: '/dispatched-equipment', icon: <IconTruck /> },
-        { label: '투입 인원', to: '/dispatched-persons', icon: <IconUsers /> },
-        // 내 장비/공급사 장비, 내 인원/공급사 인원 4메뉴 → 각 1화면(범위 필터는 화면 내 탭)으로 흡수.
-        { label: '장비', to: '/equipment', icon: <IconTruck /> },
-        { label: '인원', to: '/persons', icon: <IconUsers /> },
-        { label: '작업확인 원장', to: '/daily-work-logs/bp', icon: <IconClipboard /> },
-        { label: '업체변경 신청서', to: '/resource-change-requests', icon: <IconClipboard /> },
-        { label: '보낸 점검 요청', to: '/resource-checks/bp', icon: <IconShield /> },
+        { label: '투입 관리', to: '/work-plans/pending', icon: <IconClipboard /> },
+        { label: '자원', to: '/equipment', icon: <IconTruck /> },
         { label: '현장 관리', to: '/sites', icon: <IconBuilding /> },
-        { label: '공지사항 발송', to: '/admin/announcements', icon: <IconBell /> },
-        { label: 'DOCX 템플릿', to: '/admin/docx-templates', icon: <IconDoc /> },
       ]},
+      // 정산: 월별 작업확인서·작업확인 원장 탭.
       { label: '정산', collapsible: true, defaultOpen: false, items: [
-        { label: '월별 작업확인서', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
+        { label: '정산', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
       ]},
+      // 안전 조각(설정·점검·알림·보고서)은 안전 상황판 탭으로 흡수 — 대표 1링크. (기존 라우트는 유지 → 딥링크 무해)
       { label: '안전', collapsible: true, defaultOpen: false, items: [
-        { label: '안전 설정', to: '/safety-settings', icon: <IconCog /> },
-        { label: '안전점검', to: '/safety-inspections', icon: <IconShield /> },
-        { label: '작업자 안전알림', to: '/safety-alerts', icon: <IconBell /> },
-        { label: '이행 보고서', to: '/safety-reports', icon: <IconDoc /> },
-        { label: '알림톡 발송', to: '/alimtalk', icon: <IconBell /> },
+        { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
       ]},
     ];
   } else if (role === 'EQUIPMENT_SUPPLIER' || role === 'MANPOWER_SUPPLIER') {
@@ -158,45 +134,25 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
     hubSections = [
       { label: '대시보드', collapsible: true, defaultOpen: true, items: [
         ...home,
-        { label: '내 회사', to: '/my-company', icon: <IconBriefcase /> },
-        ...(isMaster ? [{ label: '직원 관리', to: '/company/users', icon: <IconUserCheck /> } as NavItem] : []),
-        ...(isEquip && isMaster ? [{ label: '하위공급사 관리', to: '/sub-suppliers', icon: <IconBriefcase /> } as NavItem] : []),
       ]},
+      // 견적: 입찰·제안·발송·받은견적·템플릿·계약을 SubNav 탭으로 — 대표 1링크.
       { label: '견적·계약', collapsible: true, defaultOpen: false, items: [
-        { label: 'BP 공개입찰', to: '/quotations/open-bids', icon: <IconClipboard /> },
-        { label: '내 견적 제안', to: '/my-proposals', icon: <IconClipboard /> },
-        { label: '내 견적 발송', to: '/outgoing-quotations', icon: <IconClipboard /> },
-        { label: '견적 템플릿', to: '/quote-templates', icon: <IconClipboard /> },
-        { label: '받은 견적 (지정)', to: '/quotations', icon: <IconClipboard />, end: true },
-        { label: '계약 관리', to: '/contracts', icon: <IconBriefcase /> },
+        { label: '견적', to: '/quotations/open-bids', icon: <IconClipboard /> },
       ]},
+      // 서류 허브 = 보완요청/자원점검/이행지시/서류수집/서류심사 5채널 통합(받은 요청·심사 보내기 포함) — 1링크.
       { label: '서류', collapsible: true, defaultOpen: false, items: [
-        // 보완요청/자원점검/이행지시/서류수집/서류심사를 한 화면 탭으로 통합 — 서류 기본 진입점.
-        { label: '서류 허브', to: '/supplier/document-hub', icon: <IconDoc /> },
-        { label: '받은 요청', to: '/supplier/received', icon: <IconShield />, badge: receivedBadge },
-        { label: '서류 심사 보내기', to: '/document-review-send', icon: <IconShield /> },
-        { label: '서류 관리', to: '/document-management', icon: <IconShield /> },
-        { label: '서류 수집 요청', to: '/document-collections', icon: <IconDoc /> },
+        { label: '서류 허브', to: '/supplier/document-hub', icon: <IconDoc />, badge: receivedBadge },
       ]},
+      // 자원(장비·인원·기투입·업체변경 탭) / 투입 요청(투입요청·작업일정·현장관리 탭). 파이프라인·일일확인서는 대표 링크.
       { label: '현장 운영', collapsible: true, defaultOpen: true, items: [
         { label: '자원 파이프라인', to: '/resource-pipeline', icon: <IconClipboard /> },
-        ...(isEquip ? [
-          { label: '내 장비', to: '/equipment', icon: <IconTruck /> } as NavItem,
-          { label: '내 조종원', to: '/persons', icon: <IconUsers /> } as NavItem,
-        ] : [
-          { label: '내 인원', to: '/persons', icon: <IconUsers /> } as NavItem,
-        ]),
-        { label: '기투입 등록', to: '/resource-onboardings', icon: <IconClipboard /> },
+        { label: '자원', to: isEquip ? '/equipment' : '/persons', icon: isEquip ? <IconTruck /> : <IconUsers /> },
         { label: '일일 확인서', to: '/daily-work-logs', icon: <IconClipboard /> },
-        { label: '현장 투입 요청', to: '/field-deployments/supplier', icon: <IconClipboard /> },
-        { label: '업체변경 신청서', to: '/resource-change-requests', icon: <IconClipboard /> },
-        { label: '작업 일정', to: '/work-plans', icon: <IconClipboard /> },
-        { label: '현장 관리', to: '/sites', icon: <IconBuilding /> },
+        { label: '투입 요청', to: '/field-deployments/supplier', icon: <IconClipboard /> },
       ]},
+      // 정산: 투입 정산·월별 확인서(+장비 통계) 탭.
       { label: '정산', collapsible: true, defaultOpen: false, items: [
-        { label: '투입 정산', to: '/settlements', icon: <IconClipboard /> },
-        { label: '월별 작업확인서', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
-        ...(isEquip ? [{ label: '장비 투입 통계', to: '/equipment-stats', icon: <IconClipboard /> } as NavItem] : []),
+        { label: '정산', to: '/settlements', icon: <IconClipboard /> },
       ]},
       { label: '안전', collapsible: true, defaultOpen: false, items: [
         { label: '안전점검', to: '/safety-inspections', icon: <IconShield /> },
@@ -207,6 +163,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
     hubSections = [
       { label: '관제', collapsible: true, defaultOpen: true, items: [
         { label: '현장 관제', to: '/client/dashboard', icon: <IconGrid /> },
+        { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
         { label: '알림', to: '/notifications', icon: <IconBell />, badge: unread > 0 ? unread : undefined },
       ]},
     ];
@@ -434,13 +391,6 @@ function IconDoc() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="9" y1="13" x2="15" y2="13" /><line x1="9" y1="17" x2="13" y2="17" />
-    </svg>
-  );
-}
-function IconCog() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   );
 }

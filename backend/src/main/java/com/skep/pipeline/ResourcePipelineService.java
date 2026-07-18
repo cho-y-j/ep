@@ -1,5 +1,7 @@
 package com.skep.pipeline;
 
+import com.skep.company.Company;
+import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyService;
 import com.skep.compliance.ComplianceService;
 import com.skep.compliance.dto.ResourceCompliance;
@@ -27,6 +29,8 @@ import com.skep.safety.InspectionTarget;
 import com.skep.safety.SafetyInspection;
 import com.skep.safety.SafetyInspectionRepository;
 import com.skep.security.AuthenticatedUser;
+import com.skep.site.Site;
+import com.skep.site.SiteRepository;
 import com.skep.user.Role;
 import com.skep.workconfirmation.WorkConfirmation;
 import com.skep.workconfirmation.WorkConfirmationRepository;
@@ -37,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -76,6 +81,8 @@ public class ResourcePipelineService {
     private final FieldDeploymentRepository fieldDeployments;
     private final WorkConfirmationRepository workConfirmations;
     private final CompanyService companyService;
+    private final CompanyRepository companyRepo;
+    private final SiteRepository siteRepo;
 
     /** 공급사/협력사 본인+직속 자식 소유 자원의 파이프라인 상태. 그 외 역할/회사미상은 빈 목록(readiness 와 동일). */
     @Transactional(readOnly = true)
@@ -115,6 +122,18 @@ public class ResourcePipelineService {
                 .filter(f -> f.getResourceType() == OwnerType.PERSON)
                 .map(FieldDeploymentRequest::getResourceId).collect(Collectors.toSet());
 
+        // 필터 라벨(업체·현장) — 배치 조회. 이름만 붙일 뿐 스코프/게이트에 영향 없음.
+        Set<Long> supplierIds = new HashSet<>();
+        equipment.forEach(e -> supplierIds.add(e.getSupplierId()));
+        persons.forEach(p -> supplierIds.add(p.getSupplierId()));
+        Map<Long, String> supplierNames = companyRepo.findAllById(supplierIds).stream()
+                .collect(Collectors.toMap(Company::getId, Company::getName));
+        Set<Long> siteIds = new HashSet<>();
+        equipment.forEach(e -> { if (e.getCurrentSiteId() != null) siteIds.add(e.getCurrentSiteId()); });
+        persons.forEach(p -> { if (p.getCurrentSiteId() != null) siteIds.add(p.getCurrentSiteId()); });
+        Map<Long, String> siteNames = siteRepo.findAllById(siteIds).stream()
+                .collect(Collectors.toMap(Site::getId, Site::getName));
+
         // 5) 작업 — 인력별 최근 workDate 배치 집계(장비는 해당없음).
         Map<Long, LocalDate> latestWork = new HashMap<>();
         if (!personIds.isEmpty()) {
@@ -133,7 +152,9 @@ public class ResourcePipelineService {
                     deployedStage(dispatchedEquipIds.contains(id), activeEquipIds.contains(id)),
                     workStage(false, null),
                     settlementStage(dispatchedEquipIds.contains(id)));
-            out.add(new ResourcePipelineResponse("EQUIPMENT", id, equipmentLabel(e), stages));
+            out.add(new ResourcePipelineResponse("EQUIPMENT", id, equipmentLabel(e),
+                    e.getSupplierId(), supplierNames.get(e.getSupplierId()),
+                    e.getCurrentSiteId(), siteNames.get(e.getCurrentSiteId()), stages));
         }
         for (Person p : persons) {
             Long id = p.getId();
@@ -144,7 +165,9 @@ public class ResourcePipelineService {
                     deployedStage(dispatchedPersonIds.contains(id), activePersonIds.contains(id)),
                     workStage(true, latestWork.get(id)),
                     settlementStage(dispatchedPersonIds.contains(id)));
-            out.add(new ResourcePipelineResponse("PERSON", id, personLabel(p), stages));
+            out.add(new ResourcePipelineResponse("PERSON", id, personLabel(p),
+                    p.getSupplierId(), supplierNames.get(p.getSupplierId()),
+                    p.getCurrentSiteId(), siteNames.get(p.getCurrentSiteId()), stages));
         }
         return out;
     }

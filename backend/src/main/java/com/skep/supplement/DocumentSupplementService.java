@@ -99,7 +99,7 @@ public class DocumentSupplementService {
                 "서류 보완 요청",
                 (t != null ? t.getName() : "서류") + " 보완 요청이 도착했습니다" + (req.reason() != null && !req.reason().isBlank()
                         ? " — 사유: " + req.reason() : ""),
-                "DOCUMENT_SUPPLEMENT", row.getId(), req.contextSiteId());
+                "DOCUMENT_SUPPLEMENT", row.getId(), req.contextSiteId(), notifications.senderLabelOf(actor));
         return toResponse(row);
     }
 
@@ -127,7 +127,7 @@ public class DocumentSupplementService {
                     NotificationType.SUPPLEMENT_REQUESTED,
                     "서류 보완 요청 " + group.size() + "건",
                     summary + " 보완 요청이 도착했습니다.",
-                    "DOCUMENT_SUPPLEMENT", group.get(0).getId(), group.get(0).getContextSiteId());
+                    "DOCUMENT_SUPPLEMENT", group.get(0).getId(), group.get(0).getContextSiteId(), notifications.senderLabelOf(actor));
         }
         return rows.stream().map(this::toResponse).toList();
     }

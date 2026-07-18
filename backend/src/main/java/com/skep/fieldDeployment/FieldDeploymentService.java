@@ -101,7 +101,7 @@ public class FieldDeploymentService {
                 NotificationType.FIELD_DEPLOYMENT_REQUESTED,
                 "현장 투입 요청 도착",
                 resourceLabel(row.getResourceType(), row.getResourceId()) + " 투입 요청",
-                "FIELD_DEPLOYMENT", row.getId(), req.targetSiteId());
+                "FIELD_DEPLOYMENT", row.getId(), req.targetSiteId(), notifications.senderLabelOf(actor));
         return toResponse(row);
     }
 
@@ -133,7 +133,7 @@ public class FieldDeploymentService {
                 NotificationType.FIELD_DEPLOYMENT_REVIEWED,
                 "투입 요청 수락",
                 resourceLabel(row.getResourceType(), row.getResourceId()) + " 투입 수락 — 현장 운영 시작",
-                "FIELD_DEPLOYMENT", row.getId(), row.getTargetSiteId());
+                "FIELD_DEPLOYMENT", row.getId(), row.getTargetSiteId(), notifications.senderLabelOf(actor));
         return toResponse(row);
     }
 
@@ -153,7 +153,7 @@ public class FieldDeploymentService {
                 NotificationType.FIELD_DEPLOYMENT_REVIEWED,
                 "투입 요청 반려",
                 resourceLabel(row.getResourceType(), row.getResourceId()) + " 투입 반려",
-                "FIELD_DEPLOYMENT", row.getId(), row.getTargetSiteId());
+                "FIELD_DEPLOYMENT", row.getId(), row.getTargetSiteId(), notifications.senderLabelOf(actor));
         return toResponse(row);
     }
 

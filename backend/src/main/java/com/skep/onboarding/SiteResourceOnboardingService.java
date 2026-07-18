@@ -78,7 +78,7 @@ public class SiteResourceOnboardingService {
             notifications.sendToCompany(req.bpCompanyId(),
                     "RESOURCE_ONBOARDING_REQUESTED", "기투입 소급 승인 요청 도착",
                     ownerLabel(o.getOwnerType(), o.getOwnerId()) + " — 소급 승인 대기",
-                    "RESOURCE_ONBOARDING", o.getId(), o.getSiteId());
+                    "RESOURCE_ONBOARDING", o.getId(), o.getSiteId(), notifications.senderLabelOf(actor));
             auditLog.record(actor, AuditAction.RESOURCE_ONBOARDING_REQUESTED, AuditTargetType.RESOURCE_ONBOARDING,
                     o.getId(), supplierId, o.getSiteId(), null, ownerJson(o));
             return toResponse(o);
@@ -115,7 +115,7 @@ public class SiteResourceOnboardingService {
         notifications.sendToCompany(o.getSupplierCompanyId(),
                 "RESOURCE_ONBOARDING_APPROVED", "기투입 소급 승인 완료",
                 ownerLabel(o.getOwnerType(), o.getOwnerId()) + " — 투입 확정",
-                "RESOURCE_ONBOARDING", o.getId(), o.getSiteId());
+                "RESOURCE_ONBOARDING", o.getId(), o.getSiteId(), notifications.senderLabelOf(actor));
         auditLog.record(actor, AuditAction.RESOURCE_ONBOARDING_APPROVED, AuditTargetType.RESOURCE_ONBOARDING,
                 o.getId(), o.getSupplierCompanyId(), o.getSiteId(), null, ownerJson(o));
         return toResponse(o);

@@ -300,12 +300,12 @@ public class VerificationService {
                 "{\"status\":\"" + doc.getVerificationStatus().name() + "\",\"verified\":" + verified + "}");
 
         // 알림 발신: 결과에 따라 owner 회사로 broadcast.
-        notifyResult(doc, type, ownerSupplierId);
+        notifyResult(doc, type, ownerSupplierId, notifications.senderLabelOf(actor));
         return DocumentResponse.from(doc, type.getName(), type.isHasExpiry());
     }
 
     /** 검증 결과에 따라 알림 발신. 회사 broadcast (target_user_id null + target_company_id 자원 supplier). */
-    private void notifyResult(Document doc, DocumentType type, Long ownerSupplierId) {
+    private void notifyResult(Document doc, DocumentType type, Long ownerSupplierId, String senderLabel) {
         if (ownerSupplierId == null) return;
         String typeName = type != null ? type.getName() : "서류";
         switch (doc.getVerificationStatus()) {
@@ -314,17 +314,17 @@ public class VerificationService {
                     typeName + " 반려됨",
                     typeName + " 가 반려되었습니다. 사유: "
                             + (doc.getRejectedReason() != null ? doc.getRejectedReason() : "확인 필요"),
-                    "DOCUMENT", doc.getId(), null);
+                    "DOCUMENT", doc.getId(), null, senderLabel);
             case OCR_REVIEW_REQUIRED -> notifications.sendToCompany(
                     ownerSupplierId, NotificationType.DOCUMENT_OCR_REVIEW,
                     typeName + " OCR 검토 필요",
                     typeName + " 자동 검증이 어려워 OCR 검토 큐로 들어갔습니다. 보충 입력 후 재검증해 주세요.",
-                    "DOCUMENT", doc.getId(), null);
+                    "DOCUMENT", doc.getId(), null, senderLabel);
             case VERIFIED -> notifications.sendToCompany(
                     ownerSupplierId, NotificationType.DOCUMENT_VERIFIED,
                     typeName + " 검증 완료",
                     typeName + " 가 정상적으로 검증되었습니다.",
-                    "DOCUMENT", doc.getId(), null);
+                    "DOCUMENT", doc.getId(), null, senderLabel);
             default -> { /* PENDING — 알림 없음 */ }
         }
     }
@@ -353,7 +353,7 @@ public class VerificationService {
                 "{\"status\":\"REJECTED\",\"reason\":\"" + escape(reason) + "\"}");
 
         // 반려 알림.
-        notifyResult(doc, type, ownerSupplierId);
+        notifyResult(doc, type, ownerSupplierId, notifications.senderLabelOf(actor));
         return DocumentResponse.from(doc, type.getName(), type.isHasExpiry());
     }
 

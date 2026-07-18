@@ -2,6 +2,7 @@ package com.dainon.skep.ui
 
 import android.os.Bundle
 import android.util.Base64
+import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -25,6 +26,7 @@ class WorkConfirmationActivity : AppCompatActivity() {
         const val EXTRA_WC_ID = "wc_id"
         const val EXTRA_WC_DATE = "wc_date"
         const val EXTRA_WC_HOURS = "wc_hours"
+        const val TAG = "WorkConfirm"
     }
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -97,7 +99,8 @@ class WorkConfirmationActivity : AppCompatActivity() {
             }.onFailure {
                 btnSubmit.isEnabled = true
                 btnSubmit.text = "사인 후 제출"
-                Toast.makeText(this@WorkConfirmationActivity, "실패: ${it.message}", Toast.LENGTH_LONG).show()
+                Log.w(TAG, "work confirmation sign failed", it)
+                Toast.makeText(this@WorkConfirmationActivity, "제출에 실패했습니다 — 잠시 후 다시 시도해주세요", Toast.LENGTH_LONG).show()
             }
         }
     }

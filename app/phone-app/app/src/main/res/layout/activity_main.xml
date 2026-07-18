@@ -80,7 +80,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="현재 현장"
-                    android:textSize="11sp"
+                    android:textSize="13sp"
                     android:textColor="#64748B" />
 
                 <TextView
@@ -97,7 +97,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="-"
-                    android:textSize="11sp"
+                    android:textSize="13sp"
                     android:textColor="#64748B" />
             </LinearLayout>
 
@@ -324,7 +324,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="· 현장 반경 100m 이내에서만 출석체크가 가능합니다.\n· 부정 출석이 확인될 경우 근무 인정이 되지 않을 수 있습니다."
-                    android:textSize="11sp"
+                    android:textSize="13sp"
                     android:textColor="#1E40AF"
                     android:lineSpacingExtra="2dp" />
             </LinearLayout>

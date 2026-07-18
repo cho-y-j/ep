@@ -71,6 +71,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/client/**").hasRole("CLIENT")
                         // P3d: 안전관리 이행 보고서 — BP·ADMIN·CLIENT 공용(서비스에서 현장 스코프 재검증). CLIENT 전역 차단의 예외.
                         .requestMatchers(HttpMethod.GET, "/api/safety-reports").hasAnyRole("ADMIN", "BP", "CLIENT")
+                        // P4a: 안전 상황판 — BP·ADMIN·CLIENT 공용(서비스에서 현장 스코프 재검증). CLIENT 전역 차단의 예외.
+                        .requestMatchers("/api/safety-board/**").hasAnyRole("ADMIN", "BP", "CLIENT")
                         // CLIENT 도 접근 가능한 공용(본인 스코프) 엔드포인트 — 로그인 세션·알림.
                         .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
                         .requestMatchers("/api/notifications/**").authenticated()

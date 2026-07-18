@@ -6,10 +6,12 @@ import PageContainer from '../../components/ui/PageContainer';
 
 type CompanyRow = { id: number; name: string; type?: string | null };
 type PersonRow = { id: number; name: string; supplierName?: string | null };
+type SiteRow = { id: number; name: string };
 
 export default function AdminAnnouncementsPage() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [siteId, setSiteId] = useState<string>('');
   const [supplierId, setSupplierId] = useState<string>('');
   const [selectedPersonIds, setSelectedPersonIds] = useState<number[]>([]);
   const [target, setTarget] = useState<'phone' | 'all'>('phone');
@@ -19,6 +21,7 @@ export default function AdminAnnouncementsPage() {
 
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [persons, setPersons] = useState<PersonRow[]>([]);
+  const [sites, setSites] = useState<SiteRow[]>([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
 
   useEffect(() => {
@@ -26,11 +29,13 @@ export default function AdminAnnouncementsPage() {
     Promise.all([
       api.get<CompanyRow[]>('/api/companies').catch(() => ({ data: [] as CompanyRow[] })),
       api.get<any>('/api/persons?size=500').catch(() => ({ data: { content: [] } })),
-    ]).then(([cs, ps]) => {
+      api.get<SiteRow[]>('/api/sites').catch(() => ({ data: [] as SiteRow[] })),
+    ]).then(([cs, ps, ss]) => {
       if (cancelled) return;
       const list = Array.isArray(ps.data) ? ps.data : (ps.data?.content ?? []);
       setCompanies(cs.data ?? []);
       setPersons(list.map((p: any) => ({ id: p.id, name: p.name, supplierName: p.supplierName ?? p.supplier_name })));
+      setSites(Array.isArray(ss.data) ? ss.data : []);
     }).finally(() => { if (!cancelled) setLoadingMeta(false); });
     return () => { cancelled = true; };
   }, []);
@@ -57,6 +62,7 @@ export default function AdminAnnouncementsPage() {
     setResult(null);
     try {
       const payload: Record<string, unknown> = { title: title.trim(), body: body.trim(), target };
+      if (siteId) payload.site_id = Number(siteId);
       if (supplierId) payload.supplier_id = Number(supplierId);
       if (selectedPersonIds.length > 0) payload.person_ids = selectedPersonIds;
       const res = await api.post('/api/announcements/broadcast', payload);
@@ -96,6 +102,21 @@ export default function AdminAnnouncementsPage() {
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               placeholder="자세한 내용을 입력하세요"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">현장 (선택 — 안전 상황판 확인율 집계)</label>
+            <select
+              value={siteId}
+              onChange={(e) => setSiteId(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white"
+              disabled={loadingMeta}
+            >
+              <option value="">현장 미지정</option>
+              {sites.map((st) => (
+                <option key={st.id} value={st.id}>{st.name}</option>
+              ))}
+            </select>
           </div>
 
           <div>

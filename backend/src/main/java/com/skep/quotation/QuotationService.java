@@ -425,7 +425,7 @@ public class QuotationService {
                     NotificationType.QUOTATION_RECEIVED,
                     titleLabel,
                     bpLabel + " — " + label + " 견적 요청이 도착했습니다",
-                    "QUOTATION_REQUEST", qr.getId(), null);
+                    "QUOTATION_REQUEST", qr.getId(), null, notifications.senderLabelOf(actor));
         }
         String resourceLabel = (type == QuotationRequestType.MANPOWER)
                 ? NotificationLabels.personRole(req.manpowerRole())
@@ -684,7 +684,7 @@ public class QuotationService {
                     "견적 응답 수신",
                     supplierName + " 가 [" + label2 + "] 견적에 "
                             + (Boolean.TRUE.equals(req.accept()) ? "수락" : "거부") + " 응답했습니다",
-                    "QUOTATION_REQUEST", qr.getId(), qr.getSiteId());
+                    "QUOTATION_REQUEST", qr.getId(), qr.getSiteId(), notifications.senderLabelOf(actor));
         }
 
         auditLog.record(actor, AuditAction.QUOTATION_RESPONDED, AuditTargetType.QUOTATION_REQUEST,
@@ -728,7 +728,7 @@ public class QuotationService {
                 NotificationType.QUOTATION_FINALIZED,
                 "견적 최종 수락",
                 "[" + finalLabel + "] 견적이 최종 수락되었습니다. 작업계획서는 BP가 별도로 작성합니다.",
-                "QUOTATION_REQUEST", qr.getId(), qr.getSiteId());
+                "QUOTATION_REQUEST", qr.getId(), qr.getSiteId(), notifications.senderLabelOf(actor));
 
         auditLog.record(actor, AuditAction.QUOTATION_FINALIZED, AuditTargetType.QUOTATION_REQUEST,
                 qr.getId(), qr.getBpCompanyId(), qr.getSiteId(),

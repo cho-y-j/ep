@@ -26,6 +26,43 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     /** ADMIN 전체. */
     Page<Notification> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
+    /**
+     * P4d: 가시성 + 필터 통합 목록.
+     * - includeAll=true (ADMIN): 전체. 그 외: 직접(userId) + 회사 broadcast(companyId).
+     * - has* 플래그로 각 필터 on/off. (PostgreSQL 은 IS NULL 만 있는 null 바인드의 타입을 추론 못 하므로
+     *   모든 바인드 파라미터를 non-null 로 넘기고 boolean 가드로 제어.)
+     */
+    @Query("""
+            SELECT n FROM Notification n
+            WHERE (
+                    :includeAll = true
+                 OR n.targetUserId = :userId
+                 OR (n.targetUserId IS NULL AND n.targetCompanyId = :companyId)
+                  )
+              AND (:hasUnread = false
+                   OR (:unreadVal = true AND n.readAt IS NULL)
+                   OR (:unreadVal = false AND n.readAt IS NOT NULL))
+              AND (:hasTypes = false OR n.type IN :typeList)
+              AND (:hasFrom = false OR n.createdAt >= :fromTs)
+              AND (:hasQ = false
+                   OR LOWER(n.title) LIKE :qLike
+                   OR LOWER(n.message) LIKE :qLike
+                   OR (n.senderLabel IS NOT NULL AND LOWER(n.senderLabel) LIKE :qLike))
+            ORDER BY n.createdAt DESC
+            """)
+    Page<Notification> findFiltered(@Param("includeAll") boolean includeAll,
+                                    @Param("userId") Long userId,
+                                    @Param("companyId") Long companyId,
+                                    @Param("hasUnread") boolean hasUnread,
+                                    @Param("unreadVal") boolean unreadVal,
+                                    @Param("hasTypes") boolean hasTypes,
+                                    @Param("typeList") List<String> typeList,
+                                    @Param("hasFrom") boolean hasFrom,
+                                    @Param("fromTs") java.time.LocalDateTime fromTs,
+                                    @Param("hasQ") boolean hasQ,
+                                    @Param("qLike") String qLike,
+                                    Pageable pageable);
+
     /** ADMIN 전체 미읽음 수. */
     long countByReadAtIsNull();
 

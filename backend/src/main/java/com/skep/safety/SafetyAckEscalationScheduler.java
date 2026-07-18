@@ -35,7 +35,7 @@ public class SafetyAckEscalationScheduler {
     public static final long ESCALATE_AFTER_MIN = 5;
 
     /** 작업자에게 발송돼 [확인]을 받아야 하는 kind (워치 응급/낙상 SOS 는 별도 관리 흐름 → 제외). */
-    private static final Set<String> ACK_KINDS = Set.of("wind_stop", "heat", "rest");
+    private static final Set<String> ACK_KINDS = Set.of("wind_stop", "heat", "rest", "watch_offline");
 
     private final FieldSafetyAlertRepository alertRepo;
     private final PersonRepository persons;
@@ -104,7 +104,7 @@ public class SafetyAckEscalationScheduler {
         if (p != null && p.getSupplierId() != null) companies.add(p.getSupplierId());
         for (Long companyId : companies) {
             notifications.sendToCompany(companyId, NotificationType.SAFETY_ACK_MISSING,
-                    title, message, "SITE", a.getSiteId(), a.getSiteId());
+                    title, message, "SITE", a.getSiteId(), a.getSiteId(), "시스템 (안전알림 미확인)");
         }
         log.warn("SafetyAckEscalation alert={} person={} kind={} → re-alert + notify {} companies",
                 a.getId(), a.getPersonId(), a.getKind(), companies.size());
@@ -115,6 +115,7 @@ public class SafetyAckEscalationScheduler {
             case "wind_stop" -> "강풍 작업중지";
             case "heat" -> "폭염";
             case "rest" -> "휴식";
+            case "watch_offline" -> "워치 신호 두절";
             default -> "안전";
         };
     }

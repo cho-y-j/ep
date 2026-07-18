@@ -80,7 +80,7 @@ public class ResourceCheckService {
                 "RESOURCE_CHECK_REQUEST",
                 "점검 요청 도착 — " + checkLabel,
                 label + " — 마감일: " + (req.dueDate() != null ? req.dueDate().toString() : "미정"),
-                "RESOURCE_CHECK", entity.getId(), null);
+                "RESOURCE_CHECK", entity.getId(), null, notifications.senderLabelOf(actor));
 
         // 알림톡 발송 (수신번호 입력 시) — 인앱 알림과 별개로 카카오 알림톡/SMS 통지
         sendAlimtalkIfRequested(req, bpCompanyId != null ? bpCompanyId : 0L, actor);
@@ -113,7 +113,7 @@ public class ResourceCheckService {
                 "RESOURCE_CHECK_SUBMITTED",
                 "점검 결과 회신 도착",
                 ownerLabel(entity.getOwnerType(), entity.getOwnerId()) + " — " + checkTypeLabel(entity.getCheckType()),
-                "RESOURCE_CHECK", entity.getId(), null);
+                "RESOURCE_CHECK", entity.getId(), null, notifications.senderLabelOf(actor));
 
         return toResponse(entity);
     }
@@ -145,7 +145,7 @@ public class ResourceCheckService {
                 "RESOURCE_CHECK_SUBMITTED",
                 "점검 결과 회신 도착",
                 ownerLabel(entity.getOwnerType(), entity.getOwnerId()) + " — " + checkTypeLabel(entity.getCheckType()),
-                "RESOURCE_CHECK", entity.getId(), null);
+                "RESOURCE_CHECK", entity.getId(), null, notifications.senderLabelOf(actor));
 
         return toResponse(entity);
     }
@@ -207,7 +207,7 @@ public class ResourceCheckService {
                 "RESOURCE_CHECK_REJECTED",
                 "점검 회신 반려됨 — 재제출 필요",
                 ownerLabel(entity.getOwnerType(), entity.getOwnerId()) + " — " + checkTypeLabel(entity.getCheckType()),
-                "RESOURCE_CHECK", entity.getId(), null);
+                "RESOURCE_CHECK", entity.getId(), null, notifications.senderLabelOf(actor));
 
         return toResponse(entity);
     }

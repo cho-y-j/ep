@@ -1,0 +1,593 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { AxiosError } from 'axios';
+import { api } from '../../lib/api';
+import AppShell from '../../components/layout/AppShell';
+import KakaoMap, { type MapMarker, type MapCircle, type PolygonGeoJson, type KakaoMapHandle } from '../../components/KakaoMap';
+import { useAuth } from '../auth/AuthContext';
+import { toast } from '../../lib/toast';
+import { ackState, KIND_LABEL, LEVEL_LABEL } from '../../types/safetyAlert';
+import type { BoardSite, SiteBoard, AlertMarker, RecipientStatus, WatchWorker } from '../../types/safetyBoard';
+import LegalInspectionStatusCard from '../safety/LegalInspectionStatusCard';
+
+const HAS_KAKAO_KEY = !!import.meta.env.VITE_KAKAO_JS_KEY;
+const POLL_MS = 30_000;
+const WATCH_OFFLINE_SEC = 30 * 60;   // P5-W0 30분 무수신 = 두절.
+
+type TabKey = 'alerts' | 'watch' | 'inspection' | 'announcement' | 'report' | 'settings';
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
+
+const STAGE_LEVEL_BADGE: Record<string, string> = {
+  info: 'bg-emerald-100 text-emerald-700',
+  caution: 'bg-amber-100 text-amber-700',
+  warning: 'bg-orange-100 text-orange-700',
+  danger: 'bg-rose-100 text-rose-700',
+};
+
+/**
+ * P4a 안전 상황판 — 맵 중심 단일 관제. BP·ADMIN(자기/전체 현장)·CLIENT(자기 원청, 읽기).
+ * 상단 지도(주인공) + 요약 스트립 + 탭(알림/점검/공지/보고서/설정).
+ */
+export default function SafetyBoardPage() {
+  const { user } = useAuth();
+  const role = user?.role;
+  const isClient = role === 'CLIENT';
+  const canManage = role === 'ADMIN' || role === 'BP';
+
+  const [sites, setSites] = useState<BoardSite[]>([]);
+  const [siteId, setSiteId] = useState<number | null>(null);
+  const [board, setBoard] = useState<SiteBoard | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [tab, setTab] = useState<TabKey>('alerts');
+  const [expandedAnn, setExpandedAnn] = useState<number | null>(null);
+  const [recipients, setRecipients] = useState<Record<number, RecipientStatus[]>>({});
+  const mapRef = useRef<KakaoMapHandle>(null);
+
+  // 현장 목록 로드 → 첫 현장 자동 선택.
+  useEffect(() => {
+    api.get<BoardSite[]>('/api/safety-board/sites')
+      .then((r) => {
+        setSites(r.data);
+        if (r.data.length > 0) setSiteId((prev) => prev ?? r.data[0].id);
+      })
+      .catch((e) => {
+        const err = e as AxiosError<{ message?: string }>;
+        toast.error(err.response?.data?.message ?? '현장 목록을 불러올 수 없습니다');
+      });
+  }, []);
+
+  async function loadBoard(id: number, silent = false) {
+    if (!silent) setLoading(true);
+    try {
+      const r = await api.get<SiteBoard>(`/api/safety-board/sites/${id}`);
+      setBoard(r.data);
+      setUpdatedAt(new Date());
+    } catch (e) {
+      const err = e as AxiosError<{ message?: string }>;
+      if (!silent) toast.error(err.response?.data?.message ?? '상황판을 불러올 수 없습니다');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }
+
+  // 현장 선택 시 로드 + 30초 폴링.
+  useEffect(() => {
+    if (siteId == null) return;
+    loadBoard(siteId);
+    const t = setInterval(() => loadBoard(siteId, true), POLL_MS);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId]);
+
+  const geo = board && board.latitude != null && board.longitude != null;
+  const mapCenter = geo ? { lat: board!.latitude!, lng: board!.longitude! } : null;
+
+  const polygon = useMemo<PolygonGeoJson | null>(() => {
+    if (!board?.polygon_geojson) return null;
+    try { return JSON.parse(board.polygon_geojson) as PolygonGeoJson; } catch { return null; }
+  }, [board?.polygon_geojson]);
+
+  const circles = useMemo<MapCircle[]>(() => {
+    if (!geo) return [];
+    return [{ id: `site-${board!.site_id}`, center: mapCenter!, radiusM: board!.geofence_radius_m ?? 300, color: 'amber' }];
+  }, [geo, board, mapCenter]);
+
+  const markers = useMemo<MapMarker[]>(() => {
+    if (!board) return [];
+    const out: MapMarker[] = [];
+    // 현장 중심.
+    if (geo) {
+      out.push({
+        id: `sitecenter-${board.site_id}`, position: mapCenter!, label: board.site_name, color: 'amber',
+        tooltipHtml: `<div style="padding:6px 10px;font-size:12px"><b>${escapeHtml(board.site_name)}</b><div style="margin-top:2px;color:#64748b">현장 범위${board.geofence_radius_m ? ` ${board.geofence_radius_m}m` : ''}</div></div>`,
+      });
+    }
+    // 작업자 마커 — 체크인=파랑 / 체크아웃=회색.
+    for (const w of board.workers) {
+      if (w.lat == null || w.lng == null) continue;
+      const when = new Date(w.check_in_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      out.push({
+        id: `worker-${w.person_id}`, position: { lat: w.lat, lng: w.lng },
+        label: w.name, color: w.checked_in ? 'blue' : 'slate',
+        tooltipHtml: `<div style="padding:8px 10px;font-size:12px"><b>${escapeHtml(w.name)}</b><div style="margin-top:2px;color:#475569">${w.checked_in ? '체크인 중' : '퇴근'}</div><div style="margin-top:2px;color:#64748b">${when} 출근</div></div>`,
+      });
+    }
+    // 경보 마커 — 심각도 색 + 미확인 펄스.
+    for (const a of board.alerts) {
+      if (a.lat == null || a.lng == null) continue;
+      const kind = KIND_LABEL[a.kind] ?? a.kind;
+      const lvl = LEVEL_LABEL[a.level] ?? a.level;
+      const ackTxt = a.unacked ? '미확인' : a.acknowledged_at ? '확인됨' : '';
+      out.push({
+        id: `alert-${a.id}`, position: { lat: a.lat, lng: a.lng },
+        label: a.person_name ?? `#${a.id}`,
+        color: a.level === 'danger' ? 'rose' : a.level === 'warning' ? 'amber' : 'slate',
+        pulse: a.unacked,
+        tooltipHtml: `<div style="padding:8px 10px;font-size:12px;min-width:150px"><b>${escapeHtml(a.person_name ?? kind)}</b><div style="margin-top:2px;color:#475569">${escapeHtml(kind)} · ${escapeHtml(lvl)}</div>${a.message ? `<div style="margin-top:2px;color:#64748b">${escapeHtml(a.message)}</div>` : ''}${ackTxt ? `<div style="margin-top:3px;font-weight:600;color:${a.unacked ? '#e11d48' : '#059669'}">${ackTxt}</div>` : ''}</div>`,
+      });
+    }
+    return out;
+  }, [board, geo, mapCenter]);
+
+  function focusOnAlert(a: AlertMarker) {
+    if (a.lat == null || a.lng == null) { toast.error('좌표 정보가 없는 알림입니다'); return; }
+    mapRef.current?.panTo({ lat: a.lat, lng: a.lng }, 2);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function toggleRecipients(annId: number) {
+    if (expandedAnn === annId) { setExpandedAnn(null); return; }
+    setExpandedAnn(annId);
+    if (!recipients[annId]) {
+      try {
+        const r = await api.get<RecipientStatus[]>(`/api/safety-board/announcements/${annId}/recipients`);
+        setRecipients((prev) => ({ ...prev, [annId]: r.data }));
+      } catch (e) {
+        const err = e as AxiosError<{ message?: string }>;
+        toast.error(err.response?.data?.message ?? '수신자를 불러올 수 없습니다');
+      }
+    }
+  }
+
+  const s = board?.summary;
+
+  return (
+    <AppShell>
+      <div className="p-4 sm:p-6 space-y-4">
+        {/* 헤더 + 현장 선택 */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900">안전 상황판</h1>
+            <p className="text-sm text-slate-500">
+              현장 안전을 지도 한 곳에서 — 출근 위치 · 경보 · 기상 · 점검 · 공지 확인
+              {isClient && <span className="ml-1 text-slate-400">(읽기 전용)</span>}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={siteId ?? ''}
+              onChange={(e) => setSiteId(Number(e.target.value))}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white"
+            >
+              {sites.length === 0 && <option value="">현장 없음</option>}
+              {sites.map((st) => (
+                <option key={st.id} value={st.id}>
+                  {st.name}{st.unresolved_alerts > 0 ? ` (경보 ${st.unresolved_alerts})` : ''}
+                </option>
+              ))}
+            </select>
+            <button onClick={() => siteId != null && loadBoard(siteId)}
+              className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+              새로고침
+            </button>
+          </div>
+        </div>
+        {updatedAt && (
+          <div className="text-xs text-slate-400 -mt-2">
+            {updatedAt.toLocaleTimeString('ko-KR')} 기준 · 30초마다 자동 갱신
+          </div>
+        )}
+
+        {/* 상단 지도 — 화면의 주인공 */}
+        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-slate-100">
+            <div className="text-sm font-semibold text-slate-800">
+              현장 지도 {board ? `· 작업자 ${board.workers.length} · 경보 ${board.alerts.length}` : ''}
+            </div>
+            <div className="flex items-center gap-3 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" />체크인</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400" />퇴근</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />경보</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />미확인</span>
+            </div>
+          </div>
+          {HAS_KAKAO_KEY && geo ? (
+            <KakaoMap ref={mapRef} center={mapCenter} zoom={board?.map_zoom ?? 3}
+              markers={markers} circles={circles} polygon={polygon} height="56vh" />
+          ) : (
+            <MapFallback board={board} hasKey={HAS_KAKAO_KEY} hasGeo={!!geo} />
+          )}
+        </div>
+
+        {/* 요약 스트립 */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          <StatCard label="체감온도">
+            {s?.weather.available ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-lg font-bold text-slate-800 tabular-nums">{s.weather.feels_like}℃</span>
+                {s.weather.stage_label && (
+                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${STAGE_LEVEL_BADGE[s.weather.level ?? ''] ?? 'bg-slate-100 text-slate-600'}`}>
+                    {s.weather.stage_label}
+                  </span>
+                )}
+              </div>
+            ) : <span className="text-sm text-slate-400">—</span>}
+          </StatCard>
+          <StatCard label="풍속">
+            {s?.weather.available && s.weather.wind_mps != null ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-lg font-bold text-slate-800 tabular-nums">{s.weather.wind_mps}<span className="text-xs font-medium text-slate-400"> m/s</span></span>
+                {s.weather.wind_stop_active && <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-semibold text-rose-700">작업중지</span>}
+              </div>
+            ) : <span className="text-sm text-slate-400">—</span>}
+          </StatCard>
+          <StatCard label="출근">
+            <span className="text-lg font-bold text-slate-800 tabular-nums">{s?.attended ?? 0}</span>
+            <span className="text-xs text-slate-400"> 명 (체크인 {s?.checked_in ?? 0})</span>
+          </StatCard>
+          <StatCard label="미확인 알림">
+            <span className={`text-lg font-bold tabular-nums ${(s?.unacked_alerts ?? 0) > 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+              {s?.unacked_alerts ?? 0}
+            </span>
+          </StatCard>
+          <StatCard label="법정점검">
+            <span className="text-lg font-bold text-slate-800 tabular-nums">{s?.legal_done ?? 0}</span>
+            <span className="text-xs text-slate-400"> / {s?.legal_target ?? 0}</span>
+          </StatCard>
+          <StatCard label="조종원 점검">
+            <span className="text-lg font-bold text-slate-800 tabular-nums">{s?.operator_done ?? 0}</span>
+            <span className="text-xs text-slate-400"> / {s?.operator_target ?? 0}</span>
+          </StatCard>
+          <StatCard label="공지 확인">
+            <span className="text-lg font-bold text-slate-800 tabular-nums">{s?.announcement_read ?? 0}</span>
+            <span className="text-xs text-slate-400"> / {s?.announcement_total ?? 0}</span>
+          </StatCard>
+        </div>
+
+        {/* 탭 */}
+        <div className="flex flex-wrap gap-1 border-b border-slate-200">
+          <TabBtn active={tab === 'alerts'} onClick={() => setTab('alerts')}>알림·확인</TabBtn>
+          <TabBtn active={tab === 'watch'} onClick={() => setTab('watch')}>워치</TabBtn>
+          <TabBtn active={tab === 'inspection'} onClick={() => setTab('inspection')}>점검</TabBtn>
+          <TabBtn active={tab === 'announcement'} onClick={() => setTab('announcement')}>공지</TabBtn>
+          <TabBtn active={tab === 'report'} onClick={() => setTab('report')}>보고서</TabBtn>
+          {canManage && <TabBtn active={tab === 'settings'} onClick={() => setTab('settings')}>설정</TabBtn>}
+        </div>
+
+        <div className="tab-fade-in">
+          {tab === 'alerts' && <AlertsTab board={board} onFocus={focusOnAlert} canManage={canManage} />}
+          {tab === 'watch' && <WatchTab board={board} />}
+          {tab === 'inspection' && <InspectionTab board={board} canManage={canManage} siteId={siteId} />}
+          {tab === 'announcement' && (
+            <AnnouncementTab board={board} canManage={canManage} expanded={expandedAnn}
+              recipients={recipients} onToggle={toggleRecipients} />
+          )}
+          {tab === 'report' && (
+            <LinkCard to="/safety-reports" title="안전관리 이행 보고서"
+              desc="현장·기간별 고지·확인·조치 이력을 조회·인쇄(감사·사고 조사 증빙)." />
+          )}
+          {tab === 'settings' && canManage && (
+            <LinkCard to="/safety-settings" title="안전 설정"
+              desc="현장별 온도 단계·휴식 간격·강풍 임계·점검 게이트(법정 기준 완화 금지)." />
+          )}
+        </div>
+
+        {loading && !board && <div className="text-sm text-slate-400">불러오는 중…</div>}
+      </div>
+    </AppShell>
+  );
+}
+
+// ── 하위 컴포넌트 ──────────────────────────────────────────
+
+function StatCard({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <div className="text-[11px] font-medium text-slate-500 mb-0.5">{label}</div>
+      <div className="flex items-baseline gap-1">{children}</div>
+    </div>
+  );
+}
+
+function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick}
+      className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+        active ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+      }`}>
+      {children}
+    </button>
+  );
+}
+
+/** 지도 우아한 폴백 — 카카오 키 미설정 또는 현장 좌표 미설정. 마커를 목록으로 표시. */
+function MapFallback({ board, hasKey, hasGeo }: { board: SiteBoard | null; hasKey: boolean; hasGeo: boolean }) {
+  const reason = !hasKey ? '지도 키가 설정되지 않아' : !hasGeo ? '현장 좌표가 설정되지 않아' : '';
+  return (
+    <div className="p-4" style={{ minHeight: '52vh' }}>
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 mb-3">
+        {reason} 지도 대신 목록으로 표시합니다. 상황판의 나머지 기능(요약·탭)은 정상 동작합니다.
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <div className="text-sm font-semibold text-slate-800 mb-1">작업자 위치 ({board?.workers.length ?? 0})</div>
+          {(board?.workers.length ?? 0) === 0 ? (
+            <div className="text-sm text-slate-400">오늘 출근 기록 없음</div>
+          ) : (
+            <ul className="space-y-1">
+              {board!.workers.map((w) => (
+                <li key={w.person_id} className="flex items-center gap-2 text-sm">
+                  <span className={`w-2 h-2 rounded-full ${w.checked_in ? 'bg-blue-500' : 'bg-slate-400'}`} />
+                  <span className="font-medium text-slate-800">{w.name}</span>
+                  <span className="text-xs text-slate-400">{w.checked_in ? '체크인' : '퇴근'}</span>
+                  {w.lat != null && w.lng != null && (
+                    <span className="text-xs text-slate-400">· {w.lat.toFixed(4)}, {w.lng.toFixed(4)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-slate-800 mb-1">경보 ({board?.alerts.length ?? 0})</div>
+          {(board?.alerts.length ?? 0) === 0 ? (
+            <div className="text-sm text-slate-400">미해결 경보 없음</div>
+          ) : (
+            <ul className="space-y-1">
+              {board!.alerts.map((a) => (
+                <li key={a.id} className="flex items-center gap-2 text-sm">
+                  <span className={`w-2 h-2 rounded-full ${a.unacked ? 'bg-rose-500 animate-pulse' : a.level === 'danger' ? 'bg-rose-500' : a.level === 'warning' ? 'bg-amber-500' : 'bg-slate-400'}`} />
+                  <span className="font-medium text-slate-800">{a.person_name ?? `#${a.id}`}</span>
+                  <span className="text-xs text-slate-500">{KIND_LABEL[a.kind] ?? a.kind}</span>
+                  {a.unacked && <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">미확인</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AlertsTab({ board, onFocus, canManage }: { board: SiteBoard | null; onFocus: (a: AlertMarker) => void; canManage: boolean }) {
+  const alerts = board?.alerts ?? [];
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-slate-600">미해결 경보 {alerts.length}건 · 행 클릭 시 지도 이동</div>
+        {canManage && <Link to="/safety-alerts" className="text-sm text-brand-600 hover:underline">전체 알림 관리 →</Link>}
+      </div>
+      {alerts.length === 0 ? (
+        <div className="rounded border border-dashed border-slate-300 p-8 text-center text-slate-500">표시할 경보가 없습니다.</div>
+      ) : (
+        <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-left text-slate-600">
+              <tr>
+                <th className="px-3 py-2">시각</th><th className="px-3 py-2">작업자</th>
+                <th className="px-3 py-2">종류</th><th className="px-3 py-2">수준</th><th className="px-3 py-2">확인</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alerts.map((a) => {
+                const st = ackState(a);
+                return (
+                  <tr key={a.id} onClick={() => onFocus(a)}
+                    className="border-t border-slate-100 cursor-pointer hover:bg-slate-50">
+                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{new Date(a.created_at).toLocaleString('ko-KR')}</td>
+                    <td className="px-3 py-2 font-medium text-slate-800">{a.person_name ?? `#${a.id}`}</td>
+                    <td className="px-3 py-2 text-slate-700">{KIND_LABEL[a.kind] ?? a.kind}</td>
+                    <td className="px-3 py-2 text-slate-700">{LEVEL_LABEL[a.level] ?? a.level}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {st === 'na' ? <span className="text-slate-400">—</span>
+                        : st === 'acknowledged' ? <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">확인됨</span>
+                        : st === 'escalated' ? <span className="rounded bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-rose-300">에스컬레이션</span>
+                        : <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">미확인</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// P5-W0 워치 타일 — 상태등(정상/주의/경보·회색=미착용/두절)·마지막 수신·배터리·착용.
+function minsAgo(sec: number | null): string {
+  if (sec == null) return '수신 없음';
+  const m = Math.floor(sec / 60);
+  if (m < 1) return '방금 전';
+  if (m < 60) return `${m}분 전`;
+  return `${Math.floor(m / 60)}시간 ${m % 60}분 전`;
+}
+
+function watchDisplay(w: WatchWorker): { dot: string; label: string; tone: string; pulse: boolean } {
+  const offline = w.last_seen_at == null || (w.seconds_since_seen != null && w.seconds_since_seen > WATCH_OFFLINE_SEC);
+  if (offline) return { dot: 'bg-slate-400', label: '신호 두절', tone: 'text-slate-500', pulse: false };
+  if (w.worn === false) return { dot: 'bg-slate-400', label: '미착용', tone: 'text-slate-500', pulse: false };
+  if (w.state === 'RED') return { dot: 'bg-rose-500', label: '경보', tone: 'text-rose-600', pulse: true };
+  if (w.state === 'YELLOW') return { dot: 'bg-amber-500', label: '주의', tone: 'text-amber-600', pulse: false };
+  return { dot: 'bg-emerald-500', label: '정상', tone: 'text-emerald-600', pulse: false };
+}
+
+function WatchTab({ board }: { board: SiteBoard | null }) {
+  const workers = board?.watch_workers ?? [];
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm text-slate-600">워치 보고 작업자 {workers.length}명 · 상태등·마지막 수신·배터리·착용</div>
+        <div className="flex items-center gap-3 text-xs text-slate-500">
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />정상</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />주의</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />경보</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400" />미착용·두절</span>
+        </div>
+      </div>
+      {workers.length === 0 ? (
+        <div className="rounded border border-dashed border-slate-300 p-8 text-center text-slate-500">
+          워치 상태를 보고한 작업자가 없습니다. 워치 앱이 연결되면 여기에 상태가 표시됩니다.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {workers.map((w) => {
+            const d = watchDisplay(w);
+            const lowBat = w.battery != null && w.battery <= 20;
+            return (
+              <div key={w.person_id} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 flex items-center gap-3">
+                <span className={`w-3 h-3 rounded-full shrink-0 ${d.dot} ${d.pulse ? 'animate-pulse' : ''}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-slate-800 truncate">{w.name}</span>
+                    <span className={`text-xs font-medium ${d.tone}`}>{d.label}</span>
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    {minsAgo(w.seconds_since_seen)} 수신{w.hr != null && w.hr > 0 ? ` · 심박 ${w.hr}` : ''}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  {w.battery != null ? (
+                    <div className={`text-sm font-semibold tabular-nums ${lowBat ? 'text-rose-600' : 'text-slate-700'}`}>
+                      {w.battery}%{lowBat ? ' ⚠' : ''}
+                    </div>
+                  ) : <div className="text-xs text-slate-300">배터리 —</div>}
+                  <div className="text-[11px] text-slate-400">{w.worn === false ? '미착용' : w.worn ? '착용' : '—'}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InspectionTab({ board, canManage, siteId }: { board: SiteBoard | null; canManage: boolean; siteId: number | null }) {
+  const s = board?.summary;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <InspectionCard title="법정점검 (안전점검원 NFC)" done={s?.legal_done ?? 0} target={s?.legal_target ?? 0}
+          desc="오늘 배치 장비 법정점검 · 조종원 일일점검과 별도 트랙" tone="indigo" />
+        <InspectionCard title="조종원 일일점검" done={s?.operator_done ?? 0} target={s?.operator_target ?? 0}
+          desc="오늘 배치 장비 조종원 점검" tone="emerald" />
+      </div>
+      {canManage && siteId != null && <LegalInspectionStatusCard siteId={siteId} />}
+    </div>
+  );
+}
+
+function InspectionCard({ title, done, target, desc, tone }: { title: string; done: number; target: number; desc: string; tone: 'indigo' | 'emerald' }) {
+  const pct = target > 0 ? Math.round((done / target) * 100) : 0;
+  const bar = tone === 'indigo' ? 'bg-indigo-500' : 'bg-emerald-500';
+  const border = tone === 'indigo' ? 'border-indigo-500' : 'border-emerald-500';
+  return (
+    <div className={`rounded-lg border border-slate-200 border-l-4 ${border} bg-white p-3`}>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+          <p className="text-xs text-slate-500">{desc}</p>
+        </div>
+        <span className="text-2xl font-bold tabular-nums text-slate-800">{done}<span className="text-sm font-medium text-slate-400"> / {target}대</span></span>
+      </div>
+      {target > 0 && (
+        <div className="mt-2 h-2 overflow-hidden rounded bg-slate-100">
+          <div className={`h-full rounded ${pct >= 100 ? 'bg-emerald-500' : bar}`} style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      {target === 0 && <p className="mt-2 text-xs text-slate-400">배치된 점검 대상 장비가 없습니다.</p>}
+    </div>
+  );
+}
+
+function AnnouncementTab({ board, canManage, expanded, recipients, onToggle }: {
+  board: SiteBoard | null; canManage: boolean; expanded: number | null;
+  recipients: Record<number, RecipientStatus[]>; onToggle: (id: number) => void;
+}) {
+  const anns = board?.announcements ?? [];
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-slate-600">이 현장 공지 {anns.length}건 · 확인율·미확인자</div>
+        {canManage && <Link to="/admin/announcements" className="text-sm text-brand-600 hover:underline">공지 발송 →</Link>}
+      </div>
+      {anns.length === 0 ? (
+        <div className="rounded border border-dashed border-slate-300 p-8 text-center text-slate-500">
+          이 현장으로 발송한 공지가 없습니다.{canManage && ' 공지 발송 시 현장을 지정하면 여기에 확인율이 표시됩니다.'}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {anns.map((a) => {
+            const pct = a.recipient_count > 0 ? Math.round((a.read_count / a.recipient_count) * 100) : 0;
+            const recips = recipients[a.id];
+            const unread = recips?.filter((r) => r.read_at == null) ?? [];
+            return (
+              <div key={a.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-slate-800 truncate">{a.title}</div>
+                    <div className="text-xs text-slate-400">{new Date(a.created_at).toLocaleString('ko-KR')}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-lg font-bold tabular-nums text-slate-800">{a.read_count}<span className="text-sm font-medium text-slate-400"> / {a.recipient_count}</span></div>
+                    <button onClick={() => onToggle(a.id)} className="text-xs text-brand-600 hover:underline">
+                      {expanded === a.id ? '접기' : '미확인자 보기'}
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded bg-slate-100">
+                  <div className={`h-full rounded ${pct >= 100 ? 'bg-emerald-500' : 'bg-brand-500'}`} style={{ width: `${pct}%` }} />
+                </div>
+                {expanded === a.id && recips && (
+                  <div className="mt-3 border-t border-slate-100 pt-2">
+                    <div className="text-[11px] font-semibold text-slate-500 mb-1">미확인 ({unread.length})</div>
+                    {unread.length === 0 ? (
+                      <div className="text-xs text-emerald-600">전원 확인 완료</div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {unread.map((r) => (
+                          <span key={r.person_id} className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">{r.name}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinkCard({ to, title, desc }: { to: string; title: string; desc: string }) {
+  return (
+    <Link to={to} className="block rounded-lg border border-slate-200 bg-white p-4 hover:border-brand-300 hover:bg-slate-50 transition-colors">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold text-slate-900">{title}</div>
+          <div className="text-xs text-slate-500 mt-0.5">{desc}</div>
+        </div>
+        <span className="text-brand-600">→</span>
+      </div>
+    </Link>
+  );
+}
