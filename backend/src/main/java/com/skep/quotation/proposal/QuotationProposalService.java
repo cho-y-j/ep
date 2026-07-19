@@ -155,7 +155,7 @@ public class QuotationProposalService {
                 NotificationType.QUOTATION_RECEIVED,
                 "공개입찰 새 제안",
                 supplierLabel + " 가 [" + labelOf(qr) + "] 공개입찰에 제안을 보냈습니다",
-                "QUOTATION_PROPOSAL", p.getId(), qr.getSiteId());
+                "QUOTATION_PROPOSAL", p.getId(), qr.getSiteId(), notifications.senderLabelOf(actor));
         return toResponse(p);
     }
 
@@ -258,7 +258,7 @@ public class QuotationProposalService {
                 NotificationType.QUOTATION_FINALIZED,
                 "제안 최종 수락",
                 "[" + labelOf(qr) + "] 공개입찰에 보낸 제안이 최종 선정되었습니다. 작업계획서는 BP가 별도로 작성합니다.",
-                "QUOTATION_PROPOSAL", p.getId(), qr.getSiteId());
+                "QUOTATION_PROPOSAL", p.getId(), qr.getSiteId(), notifications.senderLabelOf(actor));
 
         // 카운트 가득 차면 다른 제안 자동 거절
         long acceptedNow = proposals.countByRequestIdAndStatus(qr.getId(), QuotationProposalStatus.FINAL_ACCEPTED);

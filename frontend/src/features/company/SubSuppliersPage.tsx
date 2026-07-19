@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
-import { PageHeader, DataTable, StatusBadge, type Column } from '../../components/ui';
+import { PageHeader, FilterBar, DataTable, StatusBadge, type Column } from '../../components/ui';
 import BusinessNumberInput from '../../components/forms/BusinessNumberInput';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
@@ -31,6 +31,7 @@ export default function SubSuppliersPage() {
   const [err, setErr] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [rollup, setRollup] = useState<Map<number, ChildRollup>>(new Map());
+  const [q, setQ] = useState('');
 
   useEffect(() => {
     if (!isMaster) return;
@@ -58,6 +59,13 @@ export default function SubSuppliersPage() {
       setRollup(new Map());
     }
   };
+
+  const qLower = q.trim().toLowerCase();
+  const filtered = useMemo(
+    () => items.filter((c) => !qLower
+      || `${c.name} ${c.business_number} ${COMPANY_TYPE_LABEL[c.type]}`.toLowerCase().includes(qLower)),
+    [items, qLower],
+  );
 
   if (!isMaster) {
     return (
@@ -131,11 +139,17 @@ export default function SubSuppliersPage() {
 
         {err && <div className="card border-rose-200 bg-rose-50 text-sm text-rose-800">{err}</div>}
 
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '회사명·사업자번호 검색' }}
+          activeFilterCount={q ? 1 : 0}
+          onReset={() => setQ('')}
+        />
+
         <DataTable
           columns={columns}
-          rows={items}
+          rows={filtered}
           rowKey={(c) => c.id}
-          empty={loading ? '로딩…' : '등록된 하위공급사가 없습니다'}
+          empty={loading ? '로딩…' : items.length === 0 ? '등록된 하위공급사가 없습니다' : '조건에 맞는 하위공급사가 없습니다'}
         />
 
         {items.length > 0 && <PendingApprovals childCompanies={items} />}

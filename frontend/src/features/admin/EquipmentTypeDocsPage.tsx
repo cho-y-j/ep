@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 
@@ -23,6 +24,7 @@ export default function EquipmentTypeDocsPage() {
   const [addType, setAddType] = useState<{ code: string; name: string; grp: string; sortOrder: string } | null>(null);
   const [addDoc, setAddDoc] = useState<{ name: string; hasExpiry: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [q, setQ] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -44,15 +46,17 @@ export default function EquipmentTypeDocsPage() {
       .finally(() => setLoadingRows(false));
   }, [selected]);
 
-  // 종류를 그룹(건설기계/차량/기타)별로 — 등장 순서 유지(정렬은 sort_order).
+  // 종류를 그룹(건설기계/차량/기타)별로 — 등장 순서 유지(정렬은 sort_order). 검색어로 좌측 목록 필터.
+  const qLower = q.trim().toLowerCase();
   const grouped = useMemo(() => {
     const map = new Map<string, EquipType[]>();
     for (const t of types) {
+      if (qLower && !t.name.toLowerCase().includes(qLower)) continue;
       if (!map.has(t.grp)) map.set(t.grp, []);
       map.get(t.grp)!.push(t);
     }
     return Array.from(map.entries());
-  }, [types]);
+  }, [types, qLower]);
 
   /** 종류 추가 → POST /api/admin/equipment-types → 목록 갱신 + 새 종류 선택. */
   async function createType() {
@@ -113,27 +117,24 @@ export default function EquipmentTypeDocsPage() {
   return (
     <AppShell breadcrumb={[{ label: '장비종류 서류' }]}>
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">장비종류 서류 체크리스트</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              장비 종류를 고르고, 각 서류를 <b>필수 / 선택 / 해당없음</b>으로 지정합니다.
-              지정한 필수/선택은 해당 종류 장비의 등록·서류 화면 체크리스트에 그대로 반영됩니다.
-            </p>
-          </div>
-          <div className="flex shrink-0 gap-2">
-            <button type="button"
-              onClick={() => { setAddDoc(null); setAddType({ code: '', name: '', grp: '', sortOrder: '' }); }}
-              className="rounded-lg border border-brand-100 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm hover:bg-brand-50">
-              + 종류 추가
-            </button>
-            <button type="button"
-              onClick={() => { setAddType(null); setAddDoc({ name: '', hasExpiry: false }); }}
-              className="rounded-lg border border-brand-100 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm hover:bg-brand-50">
-              + 서류 추가
-            </button>
-          </div>
-        </div>
+        <PageHeader
+          title="장비종류 서류 체크리스트"
+          subtitle="장비 종류를 고르고, 각 서류를 필수 / 선택 / 해당없음으로 지정합니다. 지정한 필수/선택은 해당 종류 장비의 등록·서류 화면 체크리스트에 반영됩니다."
+          actions={
+            <>
+              <button type="button"
+                onClick={() => { setAddDoc(null); setAddType({ code: '', name: '', grp: '', sortOrder: '' }); }}
+                className="rounded-lg border border-brand-100 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm hover:bg-brand-50">
+                + 종류 추가
+              </button>
+              <button type="button"
+                onClick={() => { setAddType(null); setAddDoc({ name: '', hasExpiry: false }); }}
+                className="rounded-lg border border-brand-100 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm hover:bg-brand-50">
+                + 서류 추가
+              </button>
+            </>
+          }
+        />
 
         {addType && (
           <div className="card p-4 space-y-3">
@@ -174,6 +175,8 @@ export default function EquipmentTypeDocsPage() {
             </div>
           </div>
         )}
+
+        <FilterBar search={{ value: q, onChange: setQ, placeholder: '장비 종류 검색' }} />
 
         {loadingTypes ? (
           <div className="card p-8 text-center text-slate-400">불러오는 중…</div>

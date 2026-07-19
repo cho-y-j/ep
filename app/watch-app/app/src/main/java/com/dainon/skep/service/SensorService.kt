@@ -378,6 +378,8 @@ class SensorService : Service(), SensorEventListener {
                 (map["state"] as? String)?.trim(),
                 (map["send_interval_sec"] as? Number)?.toInt(),
                 (map["hr_duty_sec"] as? Number)?.toInt(),
+                (map["hr_low"] as? Number)?.toInt(),      // P5-W1 개인 대역(보정 반영).
+                (map["hr_high"] as? Number)?.toInt(),
             )
             Log.d(TAG, "📱 policy: ${telemetryPolicy.state}, send=${telemetryPolicy.sendIntervalMs / 1000}s, duty=${telemetryPolicy.hrDutyMs / 1000}s")
         } catch (e: Exception) {
@@ -832,21 +834,18 @@ class SensorService : Service(), SensorEventListener {
                     else -> "night"
                 }
 
-                val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                    .format(java.util.Date())
-
-                val data = mapOf(
-                    "workerId" to WORKER_ID,
-                    "date" to today,
-                    "timeSlot" to timeSlot,
-                    "restHrMean" to restHrMean,
-                    "restHrStd" to restHrStd,
-                    "restSamples" to restHrHistory.size,
-                    "activeHrMean" to activeHrMean,
-                    "activeHrStd" to activeHrStd,
-                    "activeSamples" to activeHrHistory.size,
-                    "workMinutes" to 0,
-                    "restMinutes" to 0,
+                val data = BaselineSyncPayload.build(
+                    restHrMean = restHrMean,
+                    restHrStd = restHrStd,
+                    activeHrMean = activeHrMean,
+                    spo2Mean = spo2Mean,
+                    spo2Std = spo2Std,
+                    bodyTempMean = baselineTempMean,
+                    bodyTempStd = baselineTempStd,
+                    accelBaselineMean = accelBaselineMean,
+                    accelBaselineStd = accelBaselineStd,
+                    alertSpo2Range = alertSpo2Range,
+                    samplesCount = restHrHistory.size + activeHrHistory.size,
                 )
 
                 val success = ServerClient.syncBaseline(data)
@@ -1001,7 +1000,8 @@ class SensorService : Service(), SensorEventListener {
 
                 // 학습 초기 여유 (+20%)
                 val margin = if (totalSamples < 60) 1.2 else 1.0
-                val adjustedUpper = (upperLimit * margin).toInt()
+                // P5-W1: 서버 개인 대역 상한(보정 반영) 우선 — 학습 루프가 온디바이스 진입 임계도 조정. 미학습이면 온디바이스 폴백.
+                val adjustedUpper = telemetryPolicy.serverHrHigh ?: (upperLimit * margin).toInt()
 
                 val isTooHigh = heartRate > adjustedUpper
                 val isTooLow = heartRate > 0 && heartRate < lowerLimit.toInt()
@@ -1217,6 +1217,7 @@ class SensorService : Service(), SensorEventListener {
         emergencyVibrator?.cancel()
         stopEmergencyBeep()
         BleAlertService.cancelEmergency(this)
+        SosBleAdvertiser.stop()   // P5-W3: EMERGENCY 해제 → SOS 광고 중지
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -1271,10 +1272,33 @@ class SensorService : Service(), SensorEventListener {
         val lat = currentLat()
         val lng = currentLng()
         // ① 폰으로 전달 (기본 경로) — 좌표 없어도 항상 중계 시도(폰이 서버로 forward). lat/lng 는 옵션.
-        WearableCommService.sendSafetyAlert(this, WORKER_ID, kind, heartRate, spo2Val, lat, lng)
+        //    P5-W3: 폰 전달 실패 시 워치가 직접 BLE SOS 광고(통신불능 폴백). 성공 시엔 폰이 담당.
+        WearableCommService.sendSafetyAlert(this, WORKER_ID, kind, heartRate, spo2Val, lat, lng) { ok ->
+            onPhoneDeliveryResult(ok)
+        }
         // ② 워치 직접 서버 호출 — lat/lng null 이어도 그대로 보냄 (백엔드는 좌표 빠진 행으로 저장).
         scope.launch {
             ServerClient.sendSafetyAlert(WORKER_ID, kind, heartRate, spo2Val, lat, lng)
+        }
+    }
+
+    /**
+     * P5-W3 통신불능 폴백 — 워치가 보유한 person id.
+     * 폰이 /skep/worker_id 로 하달한 worker_id(= person_id 문자열)를 그대로 사용.
+     * 폰 FindMeAlarmService 와 동일하게 int32 절단. 미페어링(기본 "W-001")이면 -1.
+     */
+    private fun currentPersonId(): Int = WORKER_ID.toLongOrNull()?.toInt() ?: -1
+
+    /**
+     * P5-W3 폰 전달 결과 → BLE SOS 광고 제어(특허 §5.7).
+     * 성공 = 폰이 담당(또는 재연결) → 중지. 실패 && EMERGENCY 확정 → SOS 광고 시작(제3자 폰이 대리 중계).
+     * 둘 다 멱등.
+     */
+    private fun onPhoneDeliveryResult(success: Boolean) {
+        if (success) {
+            SosBleAdvertiser.stop()
+        } else if (currentState == WorkerState.EMERGENCY) {
+            SosBleAdvertiser.start(this, currentPersonId())
         }
     }
 
@@ -1289,6 +1313,7 @@ class SensorService : Service(), SensorEventListener {
         emergencyVibrator?.cancel()
         stopEmergencyBeep()
         BleAlertService.cancelEmergency(this)
+        SosBleAdvertiser.stop()   // P5-W3: 오작동 종료 → SOS 광고 중지
         // 학습 안 함
     }
 
@@ -1548,7 +1573,8 @@ class SensorService : Service(), SensorEventListener {
             put("records", records)
         }
         scope.launch {
-            try { WearableCommService.sendStatus(this@SensorService, payload) } catch (_: Exception) {}
+            // P5-W3: 매 틱 폰 전달 결과로 SOS 광고 제어 — 폰 재연결(성공) 시 중지, EMERGENCY 중 실패 시 시작.
+            try { WearableCommService.sendStatus(this@SensorService, payload) { ok -> onPhoneDeliveryResult(ok) } } catch (_: Exception) {}
         }
     }
 

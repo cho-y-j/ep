@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import AppShell from '../../components/layout/AppShell';
 import CollapsibleSection from '../../components/ui/CollapsibleSection';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatWon } from '../../lib/format';
 
@@ -67,6 +68,12 @@ export default function SettlementPage() {
   const [error, setError] = useState<string | null>(null);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  // 클라이언트 필터 — 이미 로드된 데이터를 좁힘(서버 재조회는 기간만).
+  const [q, setQ] = useState('');
+  const [siteFilter, setSiteFilter] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState('');
+  const [bpFilter, setBpFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
 
   const load = useCallback((f: string, t: string) => {
     setLoading(true);
@@ -105,38 +112,96 @@ export default function SettlementPage() {
     }
   };
 
+  // 필터 옵션 — 로드된 데이터에서 파생(현장·소유사·발주사).
+  const { siteOptions, ownerOptions, bpOptions } = useMemo(() => {
+    const sites = new Map<string, string>();
+    const owners = new Map<string, string>();
+    const bps = new Map<string, string>();
+    data?.owners.forEach((o) => {
+      owners.set(String(o.owner_company_id), o.owner_company_name);
+      o.items.forEach((it) => {
+        if (it.site_id != null) sites.set(String(it.site_id), it.site_name ?? `현장 #${it.site_id}`);
+        if (it.bp_company_id != null) bps.set(String(it.bp_company_id), it.bp_company_name ?? `발주사 #${it.bp_company_id}`);
+      });
+    });
+    const toOpts = (m: Map<string, string>) => [...m.entries()].map(([value, label]) => ({ value, label }));
+    return { siteOptions: toOpts(sites), ownerOptions: toOpts(owners), bpOptions: toOpts(bps) };
+  }, [data]);
+
+  const qLower = q.trim().toLowerCase();
+  // 행(자원) 단위 필터가 걸리면 소계·합계를 보이는 행 기준으로 재계산(소유사만 좁힐 땐 서버 합계 유지 → 기존 계산 무회귀).
+  const itemFiltersActive = !!(siteFilter || bpFilter || typeFilter || qLower);
+  const view = useMemo(() => {
+    if (!data) return null;
+    const owners = data.owners
+      .filter((o) => !ownerFilter || String(o.owner_company_id) === ownerFilter)
+      .map((o) => {
+        const items = itemFiltersActive
+          ? o.items.filter((it) => {
+              if (siteFilter && String(it.site_id ?? '') !== siteFilter) return false;
+              if (bpFilter && String(it.bp_company_id ?? '') !== bpFilter) return false;
+              if (typeFilter && it.resource_type !== typeFilter) return false;
+              if (qLower) {
+                const hay = `${it.resource_label} ${it.site_name ?? ''} ${it.bp_company_name ?? ''}`.toLowerCase();
+                if (!hay.includes(qLower)) return false;
+              }
+              return true;
+            })
+          : o.items;
+        const total_amount = itemFiltersActive
+          ? items.reduce((s, it) => s + (it.amount ?? 0), 0)
+          : o.total_amount;
+        return { ...o, items, total_amount };
+      })
+      .filter((o) => o.items.length > 0);
+    const grand_total = itemFiltersActive || ownerFilter
+      ? owners.reduce((s, o) => s + o.total_amount, 0)
+      : data.grand_total;
+    return { owners, grand_total };
+  }, [data, ownerFilter, siteFilter, bpFilter, typeFilter, qLower, itemFiltersActive]);
+
+  const activeFilterCount =
+    [q, siteFilter, ownerFilter, bpFilter, typeFilter].filter(Boolean).length + (from || to ? 1 : 0);
+  const resetFilters = () => {
+    setQ(''); setSiteFilter(''); setOwnerFilter(''); setBpFilter(''); setTypeFilter('');
+    setFrom(''); setTo(''); void load('', '');
+  };
+
   return (
     <AppShell breadcrumb={[{ label: '투입 정산' }]}>
       <div className="space-y-5">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">투입 정산</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            소유자(본인/협력사)별로 근무일수 기준 정산 금액을 요약합니다.
-          </p>
-          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            월대 = (월대 ÷ 25) × 근무일수 + OT, 일대 = 일대 × 근무일수 + OT. 근무일수·OT일수는 투입 관리에서 입력합니다(미입력이면 금액 미산출). 미입력 시 작업확인서(서명완료) 기준 자동 집계. 수수료 미표기.
-          </p>
-        </div>
+        <PageHeader
+          title="투입 정산"
+          subtitle="소유자(본인/협력사)별로 근무일수 기준 정산 금액을 요약합니다."
+          actions={
+            <>
+              <button onClick={() => void downloadStatement('pdf')} className="btn-ghost text-sm">거래내역서 PDF</button>
+              <button onClick={() => void downloadStatement('xlsx')} className="btn-ghost text-sm">Excel</button>
+            </>
+          }
+        />
 
-        <div className="card flex flex-wrap items-end gap-3 p-4">
-          <label className="text-xs text-slate-500">시작
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-              className="mt-1 block rounded border border-slate-300 px-2 py-1 text-sm" />
-          </label>
-          <label className="text-xs text-slate-500">종료
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-              className="mt-1 block rounded border border-slate-300 px-2 py-1 text-sm" />
-          </label>
-          <button onClick={() => void load(from, to)} className="btn-primary px-4 py-1.5 text-sm">조회</button>
-          {(from || to) && (
-            <button onClick={() => { setFrom(''); setTo(''); void load('', ''); }}
-              className="text-xs text-slate-500 underline">전체</button>
-          )}
-          <div className="ml-auto flex gap-2">
-            <button onClick={() => void downloadStatement('pdf')} className="btn-ghost text-sm">거래내역서 PDF</button>
-            <button onClick={() => void downloadStatement('xlsx')} className="btn-ghost text-sm">Excel</button>
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          월대 = (월대 ÷ 25) × 근무일수 + OT, 일대 = 일대 × 근무일수 + OT. 근무일수·OT일수는 투입 관리에서 입력합니다(미입력이면 금액 미산출). 미입력 시 작업확인서(서명완료) 기준 자동 집계. 수수료 미표기.
+        </p>
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '자원명·현장·발주사 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={siteFilter} onChange={setSiteFilter} placeholder="현장 전체" options={siteOptions} />
+          <FilterSelect value={ownerFilter} onChange={setOwnerFilter} placeholder="소유사 전체" options={ownerOptions} />
+          <FilterSelect value={bpFilter} onChange={setBpFilter} placeholder="발주사(BP) 전체" options={bpOptions} />
+          <FilterSelect value={typeFilter} onChange={setTypeFilter} placeholder="자원종류 전체"
+            options={[{ value: 'EQUIPMENT', label: '장비' }, { value: 'PERSON', label: '인원' }]} />
+          <div className="flex items-center gap-1">
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-auto" />
+            <span className="text-xs text-slate-400">~</span>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-auto" />
+            <button onClick={() => void load(from, to)} className="btn-ghost text-sm">기간 조회</button>
           </div>
-        </div>
+        </FilterBar>
 
         {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
@@ -144,14 +209,16 @@ export default function SettlementPage() {
           <p className="text-sm text-slate-400">불러오는 중…</p>
         ) : !data || data.owners.length === 0 ? (
           <div className="card p-8 text-center text-sm text-slate-400">정산할 투입 내역이 없습니다.</div>
+        ) : !view || view.owners.length === 0 ? (
+          <div className="card p-8 text-center text-sm text-slate-400">조건에 맞는 정산 내역이 없습니다.</div>
         ) : (
           <>
             <div className="card flex items-center justify-between p-5">
               <span className="text-sm font-semibold text-slate-700">전체 합계</span>
-              <span className="text-2xl font-bold text-slate-900 tabular-nums">{formatWon(data.grand_total)}</span>
+              <span className="text-2xl font-bold text-slate-900 tabular-nums">{formatWon(view.grand_total)}</span>
             </div>
 
-            {data.owners.map((o) => (
+            {view.owners.map((o) => (
               <CollapsibleSection
                 key={o.owner_company_id}
                 title={o.owner_company_name}
@@ -159,7 +226,7 @@ export default function SettlementPage() {
                 status={o.is_self
                   ? <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">본인</span>
                   : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">협력사</span>}
-                summary={`${o.item_count}건 · ${formatWon(o.total_amount)}`}
+                summary={`${o.items.length}건 · ${formatWon(o.total_amount)}`}
               >
                 <OwnerTable owner={o} onSave={saveQuantity} />
               </CollapsibleSection>

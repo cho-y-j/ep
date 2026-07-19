@@ -1,9 +1,14 @@
 package com.skep.safety;
 
 import com.skep.safety.dto.SafetyReportDtos.AlertSummary;
+import com.skep.safety.dto.SafetyReportDtos.EmergencyResponseSummary;
+import com.skep.safety.dto.SafetyReportDtos.EmergencyTimeline;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -54,6 +59,57 @@ public final class SafetyReportCalculator {
         Double avgAckMinutes = ackedForAvg == 0 ? null
                 : Math.round((ackSecondsSum / (double) ackedForAvg) / 60.0 * 10.0) / 10.0;
         return new AlertSummary(total, ackNeeded, acknowledged, ackRatePct, avgAckMinutes, escalated);
+    }
+
+    /** 개인 응급(대응체인 대상) kind — SOS/낙상/BLE 릴레이 생성. 강풍·폭염(현장 단위)은 제외. */
+    static final Set<String> EMERGENCY_KINDS = Set.of("emergency", "fall", "fall_detected");
+
+    public static boolean isEmergencyChain(FieldSafetyAlert a) {
+        return EMERGENCY_KINDS.contains(a.getKind() == null ? "" : a.getKind());
+    }
+
+    private static Long elapsed(LocalDateTime from, LocalDateTime to) {
+        if (from == null || to == null) return null;
+        long sec = Duration.between(from, to).getSeconds();
+        return sec < 0 ? 0 : sec;
+    }
+
+    /**
+     * P5-W2/W3 긴급 대응 이력 — 개인 긴급 경보별 골든타임 사슬 + 평균 최초응답시간.
+     * responderCountByAlert = alertId→응답자 수(서비스가 배치 조회로 주입).
+     */
+    public static EmergencyResponseSummary emergencyResponseSummary(
+            List<FieldSafetyAlert> alerts, Map<Long, Integer> responderCountByAlert) {
+        List<EmergencyTimeline> timelines = new ArrayList<>();
+        int chainActivated = 0, responded = 0, relayedCount = 0, escalatedCount = 0;
+        long respSecSum = 0;
+        int respForAvg = 0;
+        for (FieldSafetyAlert a : alerts) {
+            if (!isEmergencyChain(a)) continue;
+            boolean relayed = a.getRelayedAt() != null;
+            boolean escalated = a.getPeerEscalatedAt() != null;
+            if (a.getPeerNotifiedAt() != null) chainActivated++;
+            if (relayed) relayedCount++;
+            if (escalated) escalatedCount++;
+            Long responseElapsed = elapsed(a.getPeerNotifiedAt(), a.getFirstResponseAt());
+            if (a.getFirstResponseAt() != null) {
+                responded++;
+                if (responseElapsed != null) { respSecSum += responseElapsed; respForAvg++; }
+            }
+            timelines.add(new EmergencyTimeline(
+                    a.getId(), a.getKind(), kindLabel(a.getKind()),
+                    a.getCreatedAt(), a.getPeerNotifiedAt(), a.getFirstResponseAt(), a.getResolvedAt(),
+                    elapsed(a.getCreatedAt(), a.getPeerNotifiedAt()),
+                    responseElapsed,
+                    elapsed(a.getCreatedAt(), a.getResolvedAt()),
+                    responderCountByAlert.getOrDefault(a.getId(), 0),
+                    relayed, escalated));
+        }
+        Double avgFirstResponse = respForAvg == 0 ? null
+                : Math.round((respSecSum / (double) respForAvg) * 10.0) / 10.0;
+        return new EmergencyResponseSummary(
+                timelines.size(), chainActivated, responded, avgFirstResponse,
+                relayedCount, escalatedCount, timelines);
     }
 
     /** kind → 한글 라벨(타임라인·미이행 표시). */

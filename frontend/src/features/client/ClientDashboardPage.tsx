@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader } from '../../components/ui';
 import MiniBarChart from '../dashboard/MiniBarChart';
 import HourlyBars from './HourlyBars';
 import { ackState } from '../../types/safetyAlert';
@@ -49,17 +50,17 @@ export default function ClientDashboardPage() {
 
   return (
     <AppShell breadcrumb={[{ label: '원청 관제' }]}>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-950">{orgName} 현장 통합 관제</h1>
-          <p className="mt-1 text-sm text-slate-500">내 원청 현장의 투입·출근·안전·서류 리스크를 한눈에 봅니다 (읽기 전용).</p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageHeader
+          title={`${orgName} 현장 통합 관제`}
+          subtitle="내 원청 현장의 투입·출근·안전·서류 리스크를 한눈에 봅니다 (읽기 전용)."
+        />
+        <div className="flex flex-wrap items-center gap-2">
           {sites.length > 0 && (
             <select
               value={selectedId ?? ''}
               onChange={(e) => setSelectedId(Number(e.target.value))}
-              className="input bg-white"
+              className="input bg-white w-auto"
             >
               {sites.map((s) => (
                 <option key={s.site_id} value={s.site_id}>

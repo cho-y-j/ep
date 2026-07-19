@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 
 interface Outgoing {
@@ -24,6 +25,9 @@ interface Outgoing {
 export default function OutgoingSentPage() {
   const [rows, setRows] = useState<Outgoing[]>([]);
   const [loading, setLoading] = useState(true);
+  // 클라이언트 필터 — 로드된 발송 견적을 좁힘.
+  const [q, setQ] = useState('');
+  const [signedFilter, setSignedFilter] = useState('');
 
   useEffect(() => {
     api.get<Outgoing[]>('/api/outgoing-quotations/sent')
@@ -31,19 +35,41 @@ export default function OutgoingSentPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const qLower = q.trim().toLowerCase();
+  const filtered = rows.filter((o) => {
+    if (signedFilter === 'SIGNED' && !o.bp_signed) return false;
+    if (signedFilter === 'PENDING' && o.bp_signed) return false;
+    if (qLower) {
+      const hay = `${o.equipment_label ?? ''} ${o.person_label ?? ''} ${o.recipient_company_name ?? ''} ${o.recipient_email ?? ''} ${o.supplier_company_name ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  });
+  const activeFilterCount = [q, signedFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setSignedFilter(''); };
+
   return (
     <AppShell breadcrumb={[{ label: '내 견적' }]}>
       <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h1 className="text-2xl font-bold">내 견적 (발송함)</h1>
-            <p className="text-sm text-slate-500 mt-1">내가 BP 또는 외부 이메일로 발송한 견적서.</p>
-          </div>
-          <Link to="/outgoing-quotations/new" className="btn-primary">+ 새 견적 발송</Link>
-        </div>
+        <PageHeader
+          title="내 견적 (발송함)"
+          subtitle="내가 BP 또는 외부 이메일로 발송한 견적서."
+          actions={<Link to="/outgoing-quotations/new" className="btn-primary">+ 새 견적 발송</Link>}
+        />
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '자원·수신처 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={signedFilter} onChange={setSignedFilter} placeholder="수락상태 전체"
+            options={[{ value: 'SIGNED', label: '수락됨' }, { value: 'PENDING', label: '대기' }]} />
+        </FilterBar>
 
         {loading ? <div className="text-slate-400">로딩 중…</div> : rows.length === 0 ? (
           <div className="card p-8 text-center text-slate-400">발송한 견적이 없습니다.</div>
+        ) : filtered.length === 0 ? (
+          <div className="card p-8 text-center text-slate-400">조건에 맞는 견적이 없습니다.</div>
         ) : (
           <table className="card w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
@@ -57,7 +83,7 @@ export default function OutgoingSentPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {rows.map((o) => (
+              {filtered.map((o) => (
                 <tr key={o.id}>
                   <td className="px-4 py-3 text-slate-500">{new Date(o.sent_at).toLocaleString('ko-KR')}</td>
                   <td className="px-4 py-3">{o.equipment_label ?? o.person_label}</td>

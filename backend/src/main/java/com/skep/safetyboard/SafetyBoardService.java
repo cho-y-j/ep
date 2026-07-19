@@ -11,12 +11,18 @@ import com.skep.equipment.DailyEquipmentInspection;
 import com.skep.equipment.DailyEquipmentInspectionRepository;
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentRepository;
+import com.skep.health.BpCheckin;
+import com.skep.health.BpCheckinRepository;
 import com.skep.legalinspection.LegalInspection;
 import com.skep.legalinspection.LegalInspectionRepository;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
 import com.skep.safety.FieldSafetyAlert;
 import com.skep.safety.FieldSafetyAlertRepository;
+import com.skep.safety.FieldSensorReading;
+import com.skep.safety.FieldSensorReadingRepository;
+import com.skep.safety.PersonVitalBaseline;
+import com.skep.safety.PersonVitalBaselineRepository;
 import com.skep.safety.SiteWindState;
 import com.skep.safety.SiteWindStateRepository;
 import com.skep.safety.WorkerWatchState;
@@ -75,6 +81,9 @@ public class SafetyBoardService {
     private final DailyEquipmentInspectionRepository dailyInspections;
     private final SiteWindStateRepository windStates;
     private final WorkerWatchStateRepository watchStates;
+    private final FieldSensorReadingRepository sensorReadings;
+    private final PersonVitalBaselineRepository vitalBaselines;
+    private final BpCheckinRepository bpCheckins;
     private final KmaWeatherClient weatherClient;
     private final PersonRepository persons;
     private final AnnouncementRepository announcements;
@@ -175,18 +184,50 @@ public class SafetyBoardService {
                 annReadTotal, annRecipTotal);
 
         // P5-W0 워커 워치 타일 — 현장 스코프 최신 상태(문제 먼저 보이게 오래된 수신순).
+        // P5-W1 스파크라인: 최근 2h 심박 시계열 + 개인 대역(정상범위 밴드) 배치 조회.
         LocalDateTime nowTs = LocalDateTime.now();
         List<WorkerWatchState> watch = watchStates.findBySiteId(siteId);
-        Map<Long, Person> watchPersons = loadPersons(watch.stream()
-                .map(WorkerWatchState::getPersonId).toList());
+        List<Long> watchPersonIds = watch.stream().map(WorkerWatchState::getPersonId).toList();
+        Map<Long, Person> watchPersons = loadPersons(watchPersonIds);
+        Map<Long, List<Integer>> seriesByPerson = new java.util.HashMap<>();
+        Map<Long, PersonVitalBaseline> bandByPerson = Map.of();
+        if (!watchPersonIds.isEmpty()) {
+            for (FieldSensorReading r : sensorReadings
+                    .findByPersonIdInAndRecordedAtAfterOrderByRecordedAtAsc(watchPersonIds, nowTs.minusHours(2))) {
+                if (r.getHr() != null && r.getHr() > 0) {
+                    seriesByPerson.computeIfAbsent(r.getPersonId(), k -> new ArrayList<>()).add(r.getHr());
+                }
+            }
+            bandByPerson = vitalBaselines.findAllById(watchPersonIds).stream()
+                    .collect(Collectors.toMap(PersonVitalBaseline::getPersonId, Function.identity()));
+        }
+        Map<Long, PersonVitalBaseline> bands = bandByPerson;
+        // P5-W4 1겹 — 오늘 혈압 체크인 판정(인당 최신 1건). 워치 상시 측정 불가라 마커/팝오버 병기.
+        Map<Long, String> bpVerdictByPerson = new java.util.HashMap<>();
+        for (BpCheckin bp : bpCheckins.findBySiteIdAndMeasuredAtBetweenOrderByMeasuredAtDesc(
+                siteId, todayStart, todayStart.plusDays(1))) {
+            bpVerdictByPerson.putIfAbsent(bp.getPersonId(), bp.getVerdict().name());   // 최신순 조회 → 첫 값=최신.
+        }
         List<WatchWorker> watchWorkers = watch.stream()
                 .sorted(Comparator.comparing(WorkerWatchState::getLastSeenAt,
                         Comparator.nullsFirst(Comparator.naturalOrder())))
-                .map(w -> new WatchWorker(
-                        w.getPersonId(), personName(watchPersons, w.getPersonId()), w.getState(),
-                        w.getLastSeenAt(),
-                        w.getLastSeenAt() == null ? null : Duration.between(w.getLastSeenAt(), nowTs).getSeconds(),
-                        w.getBattery(), w.getWorn(), w.getHr()))
+                .map(w -> {
+                    PersonVitalBaseline pv = bands.get(w.getPersonId());
+                    List<Integer> series = seriesByPerson.getOrDefault(w.getPersonId(), List.of());
+                    if (series.size() > 90) series = series.subList(series.size() - 90, series.size());  // 경량 cap.
+                    return new WatchWorker(
+                            w.getPersonId(), personName(watchPersons, w.getPersonId()), w.getState(),
+                            w.getLastSeenAt(),
+                            w.getLastSeenAt() == null ? null : Duration.between(w.getLastSeenAt(), nowTs).getSeconds(),
+                            w.getBattery(), w.getWorn(), w.getHr(),
+                            w.getBodyTemp(), w.getLat(), w.getLng(),
+                            series,
+                            pv != null ? pv.getRestHrLow() : null, pv != null ? pv.getRestHrHigh() : null,
+                            pv != null ? pv.getWorkHrLow() : null, pv != null ? pv.getWorkHrHigh() : null,
+                            pv != null && pv.isLearned(),
+                            healthRisk(watchPersons, w.getPersonId()),
+                            bpVerdictByPerson.get(w.getPersonId()));
+                })
                 .toList();
 
         return new SiteBoard(site.getId(), site.getName(), site.getCode(), site.getAddress(),
@@ -285,5 +326,11 @@ public class SafetyBoardService {
     private String personName(Map<Long, Person> map, Long personId) {
         Person p = personId == null ? null : map.get(personId);
         return p != null ? p.getName() : (personId != null ? "작업자 #" + personId : null);
+    }
+
+    /** P5-W4 2겹 — 워치 타일 고위험군 뱃지용. 미상은 NORMAL. */
+    private String healthRisk(Map<Long, Person> map, Long personId) {
+        Person p = personId == null ? null : map.get(personId);
+        return p != null ? p.getHealthRiskLevel().name() : "NORMAL";
     }
 }

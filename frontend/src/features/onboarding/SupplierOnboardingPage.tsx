@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader } from '../../components/ui';
 import type { DeployCheckResult } from '../readiness/DeployCheckCard';
 
 type ResourceType = 'EQUIPMENT' | 'PERSON';
@@ -130,13 +131,10 @@ export default function SupplierOnboardingPage() {
   return (
     <AppShell breadcrumb={[{ label: '기투입 등록' }]}>
       <div className="mx-auto max-w-5xl space-y-6">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-950">기투입 등록 (기통과 소급)</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            이미 현장에 투입 중인 장비·인력을 선택해 소급 처리합니다. BP가 프로그램을 쓰면 <b>BP 승인 요청</b>,
-            아니면 <b>구두승인</b>으로 즉시 확정할 수 있어요. 확정되면 반입검사·건강검진·안전교육 통과가 자동 반영됩니다.
-          </p>
-        </header>
+        <PageHeader
+          title="기투입 등록 (기통과 소급)"
+          subtitle="이미 현장에 투입 중인 장비·인력을 선택해 소급 처리합니다. BP가 프로그램을 쓰면 BP 승인 요청, 아니면 구두승인으로 즉시 확정할 수 있어요. 확정되면 반입검사·건강검진·안전교육 통과가 자동 반영됩니다."
+        />
 
         {/* 자원 선택 */}
         <section>

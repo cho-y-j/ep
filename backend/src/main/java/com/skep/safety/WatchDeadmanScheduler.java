@@ -48,6 +48,14 @@ public class WatchDeadmanScheduler {
         return lastSeenAt == null || lastSeenAt.isBefore(now.minusMinutes(afterMin));
     }
 
+    /**
+     * D1 픽스: 열린 세션이 이미 삭제된 work_plan 을 참조하면(FK 위반 → 그 분 전체 배치 롤백)
+     * alert 의 work_plan_id 를 null 로. 존재하는 계획서만 그 id, 없으면 null. (순수 — 단위 테스트용)
+     */
+    static Long resolveAlertWorkPlanId(WorkPlan wp) {
+        return wp == null ? null : wp.getId();
+    }
+
     @Scheduled(cron = "0 * * * * *")   // 매분.
     @Transactional
     public void checkDeadman() {
@@ -73,7 +81,8 @@ public class WatchDeadmanScheduler {
 
             WorkPlan wp = workPlans.findById(s.getWorkPlanId()).orElse(null);
             boolean removed = ws != null && Boolean.FALSE.equals(ws.getWorn());   // 벗음 사유 라벨.
-            fireDeadman(personId, s.getWorkPlanId(),
+            // D1: 삭제된 계획서 참조 시 work_plan_id 는 null (위 findById 로 존재 확인 — 추가 쿼리 없음).
+            fireDeadman(personId, resolveAlertWorkPlanId(wp),
                     wp != null ? wp.getSiteId() : null, wp != null ? wp.getBpCompanyId() : null, ws, removed);
             created++;
         }

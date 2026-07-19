@@ -13,12 +13,18 @@ class WatchTelemetryPolicy {
     var state: String = "GREEN"; private set
     var sendIntervalMs: Long = 600_000L; private set   // 10분.
     var hrDutyMs: Long = 60_000L; private set          // 60초.
+    // P5-W1 서버 개인 심박 대역(보정 반영). null = 미학습 → 온디바이스 임계로 폴백.
+    var serverHrHigh: Int? = null; private set         // MILD_ANOMALY 진입 상한.
+    var serverHrLow: Int? = null; private set
 
     /** 서버 정책 적용. 유효 범위 밖·누락 값은 무시(기존 유지). */
-    fun apply(state: String?, sendIntervalSec: Int?, hrDutySec: Int?) {
+    fun apply(state: String?, sendIntervalSec: Int?, hrDutySec: Int?, hrLow: Int? = null, hrHigh: Int? = null) {
         if (state == "GREEN" || state == "YELLOW") this.state = state
         if (sendIntervalSec != null && sendIntervalSec in 10..3600) sendIntervalMs = sendIntervalSec * 1000L
         if (hrDutySec != null && hrDutySec in 5..600) hrDutyMs = hrDutySec * 1000L
+        // 개인 대역 — 유효 범위만 반영(누락/범위밖은 기존 유지). 워치 1차 판정 임계로 사용.
+        if (hrHigh != null && hrHigh in 80..240) serverHrHigh = hrHigh
+        if (hrLow != null && hrLow in 30..120) serverHrLow = hrLow
     }
 
     /** 묶음 전송할 때인가 — 보낼 게 있고(버퍼>0), 실시간(경보)이거나 전송 주기 경과. */

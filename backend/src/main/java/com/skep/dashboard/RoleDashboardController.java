@@ -12,6 +12,8 @@ import com.skep.document.DocumentType;
 import com.skep.document.DocumentTypeRepository;
 import com.skep.document.OwnerType;
 import com.skep.equipment.EquipmentRepository;
+import com.skep.notification.NotificationService;
+import com.skep.notification.dto.NotificationResponse;
 import com.skep.person.PersonRepository;
 import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
@@ -70,6 +72,7 @@ public class RoleDashboardController {
     private final WorkPlanPersonRepository wpp;
     private final WorksheetSignatureRepository signatures;
     private final BpSitePipelineService bpSitePipeline;
+    private final NotificationService notifications;
 
     public RoleDashboardController(UserRepository users, CompanyRepository companies,
                                    SiteRepository sites, SiteParticipantRepository participants,
@@ -82,7 +85,8 @@ public class RoleDashboardController {
                                    WorkPlanEquipmentRepository wpe,
                                    WorkPlanPersonRepository wpp,
                                    WorksheetSignatureRepository signatures,
-                                   BpSitePipelineService bpSitePipeline) {
+                                   BpSitePipelineService bpSitePipeline,
+                                   NotificationService notifications) {
         this.users = users;
         this.companies = companies;
         this.sites = sites;
@@ -99,6 +103,7 @@ public class RoleDashboardController {
         this.wpp = wpp;
         this.signatures = signatures;
         this.bpSitePipeline = bpSitePipeline;
+        this.notifications = notifications;
     }
 
     @GetMapping("/admin/summary")
@@ -120,7 +125,8 @@ public class RoleDashboardController {
         body.put("recent_audit_logs", auditLog.recent(actor, 10).stream()
                 .map(r -> AuditLogResponse.from(r.log())).toList());
         body.put("today_work_plans", toWorkPlanItems(upcoming, 20));
-        body.put("recent_notifications", List.of());
+        body.put("recent_notifications", notifications.list(actor, 0, 5, null, null, null, null)
+                .getContent().stream().map(NotificationResponse::from).toList());
         return body;
     }
 

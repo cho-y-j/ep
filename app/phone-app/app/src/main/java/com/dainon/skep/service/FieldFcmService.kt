@@ -11,6 +11,7 @@ import android.util.Log
 import com.dainon.skep.net.FieldApi
 import com.dainon.skep.net.Prefs
 import com.dainon.skep.ui.AnnouncementActivity
+import com.dainon.skep.ui.PeerEmergencyActivity
 import com.dainon.skep.ui.SafetyAlertActivity
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -46,6 +47,28 @@ class FieldFcmService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+
+        // P5-W2 대응체인 — kind 기반 분기(type/severity 계산 이전에 처리). 데이터-only 페이로드.
+        when (data["kind"]) {
+            "find_me" -> {   // 피재자 폰: 파인드미 자가발동(사이렌·스트로브·BLE).
+                val alertId = data["alert_id"]?.toLongOrNull() ?: -1L
+                val personId = data["person_id"]?.toLongOrNull()
+                    ?: Prefs.workerId(this)?.toLongOrNull() ?: -1L
+                FindMeAlarmService.start(this, alertId, personId)
+                return
+            }
+            "find_me_stop" -> { FindMeAlarmService.stop(this); return }   // 해제.
+            "peer_emergency" -> {   // 동료 폰: 근접 동료 호출 풀스크린.
+                showPeerEmergency(
+                    alertId = data["alert_id"]?.toLongOrNull() ?: -1L,
+                    victimName = data["victim_name"] ?: "동료",
+                    lat = data["lat"]?.toDoubleOrNull(),
+                    lng = data["lng"]?.toDoubleOrNull(),
+                )
+                return
+            }
+        }
+
         val type = data["type"] ?: message.notification?.let { "announcement" } ?: return
         val title = data["title"] ?: message.notification?.title ?: "공지"
         val body = data["body"] ?: message.notification?.body ?: ""
@@ -128,6 +151,58 @@ class FieldFcmService : FirebaseMessagingService() {
         nm.notify(reqCode, notification)
 
         // 앱이 포그라운드일 때 즉시 띄우기.
+        runCatching { startActivity(fullScreen) }
+    }
+
+    /**
+     * P5-W2 동료 긴급 호출(kind=peer_emergency) — 긴급 채널(알람 사운드·DND 우회) + 풀스크린 PeerEmergencyActivity.
+     * 피재자 이름·좌표를 넘겨 거리 표시·[제가 갑니다]·[지도 열기]를 처리한다.
+     */
+    private fun showPeerEmergency(alertId: Long, victimName: String, lat: Double?, lng: Double?) {
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        nm.createNotificationChannel(
+            NotificationChannel(EMERGENCY_CHANNEL_ID, "긴급 안전알림", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "작업중지·응급 등 긴급 안전알림(무음모드 우회)"
+                setSound(alarmUri, attrs)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 600, 400, 600, 400, 600)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setBypassDnd(true)
+            }
+        )
+
+        val title = "동료 긴급 호출"
+        val body = "${victimName}님이 위급합니다. 응답해 주세요."
+        val fullScreen = Intent(this, PeerEmergencyActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("alert_id", alertId)
+            putExtra("victim_name", victimName)
+            putExtra("lat", lat ?: Double.NaN)
+            putExtra("lng", lng ?: Double.NaN)
+        }
+        val reqCode = if (alertId > 0) alertId.toInt() else victimName.hashCode()
+        val pi = PendingIntent.getActivity(
+            this, reqCode, fullScreen,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = Notification.Builder(this, EMERGENCY_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(Notification.PRIORITY_MAX)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setContentIntent(pi)
+            .setFullScreenIntent(pi, true)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(reqCode, notification)
+
         runCatching { startActivity(fullScreen) }
     }
 

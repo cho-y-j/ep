@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import type { FieldDeploymentResponse } from '../../types/fieldDeployment';
 
@@ -13,6 +14,10 @@ export default function FieldDeploymentBpInbox() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
+  // 클라이언트 필터 — 로드된 요청을 좁힘. 선택·일괄수락은 보이는(필터된) 행 기준.
+  const [q, setQ] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [siteFilter, setSiteFilter] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -31,13 +36,39 @@ export default function FieldDeploymentBpInbox() {
       return next;
     });
   };
-  const allSelected = items.length > 0 && selected.size === items.length;
+  const siteOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    items.forEach((r) => { if (r.target_site_name) m.set(r.target_site_name, r.target_site_name); });
+    return [...m.values()].map((v) => ({ value: v, label: v }));
+  }, [items]);
+
+  const qLower = q.trim().toLowerCase();
+  const filtered = useMemo(() => items.filter((r) => {
+    if (typeFilter && r.resource_type !== typeFilter) return false;
+    if (siteFilter && (r.target_site_name ?? '') !== siteFilter) return false;
+    if (qLower) {
+      const hay = `${r.resource_label ?? ''} ${r.supplier_company_name ?? ''} ${r.target_site_name ?? ''} ${r.note ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  }), [items, typeFilter, siteFilter, qLower]);
+
+  const activeFilterCount = [q, typeFilter, siteFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setTypeFilter(''); setSiteFilter(''); };
+
+  // 선택/일괄수락은 보이는(필터된) 행 기준으로만 동작 — 숨겨진 선택은 처리 대상에서 제외.
+  const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
   const toggleAll = () => {
-    setSelected((prev) => (prev.size === items.length ? new Set() : new Set(items.map((r) => r.id))));
+    setSelected((prev) => {
+      const allSel = filtered.length > 0 && filtered.every((r) => prev.has(r.id));
+      const next = new Set(prev);
+      if (allSel) filtered.forEach((r) => next.delete(r.id)); else filtered.forEach((r) => next.add(r.id));
+      return next;
+    });
   };
 
   // 희망 현장(target_site_id)이 있는 선택 건만 일괄 수락 대상. 없는 건은 개별 "수락 + 배치" 필요.
-  const selectedRows = items.filter((r) => selected.has(r.id));
+  const selectedRows = filtered.filter((r) => selected.has(r.id));
   const bulkAcceptable = selectedRows.filter((r) => r.target_site_id != null);
   const bulkExcluded = selectedRows.filter((r) => r.target_site_id == null);
 
@@ -71,16 +102,26 @@ export default function FieldDeploymentBpInbox() {
   return (
     <AppShell breadcrumb={[{ label: '받은 투입 요청' }]}>
       <div className="mx-auto max-w-7xl space-y-4">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-950">받은 투입 요청</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            공급사가 "현장으로 보낼게요" 요청한 자원입니다. 수락하면 요청이 수락 처리되고 공급사에 알림이 전송됩니다. 실제 투입 현황은 작업계획서(서명 완료) 기준으로 반영됩니다.
-          </p>
-        </header>
+        <PageHeader
+          title="받은 투입 요청"
+          subtitle='공급사가 "현장으로 보낼게요" 요청한 자원입니다. 수락하면 요청이 수락 처리되고 공급사에 알림이 전송됩니다. 실제 투입 현황은 작업계획서(서명 완료) 기준으로 반영됩니다.'
+        />
 
-        {selected.size > 0 && (
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '자원·공급사·현장 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={typeFilter} onChange={setTypeFilter} placeholder="자원종류 전체"
+            options={[{ value: 'EQUIPMENT', label: '장비' }, { value: 'PERSON', label: '인원' }]} />
+          {siteOptions.length > 0 && (
+            <FilterSelect value={siteFilter} onChange={setSiteFilter} placeholder="희망 현장 전체" options={siteOptions} />
+          )}
+        </FilterBar>
+
+        {selectedRows.length > 0 && (
           <div className="card p-3 flex items-center justify-between border-amber-200 bg-amber-50/60">
-            <span className="text-sm text-amber-800 font-medium">{selected.size}건 선택됨</span>
+            <span className="text-sm text-amber-800 font-medium">{selectedRows.length}건 선택됨</span>
             <div className="flex gap-2">
               <button type="button" onClick={() => setSelected(new Set())}
                       className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900">선택 해제</button>
@@ -95,6 +136,8 @@ export default function FieldDeploymentBpInbox() {
         {loading ? <div className="text-sm text-slate-400">불러오는 중…</div>
          : items.length === 0 ? (
           <div className="card p-8 text-center text-slate-400">받은 요청이 없습니다.</div>
+        ) : filtered.length === 0 ? (
+          <div className="card p-8 text-center text-slate-400">조건에 맞는 요청이 없습니다.</div>
         ) : (
           <div className="card overflow-x-auto p-0">
             <table className="w-full text-sm">
@@ -113,7 +156,7 @@ export default function FieldDeploymentBpInbox() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {items.map((r) => (
+                {filtered.map((r) => (
                   <tr key={r.id}>
                     <td className="px-3 py-2">
                       <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)}

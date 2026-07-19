@@ -27,11 +27,20 @@ public class SafetyBoardDtos {
     /**
      * P5-W0 워커 워치 타일 — 상태등(state)·마지막 수신(secondsSinceSeen)·배터리·착용.
      * 회색(미착용/두절) 판정은 프론트에서 worn·secondsSinceSeen 로 파생.
+     * P5-W1: hrSeries=최근 2h 심박(스파크라인), rest/work 대역=정상범위 밴드, baselineLearned=학습 여부(미학습 뱃지).
+     * 지도 통합: bodyTemp(체온)·lat/lng(최근 위치, 워치 지도 마커)·bpVerdict(오늘 혈압 판정 OK|CAUTION|BLOCK, null=미측정).
      */
     public record WatchWorker(
             Long personId, String name, String state,
             LocalDateTime lastSeenAt, Long secondsSinceSeen,
-            Integer battery, Boolean worn, Integer hr) {}
+            Integer battery, Boolean worn, Integer hr,
+            java.math.BigDecimal bodyTemp,
+            Double lat, Double lng,
+            List<Integer> hrSeries,
+            Integer restHrLow, Integer restHrHigh, Integer workHrLow, Integer workHrHigh,
+            boolean baselineLearned,
+            String healthRiskLevel,      // P5-W4 2겹: NORMAL|CAUTION|HIGH (HIGH=관제 뱃지).
+            String bpVerdict) {}
 
     /** 오늘 출근 작업자 마커. checkedIn=체크인 중(미퇴근). */
     public record WorkerMarker(

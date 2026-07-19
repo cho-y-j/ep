@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 
 /** 점검 항목 — 백엔드 items JSONB 패스스루. no 는 저장 시 행 순서로 재부여. */
 type Item = { no: number; text: string; required: boolean };
@@ -24,6 +25,7 @@ export default function SafetyCheckTemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Template | 'new' | null>(null);
+  const [q, setQ] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -49,18 +51,19 @@ export default function SafetyCheckTemplatesPage() {
     }
   };
 
+  const qLower = q.trim().toLowerCase();
+  const filtered = qLower ? templates.filter((t) => t.name.toLowerCase().includes(qLower)) : templates;
+
   return (
     <AppShell breadcrumb={[{ label: '점검 템플릿' }]}>
       <div className="mx-auto max-w-5xl space-y-6">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-950">법정점검 템플릿 (S2′)</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              안전점검원이 NFC 태그 후 수행하는 법정점검 체크리스트입니다. 항목을 자유롭게 추가·삭제·정렬하세요.
-            </p>
-          </div>
-          <button onClick={() => setEditing('new')} className="btn-primary shrink-0">+ 새 템플릿</button>
-        </header>
+        <PageHeader
+          title="법정점검 템플릿 (S2′)"
+          subtitle="안전점검원이 NFC 태그 후 수행하는 법정점검 체크리스트입니다. 항목을 자유롭게 추가·삭제·정렬하세요."
+          actions={<button onClick={() => setEditing('new')} className="btn-primary shrink-0">+ 새 템플릿</button>}
+        />
+
+        <FilterBar search={{ value: q, onChange: setQ, placeholder: '템플릿 이름 검색' }} />
 
         {loading ? (
           <div className="text-sm text-slate-400">불러오는 중…</div>
@@ -69,9 +72,11 @@ export default function SafetyCheckTemplatesPage() {
             <div className="mb-2 text-4xl">🛡️</div>
             <div className="font-semibold text-slate-700">등록된 점검 템플릿이 없습니다</div>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="card p-8 text-center text-sm text-slate-400">조건에 맞는 템플릿이 없습니다.</div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {templates.map((t) => (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {filtered.map((t) => (
               <TemplateCard key={t.id} t={t} onEdit={() => setEditing(t)} onDelete={() => void remove(t)} />
             ))}
           </div>

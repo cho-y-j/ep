@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { SignaturePadDialog } from '../workPlan/create/components/SignaturePadDialog';
@@ -25,6 +26,9 @@ export default function InboxPage() {
   const [rows, setRows] = useState<Outgoing[]>([]);
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState<Outgoing | null>(null);
+  // 클라이언트 필터 — 로드된 수신 견적을 좁힘.
+  const [q, setQ] = useState('');
+  const [signedFilter, setSignedFilter] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -49,21 +53,43 @@ export default function InboxPage() {
     }
   };
 
+  const qLower = q.trim().toLowerCase();
+  const filtered = rows.filter((o) => {
+    if (signedFilter === 'SIGNED' && !o.bp_signed) return false;
+    if (signedFilter === 'PENDING' && o.bp_signed) return false;
+    if (qLower) {
+      const hay = `${o.supplier_company_name ?? ''} ${o.equipment_label ?? ''} ${o.person_label ?? ''} ${o.note ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  });
+  const activeFilterCount = [q, signedFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setSignedFilter(''); };
+
   return (
     <AppShell breadcrumb={[{ label: '수신함' }]}>
       <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold">수신 견적 (영업 자료)</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            장비/인력 공급사가 우리 회사에 보낸 견적서. 내용 확인 후 수락 사인을 남길 수 있습니다.
-          </p>
-        </div>
+        <PageHeader
+          title="수신 견적 (영업 자료)"
+          subtitle="장비/인력 공급사가 우리 회사에 보낸 견적서. 내용 확인 후 수락 사인을 남길 수 있습니다."
+        />
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '공급사·자원 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={signedFilter} onChange={setSignedFilter} placeholder="사인상태 전체"
+            options={[{ value: 'SIGNED', label: '사인 완료' }, { value: 'PENDING', label: '미사인' }]} />
+        </FilterBar>
 
         {loading ? <div className="text-slate-400">로딩 중…</div> : rows.length === 0 ? (
           <div className="card p-8 text-center text-slate-400">수신된 견적이 없습니다.</div>
+        ) : filtered.length === 0 ? (
+          <div className="card p-8 text-center text-slate-400">조건에 맞는 견적이 없습니다.</div>
         ) : (
           <div className="space-y-3">
-            {rows.map((o) => (
+            {filtered.map((o) => (
               <div key={o.id} className="card p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div>

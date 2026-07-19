@@ -108,7 +108,7 @@ public class DispatchedPersonService {
             String supplierName = companies.findById(finalSupplier).map(Company::getName).orElse("공급사");
             notifications.sendToCompany(bpCompanyId, "QUOTATION_DISPATCH", "인원 견적서 도착",
                     supplierName + " — 인원 " + entities.size() + "명 (견적 #" + requestId + ")",
-                    "QUOTATION_REQUEST", requestId, qr.getSiteId());
+                    "QUOTATION_REQUEST", requestId, qr.getSiteId(), notifications.senderLabelOf(actor));
         }
 
         // V80: 이 (요청,공급사)로 발송 완료 → 잔존 DRAFT 초안 폐기. confirm 경로면 이후 CONFIRMED 로 덮어씀.

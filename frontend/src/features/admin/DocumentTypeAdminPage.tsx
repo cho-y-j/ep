@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import { ALL_PERSON_ROLES, PERSON_ROLE_LABEL } from '../../types/person';
@@ -69,6 +70,7 @@ export default function DocumentTypeAdminPage() {
   const [newRequired, setNewRequired] = useState(false);
   const [newHasExpiry, setNewHasExpiry] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [q, setQ] = useState('');
 
   async function load() {
     setLoading(true);
@@ -120,22 +122,23 @@ export default function DocumentTypeAdminPage() {
     } finally { setAdding(false); }
   }
 
-  const groups = useMemo(() => ({
-    PERSON: types.filter((t) => t.applies_to === 'PERSON'),
-    EQUIPMENT: types.filter((t) => t.applies_to === 'EQUIPMENT'),
-    COMPANY: types.filter((t) => t.applies_to === 'COMPANY'),
-  }), [types]);
+  const qLower = q.trim().toLowerCase();
+  const groups = useMemo(() => {
+    const match = (t: DocType) => !qLower || t.name.toLowerCase().includes(qLower);
+    return {
+      PERSON: types.filter((t) => t.applies_to === 'PERSON' && match(t)),
+      EQUIPMENT: types.filter((t) => t.applies_to === 'EQUIPMENT' && match(t)),
+      COMPANY: types.filter((t) => t.applies_to === 'COMPANY' && match(t)),
+    };
+  }, [types, qLower]);
 
   return (
     <AppShell breadcrumb={[{ label: '서류종류 관리' }]}>
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">서류종류 관리</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            자원별 필수/선택 서류와 역할·카테고리 적용 범위를 지정합니다.
-            예: 조종원에게 신분증·보험증을 필수로 지정하면, 해당 인원 서류 등록 시 "필수"로 묶여 표시됩니다.
-          </p>
-        </div>
+        <PageHeader
+          title="서류종류 관리"
+          subtitle="자원별 필수/선택 서류와 역할·카테고리 적용 범위를 지정합니다."
+        />
 
         {/* 신규 추가 */}
         <section className="card p-4 flex flex-wrap items-end gap-3">
@@ -166,6 +169,8 @@ export default function DocumentTypeAdminPage() {
             {adding ? '추가 중…' : '+ 추가'}
           </button>
         </section>
+
+        <FilterBar search={{ value: q, onChange: setQ, placeholder: '서류 이름 검색' }} />
 
         {loading ? (
           <div className="card p-8 text-center text-slate-400">불러오는 중…</div>

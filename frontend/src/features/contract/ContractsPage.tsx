@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import MoneyInput from '../../components/MoneyInput';
 import { useAuth } from '../auth/AuthContext';
 
@@ -41,6 +42,22 @@ const OT_FIELDS: Array<{ key: keyof Contract; label: string }> = [
   { key: 'rate_overnight', label: '철야' },
 ];
 
+/** 계약 기간(start/end)과 오늘을 비교해 진행 상태 도출 — 서버 상태필드 없음(클라 파생). */
+type ContractStatusKey = 'ACTIVE' | 'UPCOMING' | 'ENDED' | 'UNDATED';
+function contractStatus(c: Contract): ContractStatusKey {
+  if (!c.start_date && !c.end_date) return 'UNDATED';
+  const today = new Date().toISOString().slice(0, 10);
+  if (c.end_date && c.end_date < today) return 'ENDED';
+  if (c.start_date && c.start_date > today) return 'UPCOMING';
+  return 'ACTIVE';
+}
+const CONTRACT_STATUS_OPTIONS = [
+  { value: 'ACTIVE', label: '진행중' },
+  { value: 'UPCOMING', label: '예정' },
+  { value: 'ENDED', label: '종료' },
+  { value: 'UNDATED', label: '기간미정' },
+];
+
 export default function ContractsPage() {
   const { user } = useAuth();
   const role = user?.role;
@@ -51,6 +68,12 @@ export default function ContractsPage() {
   const [bpOptions, setBpOptions] = useState<Option[]>([]);
   const [siteOptions, setSiteOptions] = useState<Option[]>([]);
   const [editing, setEditing] = useState<Contract | 'new' | null>(null);
+  // 클라이언트 필터 — 로드된 계약을 좁힘(백엔드 무접촉).
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [siteFilter, setSiteFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -71,22 +94,57 @@ export default function ContractsPage() {
     api.get<Option[]>('/api/sites').then((r) => setSiteOptions((r.data ?? []).map((s) => ({ id: s.id, name: s.name })))).catch(() => setSiteOptions([]));
   }, [isSupplier]);
 
+  const siteFilterOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    contracts.forEach((c) => { if (c.site_name) m.set(c.site_name, c.site_name); });
+    return [...m.values()].map((v) => ({ value: v, label: v }));
+  }, [contracts]);
+
+  const qLower = q.trim().toLowerCase();
+  const filtered = useMemo(() => contracts.filter((c) => {
+    if (statusFilter && contractStatus(c) !== statusFilter) return false;
+    if (siteFilter && (c.site_name ?? '') !== siteFilter) return false;
+    if (dateFrom && c.end_date && c.end_date < dateFrom) return false;
+    if (dateTo && c.start_date && c.start_date > dateTo) return false;
+    if (qLower) {
+      const hay = `${c.title ?? ''} ${c.equipment_desc ?? ''} ${c.supplier_company_name ?? ''} ${c.bp_company_name ?? ''} ${c.bp_name ?? ''} ${c.site_name ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  }), [contracts, statusFilter, siteFilter, dateFrom, dateTo, qLower]);
+
+  const activeFilterCount =
+    [q, statusFilter, siteFilter].filter(Boolean).length + (dateFrom || dateTo ? 1 : 0);
+  const resetFilters = () => {
+    setQ(''); setStatusFilter(''); setSiteFilter(''); setDateFrom(''); setDateTo('');
+  };
+
   return (
     <AppShell breadcrumb={[{ label: isSupplier ? '계약 관리' : '계약 조회' }]}>
       <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-950">{isSupplier ? '계약 관리' : '계약 조회'}</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {isSupplier
-                ? '현장 소장과 맺은 계약을 등록해 두면 정산 단가의 기준이 됩니다. 견적 없이도 계약만 직접 등록할 수 있어요.'
-                : '공급사가 우리 회사 앞으로 등록한 계약 단가를 확인합니다.'}
-            </p>
+        <PageHeader
+          title={isSupplier ? '계약 관리' : '계약 조회'}
+          subtitle={isSupplier
+            ? '현장 소장과 맺은 계약을 등록해 두면 정산 단가의 기준이 됩니다. 견적 없이도 계약만 직접 등록할 수 있어요.'
+            : '공급사가 우리 회사 앞으로 등록한 계약 단가를 확인합니다.'}
+          actions={isSupplier
+            ? <button onClick={() => setEditing('new')} className="btn-primary shrink-0">+ 새 계약 등록</button>
+            : undefined}
+        />
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '업체·현장·제목 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={statusFilter} onChange={setStatusFilter} placeholder="상태 전체" options={CONTRACT_STATUS_OPTIONS} />
+          <FilterSelect value={siteFilter} onChange={setSiteFilter} placeholder="현장 전체" options={siteFilterOptions} />
+          <div className="flex items-center gap-1">
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input w-auto" />
+            <span className="text-xs text-slate-400">~</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input w-auto" />
           </div>
-          {isSupplier && (
-            <button onClick={() => setEditing('new')} className="btn-primary shrink-0">+ 새 계약 등록</button>
-          )}
-        </header>
+        </FilterBar>
 
         {loading ? (
           <div className="text-sm text-slate-400">불러오는 중…</div>
@@ -102,9 +160,11 @@ export default function ContractsPage() {
                 : '공급사가 계약을 등록하면 여기에 표시됩니다.'}
             </p>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="card p-8 text-center text-sm text-slate-400">조건에 맞는 계약이 없습니다.</div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            {contracts.map((c) => (
+            {filtered.map((c) => (
               <ContractCard key={c.id} c={c} isSupplier={isSupplier} onEdit={() => setEditing(c)} />
             ))}
           </div>

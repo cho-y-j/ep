@@ -59,6 +59,19 @@ public class SiteSafetySettings {
     @Column(name = "maintenance_interval_hours")
     private Integer maintenanceIntervalHours;
 
+    // P5-W4 혈압 임계(법정 아님·자유 설정, 완화 금지 가드 대상 아님). 기본 160/100·180/110.
+    @Column(name = "bp_caution_sys", nullable = false)
+    private int bpCautionSys = 160;
+
+    @Column(name = "bp_caution_dia", nullable = false)
+    private int bpCautionDia = 100;
+
+    @Column(name = "bp_block_sys", nullable = false)
+    private int bpBlockSys = 180;
+
+    @Column(name = "bp_block_dia", nullable = false)
+    private int bpBlockDia = 110;
+
     @Column(name = "updated_by")
     private Long updatedBy;
 
@@ -104,6 +117,15 @@ public class SiteSafetySettings {
         this.windStopMps = windStopMps;
         this.enforceDailyInspectionGate = enforceDailyInspectionGate;
         this.maintenanceIntervalHours = maintenanceIntervalHours;
+        this.updatedBy = updatedBy;
+    }
+
+    /** P5-W4 혈압 임계 갱신 — 폭염/풍속 설정과 독립(완화 금지 가드 대상 아님). */
+    public void applyBpThresholds(int cautionSys, int cautionDia, int blockSys, int blockDia, Long updatedBy) {
+        this.bpCautionSys = cautionSys;
+        this.bpCautionDia = cautionDia;
+        this.bpBlockSys = blockSys;
+        this.bpBlockDia = blockDia;
         this.updatedBy = updatedBy;
     }
 }

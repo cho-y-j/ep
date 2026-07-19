@@ -25,9 +25,41 @@ public final class SafetyReportDtos {
             AlertSummary alertSummary,
             InspectionSummary inspectionSummary,
             WorkComplianceSummary workComplianceSummary,
+            EmergencyResponseSummary emergencyResponse,
             List<TimelineDay> timeline,
             Noncompliance noncompliance,
             SiteSafetySettingsResponse standard
+    ) {}
+
+    /**
+     * P5-W2/W3 긴급 대응 이력 — 개인 응급(SOS/낙상/BLE 릴레이) 골든타임 요약.
+     * avgFirstResponseSeconds = 통보→최초응답 평균(응답 있은 것만, 없으면 null).
+     */
+    public record EmergencyResponseSummary(
+            int total,                       // 기간 내 개인 긴급 경보 수.
+            int chainActivated,              // 대응체인 발동(근접 동료 통보) 수.
+            int responded,                   // [제가 갑니다] 응답 있은 수.
+            Double avgFirstResponseSeconds,  // 통보→최초응답 평균(초).
+            int relayedCount,                // BLE 대리중계 수신 수.
+            int escalatedCount,              // 60초 무응답 → 현장 확대 수.
+            List<EmergencyTimeline> timelines
+    ) {}
+
+    /** 긴급 1건의 골든타임 사슬 — 감지(created)→통보→최초응답→해제. elapsed 는 결측 시 null. */
+    public record EmergencyTimeline(
+            Long alertId,
+            String kind,
+            String kindLabel,
+            LocalDateTime detectedAt,
+            LocalDateTime peerNotifiedAt,
+            LocalDateTime firstResponseAt,
+            LocalDateTime resolvedAt,
+            Long notifyElapsedSeconds,     // 감지→통보.
+            Long responseElapsedSeconds,   // 통보→최초응답.
+            Long resolveElapsedSeconds,    // 감지→해제.
+            int responderCount,
+            boolean relayed,
+            boolean escalated
     ) {}
 
     /** ①요약 — 안전알림 고지→확인 사슬. avgAckMinutes/ackRatePct 는 대상(ackNeeded) 0 이면 null. */

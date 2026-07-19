@@ -154,7 +154,7 @@ public class AssignmentService {
                     "장비 강제 배치",
                     "서류 미비 상태로 강제 배치됨. 사유: " + req.overrideReason()
                             + " / 누락: " + String.join(", ", docMissing),
-                    "EQUIPMENT", e.getId(), site.getId());
+                    "EQUIPMENT", e.getId(), site.getId(), notifications.senderLabelOf(actor));
         }
         return e;
     }
@@ -252,7 +252,7 @@ public class AssignmentService {
                     "인원 강제 배치",
                     "서류 미비 상태로 강제 배치됨. 사유: " + req.overrideReason()
                             + " / 누락: " + String.join(", ", docMissing),
-                    "PERSON", p.getId(), site.getId());
+                    "PERSON", p.getId(), site.getId(), notifications.senderLabelOf(actor));
         }
         return p;
     }

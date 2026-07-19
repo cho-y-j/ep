@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 
 type BoardItem = {
   resource_type: 'EQUIPMENT' | 'PERSON';
@@ -29,6 +30,8 @@ type SiteSummary = {
 export default function BpActiveSitesPage() {
   const [items, setItems] = useState<BoardItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
+  const [siteFilter, setSiteFilter] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -64,15 +67,37 @@ export default function BpActiveSitesPage() {
     return Array.from(m.values());
   }, [items]);
 
+  const siteKeyOf = (s: SiteSummary) => (s.site_id != null ? String(s.site_id) : 'null');
+  const siteOptions = useMemo(
+    () => sites.map((s) => ({ value: siteKeyOf(s), label: s.site_name })),
+    [sites]
+  );
+
+  const qLower = q.trim().toLowerCase();
+  const filtered = useMemo(() => sites.filter((s) => {
+    if (siteFilter && siteKeyOf(s) !== siteFilter) return false;
+    if (qLower && !s.site_name.toLowerCase().includes(qLower)) return false;
+    return true;
+  }), [sites, siteFilter, qLower]);
+
+  const activeFilterCount = [q, siteFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setSiteFilter(''); };
+
   return (
     <AppShell breadcrumb={[{ label: '투입 현황' }]}>
       <div className="mx-auto max-w-7xl space-y-4">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-950">투입 현황</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            사인 완료된 작업계획서의 현장 목록입니다. 클릭하여 자원 가동·출퇴근 대시보드를 확인하세요.
-          </p>
-        </header>
+        <PageHeader
+          title="투입 현황"
+          subtitle="사인 완료된 작업계획서의 현장 목록입니다. 클릭하여 자원 가동·출퇴근 대시보드를 확인하세요."
+        />
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '현장 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={siteFilter} onChange={setSiteFilter} placeholder="현장 전체" options={siteOptions} />
+        </FilterBar>
 
         {loading ? (
           <p className="text-sm text-slate-400">불러오는 중...</p>
@@ -80,9 +105,11 @@ export default function BpActiveSitesPage() {
           <div className="card p-10 text-center text-sm text-slate-400">
             현재 사인 완료된 작업계획서가 없습니다.
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="card p-8 text-center text-sm text-slate-400">조건에 맞는 현장이 없습니다.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {sites.map((s) => (
+            {filtered.map((s) => (
               <Link key={s.site_id ?? 'null'} to={`/work-plans/active/sites/${s.site_id ?? 'none'}`}
                     className="card p-4 hover:shadow transition block">
                 <h2 className="font-bold text-slate-900 truncate">{s.site_name}</h2>

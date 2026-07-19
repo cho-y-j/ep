@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** ADMIN/BP 가 JWT 인증으로 안전알림을 조회. /api/safety-alerts/* */
 @RestController
@@ -36,12 +37,15 @@ public class SafetyAlertController {
     private final FieldSafetyAlertRepository alertRepo;
     private final FieldSensorReadingRepository sensorRepo;
     private final FieldBaselineRepository baselineRepo;
+    private final VitalBaselineService vitalBaselineService;
     private final PersonRepository persons;
     private final AttendanceSessionRepository attendanceSessions;
     private final WorkPlanRepository workPlans;
     private final SiteRepository sites;
     private final KmaWeatherClient weatherClient;
     private final FieldFcmService fcm;
+    private final SafetyAlertResponseRepository responseRepo;
+    private final EmergencyResponseService emergencyResponseService;
 
     /** 전체(또는 unresolved 만). ADMIN 전체 / BP 자기 회사만. */
     @GetMapping
@@ -74,10 +78,14 @@ public class SafetyAlertController {
         return toAlertMaps(list.stream().limit(100).toList());
     }
 
-    /** 알림 해결 처리 (ADMIN/BP). */
+    /**
+     * 알림 해결 처리 (ADMIN/BP). realEvent=true 이고 vital 경보면 P5-W1 실제사건 피드백(개인 임계 강화).
+     * 기존 호출(realEvent 생략)은 false → 동작 불변(하위호환).
+     */
     @PostMapping("/{id}/resolve")
     @PreAuthorize("hasAnyRole('ADMIN','BP')")
     public Map<String, Object> resolve(@org.springframework.web.bind.annotation.PathVariable Long id,
+                                       @RequestParam(defaultValue = "false") boolean realEvent,
                                        @CurrentUser AuthenticatedUser actor) {
         FieldSafetyAlert a = alertRepo.findById(id)
                 .orElseThrow(() -> ApiException.notFound("ALERT_NOT_FOUND", "알림을 찾을 수 없습니다"));
@@ -89,7 +97,25 @@ public class SafetyAlertController {
         a.setResolvedAt(LocalDateTime.now());
         a.setResolvedByUserId(actor.id());
         alertRepo.save(a);
+        // P5-W2 대응체인 발동됐던 경보 해제 → 피재자 폰 파인드미 해제(find_me_stop).
+        if (a.getPeerNotifiedAt() != null) {
+            persons.findById(a.getPersonId()).ifPresent(emergencyResponseService::sendFindMeStop);
+        }
+        // P5-W1 실제사건 확인 → 강화(민감도↑). 낙상·SOS·데드맨은 LEARN_KINDS 밖(보정 제외).
+        if (realEvent && VitalAnomalyService.LEARN_KINDS.contains(a.getKind())) {
+            vitalBaselineService.markRealEvent(a.getPersonId());
+        }
         return alertMap(a);
+    }
+
+    /** P5-W1 개인 대역 재학습 수동 트리거(ADMIN) — 주간 크론과 동일 로직. @return 학습 성사 인원. */
+    @PostMapping("/relearn-baselines")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Map<String, Object> relearnBaselines() {
+        Map<String, Object> out = new HashMap<>();
+        out.put("ok", true);
+        out.put("learned", vitalBaselineService.relearnAll());
+        return out;
     }
 
     /** 같은 현장(또는 같은 작업계획서) 다른 작업자에게 "도움 요청" 푸시. ADMIN/BP. */
@@ -170,13 +196,30 @@ public class SafetyAlertController {
             return m;
         }).toList());
         if (baseline != null) {
-            out.put("baseline", Map.of(
-                    "hr_rest_mean", baseline.getHrRestMean(),
-                    "hr_active_mean", baseline.getHrActiveMean(),
-                    "spo2_mean", baseline.getSpo2Mean(),
-                    "samples_count", baseline.getSamplesCount()
-            ));
+            // 부분 학습 베이스라인(일부 필드 null)에도 안전하도록 HashMap 사용(Map.of 는 null 값 불가 → 500).
+            Map<String, Object> bl = new HashMap<>();
+            bl.put("hr_rest_mean", baseline.getHrRestMean());
+            bl.put("hr_active_mean", baseline.getHrActiveMean());
+            bl.put("spo2_mean", baseline.getSpo2Mean());
+            bl.put("samples_count", baseline.getSamplesCount());
+            out.put("baseline", bl);
         }
+        // P5-W1 개인 대역(정상범위 밴드) + 최근 경보 이력(타일 클릭 상세).
+        PersonVitalBaseline pv = vitalBaselineService.find(personId).orElse(null);
+        if (pv != null) {
+            Map<String, Object> band = new HashMap<>();
+            band.put("learned", pv.isLearned());
+            band.put("rest_hr_low", pv.getRestHrLow());
+            band.put("rest_hr_high", pv.getRestHrHigh());
+            band.put("work_hr_low", pv.getWorkHrLow());
+            band.put("work_hr_high", pv.getWorkHrHigh());
+            band.put("adjust_pct", pv.getAdjustPct());
+            band.put("fp_count", pv.getFpCount());
+            band.put("tp_count", pv.getTpCount());
+            out.put("band", band);
+        }
+        out.put("alerts", alertRepo.findByPersonIdOrderByCreatedAtDesc(personId).stream()
+                .limit(15).map(this::alertMap).toList());
         return out;
     }
 
@@ -238,20 +281,37 @@ public class SafetyAlertController {
         return m;
     }
 
-    /** 목록 직렬화 — personId 를 모아 findAllById 로 배치 조회 (행별 findById N+1 제거). */
+    /** 목록 직렬화 — 대상 person + 응답자 person 을 모아 findAllById 로 배치 조회(행별 N+1 제거). */
     private List<Map<String, Object>> toAlertMaps(List<FieldSafetyAlert> rows) {
-        List<Long> personIds = rows.stream().map(FieldSafetyAlert::getPersonId)
-                .filter(Objects::nonNull).distinct().toList();
+        List<Long> alertIds = rows.stream().map(FieldSafetyAlert::getId).toList();
+        List<SafetyAlertResponse> responses = alertIds.isEmpty() ? List.of()
+                : responseRepo.findByAlertIdInOrderByCreatedAtAsc(alertIds);
+        Map<Long, List<SafetyAlertResponse>> respByAlert = new HashMap<>();
+        for (SafetyAlertResponse r : responses) {
+            respByAlert.computeIfAbsent(r.getAlertId(), k -> new ArrayList<>()).add(r);
+        }
+        Set<Long> personIds = new java.util.HashSet<>();
+        for (FieldSafetyAlert a : rows) if (a.getPersonId() != null) personIds.add(a.getPersonId());
+        for (SafetyAlertResponse r : responses) personIds.add(r.getPersonId());
         Map<Long, Person> personById = new HashMap<>();
         for (Person p : persons.findAllById(personIds)) personById.put(p.getId(), p);
-        return rows.stream().map(a -> alertMap(a, personById.get(a.getPersonId()))).toList();
+        return rows.stream().map(a -> alertMap(a, personById.get(a.getPersonId()),
+                respByAlert.getOrDefault(a.getId(), List.of()), personById)).toList();
     }
 
+    /** 단건 직렬화 — 응답자 배치 조회(경보 1건 + 응답자 person). resolve·personVitals 용. */
     private Map<String, Object> alertMap(FieldSafetyAlert a) {
-        return alertMap(a, persons.findById(a.getPersonId()).orElse(null));
+        List<SafetyAlertResponse> responses = responseRepo.findByAlertIdOrderByCreatedAtAsc(a.getId());
+        Set<Long> personIds = new java.util.HashSet<>();
+        if (a.getPersonId() != null) personIds.add(a.getPersonId());
+        for (SafetyAlertResponse r : responses) personIds.add(r.getPersonId());
+        Map<Long, Person> personById = new HashMap<>();
+        for (Person p : persons.findAllById(personIds)) personById.put(p.getId(), p);
+        return alertMap(a, personById.get(a.getPersonId()), responses, personById);
     }
 
-    private Map<String, Object> alertMap(FieldSafetyAlert a, Person p) {
+    private Map<String, Object> alertMap(FieldSafetyAlert a, Person p,
+                                         List<SafetyAlertResponse> responses, Map<Long, Person> personById) {
         Map<String, Object> m = new HashMap<>();
         m.put("id", a.getId());
         m.put("person_id", a.getPersonId());
@@ -275,6 +335,22 @@ public class SafetyAlertController {
         m.put("acknowledged_at", a.getAcknowledgedAt());
         m.put("ack_person_id", a.getAckPersonId());
         m.put("escalated_at", a.getEscalatedAt());
+        // P5-W2/W3 골든타임 타임라인(감지→통보→응답→해제) + 응답자 + 릴레이 위치 보강.
+        m.put("peer_notified_at", a.getPeerNotifiedAt());
+        m.put("first_response_at", a.getFirstResponseAt());
+        m.put("peer_escalated_at", a.getPeerEscalatedAt());
+        m.put("relayed_at", a.getRelayedAt());
+        m.put("relay_lat", a.getRelayLat());
+        m.put("relay_lng", a.getRelayLng());
+        m.put("responder_count", responses.size());
+        m.put("responders", responses.stream().map(r -> {
+            Map<String, Object> rm = new HashMap<>();
+            rm.put("person_id", r.getPersonId());
+            Person rp = personById.get(r.getPersonId());
+            rm.put("name", rp != null ? rp.getName() : ("#" + r.getPersonId()));
+            rm.put("created_at", r.getCreatedAt());
+            return rm;
+        }).toList());
         m.put("created_at", a.getCreatedAt());
         return m;
     }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import type { DocumentTypeResponse, OwnerType } from '../../types/document';
 import type { EquipmentResponse } from '../../types/equipment';
@@ -38,6 +39,10 @@ export default function DocumentCollectionPage() {
   const [recipientPhone, setRecipientPhone] = useState('');
   const [title, setTitle] = useState('');
 
+  // 목록 필터(클라이언트)
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
   const types = ownerType === 'EQUIPMENT' ? typesEq : typesPe;
 
   async function reload() {
@@ -69,6 +74,17 @@ export default function DocumentCollectionPage() {
   }, [ownerType, typesEq, typesPe]);
 
   const selectedCount = useMemo(() => Object.values(sel).filter((v) => v !== 'none').length, [sel]);
+
+  const statusOptions = useMemo(
+    () => [...new Set(requests.map((r) => r.status))].map((v) => ({ value: v, label: v })),
+    [requests],
+  );
+  const qLower = q.trim().toLowerCase();
+  const shownRequests = requests.filter((r) => {
+    if (statusFilter && r.status !== statusFilter) return false;
+    if (qLower && !`${r.owner_name ?? ''} ${r.title ?? ''} ${r.recipient_name ?? ''}`.toLowerCase().includes(qLower)) return false;
+    return true;
+  });
 
   async function create() {
     if (!ownerId) { setError('대상(장비/인원)을 선택하세요'); return; }
@@ -120,13 +136,13 @@ export default function DocumentCollectionPage() {
   return (
     <AppShell breadcrumb={[{ label: '서류 수집 요청' }]}>
       <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">서류 수집 요청</h1>
-            <p className="mt-1 text-sm text-slate-500">차량주인·인원에게 공개 링크를 보내 서류를 받고, 모이면 PDF로 합쳐 이메일로 보냅니다.</p>
-          </div>
-          <button onClick={() => setShowNew((v) => !v)} className="btn-primary">{showNew ? '닫기' : '+ 새 수집 요청'}</button>
-        </div>
+        <PageHeader
+          title="서류 수집 요청"
+          subtitle="차량주인·인원에게 공개 링크를 보내 서류를 받고, 모이면 PDF로 합쳐 이메일로 보냅니다."
+          actions={
+            <button onClick={() => setShowNew((v) => !v)} className="btn-primary">{showNew ? '닫기' : '+ 새 수집 요청'}</button>
+          }
+        />
 
         {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
@@ -198,8 +214,17 @@ export default function DocumentCollectionPage() {
         {/* 생성된 요청 목록 */}
         {loading ? <p className="text-sm text-slate-400">불러오는 중…</p> :
           requests.length === 0 ? <div className="card p-8 text-center text-sm text-slate-400">아직 수집 요청이 없습니다.</div> :
+          <>
+            <FilterBar
+              search={{ value: q, onChange: setQ, placeholder: '대상·제목·받는사람 검색' }}
+              activeFilterCount={[q, statusFilter].filter(Boolean).length}
+              onReset={() => { setQ(''); setStatusFilter(''); }}
+            >
+              <FilterSelect value={statusFilter} onChange={setStatusFilter} placeholder="상태 전체" options={statusOptions} />
+            </FilterBar>
+            {shownRequests.length === 0 ? <div className="card p-8 text-center text-sm text-slate-400">조건에 맞는 요청이 없습니다.</div> :
             <div className="space-y-2">
-              {requests.map((req) => {
+              {shownRequests.map((req) => {
                 const up = req.items.filter((i) => i.uploaded).length;
                 return (
                   <div key={req.id} className="card space-y-2 p-4">
@@ -226,6 +251,7 @@ export default function DocumentCollectionPage() {
                 );
               })}
             </div>}
+          </>}
       </div>
     </AppShell>
   );

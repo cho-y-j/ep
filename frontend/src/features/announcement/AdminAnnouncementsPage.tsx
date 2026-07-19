@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
 import PageContainer from '../../components/ui/PageContainer';
+import { PageHeader, SearchInput } from '../../components/ui';
 
 type CompanyRow = { id: number; name: string; type?: string | null };
 type PersonRow = { id: number; name: string; supplierName?: string | null };
@@ -14,6 +15,7 @@ export default function AdminAnnouncementsPage() {
   const [siteId, setSiteId] = useState<string>('');
   const [supplierId, setSupplierId] = useState<string>('');
   const [selectedPersonIds, setSelectedPersonIds] = useState<number[]>([]);
+  const [personQuery, setPersonQuery] = useState('');
   const [target, setTarget] = useState<'phone' | 'all'>('phone');
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ attempted: number; targets: number; phone_sent?: number; watch_sent?: number } | null>(null);
@@ -48,6 +50,12 @@ export default function AdminAnnouncementsPage() {
       })
     : persons;
 
+  // 인원 선택 리스트 내 이름·공급사 검색(발송 폼 유지, 리스트만 좁힘).
+  const pq = personQuery.trim().toLowerCase();
+  const personsSearched = pq
+    ? personsFiltered.filter((p) => p.name.toLowerCase().includes(pq) || (p.supplierName ?? '').toLowerCase().includes(pq))
+    : personsFiltered;
+
   const togglePerson = (id: number) => {
     setSelectedPersonIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   };
@@ -78,8 +86,10 @@ export default function AdminAnnouncementsPage() {
   return (
     <AppShell>
       <PageContainer>
-        <h1 className="text-xl font-semibold text-slate-900 mb-1">공지사항 발송</h1>
-        <p className="text-sm text-slate-500 mb-6">현장 작업자 폰/워치로 푸시 알림 발송</p>
+        <PageHeader
+          title="공지사항 발송"
+          subtitle="현장 작업자 폰/워치로 푸시 알림 발송"
+        />
         <div className="space-y-4 max-w-2xl">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">제목</label>
@@ -140,18 +150,19 @@ export default function AdminAnnouncementsPage() {
                 인원 선택 (선택 — {selectedPersonIds.length}명)
               </label>
               <div className="text-xs text-slate-500">
-                <button type="button" onClick={() => setSelectedPersonIds(personsFiltered.map((p) => p.id))}
+                <button type="button" onClick={() => setSelectedPersonIds(personsSearched.map((p) => p.id))}
                   className="underline hover:text-slate-700 mr-2">전체 선택</button>
                 <button type="button" onClick={() => setSelectedPersonIds([])}
                   className="underline hover:text-slate-700">선택 해제</button>
               </div>
             </div>
+            <SearchInput value={personQuery} onChange={setPersonQuery} placeholder="인원 이름·공급사 검색" className="mb-2" />
             <div className="rounded-md border border-slate-300 bg-white max-h-48 overflow-y-auto p-2">
               {loadingMeta && <div className="text-sm text-slate-500 px-2 py-1">불러오는 중…</div>}
-              {!loadingMeta && personsFiltered.length === 0 && (
+              {!loadingMeta && personsSearched.length === 0 && (
                 <div className="text-sm text-slate-500 px-2 py-1">표시할 인원이 없습니다.</div>
               )}
-              {personsFiltered.map((p) => (
+              {personsSearched.map((p) => (
                 <label key={p.id} className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer text-sm">
                   <input
                     type="checkbox"

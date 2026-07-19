@@ -85,6 +85,15 @@ public class FieldFcmService {
         return doSend(fcmTokens, data, title);
     }
 
+    /**
+     * P5-W2/W3 대응체인 데이터-only 발송 — 폰앱 FieldFcmService.kt 가 data["kind"] 로 분기.
+     * find_me(피재자 파인드미)·find_me_stop(해제)·peer_emergency(동료 호출). 폰이 kind 이전 필드에 의존하지
+     * 않으므로 type/severity 없이 kind 계열 필드만 싣는다. null 값은 제외(FCM data 는 문자열만 허용).
+     */
+    public int sendChain(List<String> fcmTokens, Map<String, String> data) {
+        return doSend(fcmTokens, data, data.getOrDefault("kind", "chain"));
+    }
+
     private int doSend(List<String> fcmTokens, Map<String, String> data, String label) {
         if (fcmTokens.isEmpty()) return 0;
         if (!enabled) {

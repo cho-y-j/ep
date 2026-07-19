@@ -75,6 +75,7 @@ public class SafetyReportService {
     private final DailyWorkLogRepository dailyWorkLogs;
     private final SiteWindStateRepository windStates;
     private final SiteSafetySettingsRepository safetySettings;
+    private final SafetyAlertResponseRepository alertResponses;
 
     public SafetyReport report(Long siteId, LocalDate fromParam, LocalDate toParam, AuthenticatedUser actor) {
         Site site = sites.findById(siteId)
@@ -109,6 +110,7 @@ public class SafetyReportService {
         AlertSummary alertSummary = SafetyReportCalculator.alertSummary(periodAlerts);
         InspectionSummary inspectionSummary = inspectionSummary(legals, operators, eqIds.size());
         WorkComplianceSummary workComplianceSummary = workComplianceSummary(activePlans, signedRoles, logs);
+        EmergencyResponseSummary emergencyResponse = emergencyResponseSummary(periodAlerts);
 
         // ── ② 타임라인 ───────────────────────────────────────────
         List<TimelineDay> timeline = buildTimeline(periodAlerts, legals, operators, siteId, from, to);
@@ -131,8 +133,22 @@ public class SafetyReportService {
         return new SafetyReport(
                 site.getId(), site.getName(), site.getCode(), bpName, clientOrgName,
                 from, to, LocalDateTime.now(), actor.name(),
-                alertSummary, inspectionSummary, workComplianceSummary,
+                alertSummary, inspectionSummary, workComplianceSummary, emergencyResponse,
                 timeline, noncompliance, standard);
+    }
+
+    /** P5-W2/W3 긴급 대응 이력 — 개인 긴급 경보 응답자 수 배치 조회 후 골든타임 요약. */
+    private EmergencyResponseSummary emergencyResponseSummary(List<FieldSafetyAlert> periodAlerts) {
+        List<Long> emergencyIds = periodAlerts.stream()
+                .filter(SafetyReportCalculator::isEmergencyChain)
+                .map(FieldSafetyAlert::getId).toList();
+        Map<Long, Integer> responderCounts = new java.util.HashMap<>();
+        if (!emergencyIds.isEmpty()) {
+            for (SafetyAlertResponse r : alertResponses.findByAlertIdInOrderByCreatedAtAsc(emergencyIds)) {
+                responderCounts.merge(r.getAlertId(), 1, Integer::sum);
+            }
+        }
+        return SafetyReportCalculator.emergencyResponseSummary(periodAlerts, responderCounts);
     }
 
     // ── 집계 helpers ─────────────────────────────────────────────

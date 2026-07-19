@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import { ALL_PERSON_ROLES, PERSON_ROLE_LABEL, type PersonRole } from '../../types/person';
@@ -17,6 +18,12 @@ export default function PersonRoleDocsPage() {
   const [selected, setSelected] = useState<PersonRole>(ALL_PERSON_ROLES[0]);
   const [rows, setRows] = useState<DocRow[]>([]);
   const [loadingRows, setLoadingRows] = useState(false);
+  const [q, setQ] = useState('');
+
+  const qLower = q.trim().toLowerCase();
+  const visibleRoles = qLower
+    ? ALL_PERSON_ROLES.filter((r) => PERSON_ROLE_LABEL[r].toLowerCase().includes(qLower))
+    : ALL_PERSON_ROLES;
 
   useEffect(() => {
     setLoadingRows(true);
@@ -41,18 +48,17 @@ export default function PersonRoleDocsPage() {
   return (
     <AppShell breadcrumb={[{ label: '인력역할 서류' }]}>
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold">인력역할 서류 체크리스트</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            인력 역할을 고르고, 각 서류를 <b>필수 / 선택 / 해당없음</b>으로 지정합니다.
-            지정한 필수/선택은 해당 역할 인력의 등록·서류 화면 체크리스트에 그대로 반영됩니다.
-          </p>
-        </div>
+        <PageHeader
+          title="인력역할 서류 체크리스트"
+          subtitle="인력 역할을 고르고, 각 서류를 필수 / 선택 / 해당없음으로 지정합니다. 지정한 필수/선택은 해당 역할 인력의 등록·서류 화면 체크리스트에 반영됩니다."
+        />
+
+        <FilterBar search={{ value: q, onChange: setQ, placeholder: '역할 검색' }} />
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">
           {/* 좌: 역할 목록 */}
           <div className="card p-0 overflow-hidden self-start">
-            {ALL_PERSON_ROLES.map((r) => (
+            {visibleRoles.map((r) => (
               <button key={r} type="button" onClick={() => setSelected(r)}
                 className={`w-full px-3 py-2 text-left text-sm border-b border-slate-100 flex items-center gap-2 ${
                   selected === r ? 'bg-brand-50 text-brand-700 font-semibold' : 'hover:bg-slate-50 text-slate-700'

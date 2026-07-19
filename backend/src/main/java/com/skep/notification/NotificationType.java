@@ -54,4 +54,12 @@ public final class NotificationType {
     public static final String EQUIPMENT_MAINTENANCE_DUE = "EQUIPMENT_MAINTENANCE_DUE";
     /** P3b S5': 안전알림 5분 미확인 → BP·공급사 관리자("○○○ 미확인"). */
     public static final String SAFETY_ACK_MISSING = "SAFETY_ACK_MISSING";
+
+    /** P5-W2: 긴급 대응체인 60초 동료 무응답 → 현장 전체 확대 + BP·공급사 관리자. */
+    public static final String EMERGENCY_NO_RESPONSE = "EMERGENCY_NO_RESPONSE";
+
+    /** P5-W4: 혈압 체크인 BLOCK(차단권고 임계 초과) → BP·공급사 관리자(조치 권고, 출근 차단 아님). */
+    public static final String BP_CHECKIN_BLOCK = "BP_CHECKIN_BLOCK";
+    /** P5-W4: 과로 경고(연속 야간 3일+ 또는 최근 7일 60h+) → BP·공급사 관리자. */
+    public static final String OVERWORK_WARNING = "OVERWORK_WARNING";
 }

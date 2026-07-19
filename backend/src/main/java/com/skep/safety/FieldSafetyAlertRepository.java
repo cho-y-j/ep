@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface FieldSafetyAlertRepository extends JpaRepository<FieldSafetyAlert, Long> {
 
@@ -31,4 +32,20 @@ public interface FieldSafetyAlertRepository extends JpaRepository<FieldSafetyAle
     List<FieldSafetyAlert> findTop100ByOrderByCreatedAtDesc();
 
     List<FieldSafetyAlert> findByPersonIdAndCreatedAtAfterOrderByCreatedAtDesc(Long personId, LocalDateTime since);
+
+    /** P5-W1 중복 발화 방지 — 해당 작업자의 활성(미해결) vital 경보 존재 여부. */
+    boolean existsByPersonIdAndKindInAndResolvedFalse(Long personId, Collection<String> kinds);
+
+    /** P5-W4 과로 경고 인당 일 1회 가드 — 오늘 이미 발화한 kind 경보 존재 여부. */
+    boolean existsByPersonIdAndKindAndCreatedAtAfter(Long personId, String kind, LocalDateTime after);
+
+    /** P5-W3 릴레이 수신 — 피재자의 활성 EMERGENCY 경보(있으면 위치 보강, 없으면 신규 생성). */
+    Optional<FieldSafetyAlert> findFirstByPersonIdAndSeverityAndResolvedFalseOrderByCreatedAtDesc(
+            Long personId, String severity);
+
+    /** P5-W3 릴레이 dedupe(victim당 5분) — 최근 릴레이가 기록된 경보가 있으면 중복 처리 방지. */
+    boolean existsByPersonIdAndKindAndRelayedAtAfter(Long personId, String kind, LocalDateTime after);
+
+    /** P5-W2 60초 무응답 확대 후보 — 대응체인 발동(peer_notified)됐고 응답·확대·해결 전인 경보. */
+    List<FieldSafetyAlert> findByPeerNotifiedAtIsNotNullAndFirstResponseAtIsNullAndPeerEscalatedAtIsNullAndResolvedFalse();
 }

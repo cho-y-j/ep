@@ -80,6 +80,30 @@ public class SafetyAlertBroadcaster {
         publishWs(payload, a.getSiteId(), a.getBpCompanyId());
     }
 
+    /** P5-W2 동료 응답([제가 갑니다]) — 관제 "N명 응답 — ○○○ 이동중" 실시간 갱신. */
+    public void publishResponded(FieldSafetyAlert a, String responderName, int responderCount) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("event", "responded");
+        payload.put("id", a.getId());
+        payload.put("responder_name", responderName);
+        payload.put("responder_count", responderCount);
+        payload.put("first_response_at", a.getFirstResponseAt());
+        publishWs(payload, a.getSiteId(), a.getBpCompanyId());
+    }
+
+    /** P5-W3 BLE 대리중계 위치 보강 — 관제 지도 마커(피재자 추정 위치) 실시간 갱신. */
+    public void publishRelay(FieldSafetyAlert a) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("event", "relayed");
+        payload.put("id", a.getId());
+        payload.put("relayed_at", a.getRelayedAt());
+        payload.put("lat", a.getLat());
+        payload.put("lng", a.getLng());
+        payload.put("relay_lat", a.getRelayLat());
+        payload.put("relay_lng", a.getRelayLng());
+        publishWs(payload, a.getSiteId(), a.getBpCompanyId());
+    }
+
     /**
      * S1 강풍 작업중지 경보 — 현장 단위 1회 발송. 관제(WS)는 작업자별 alert 로 전파,
      * FCM 은 해당 현장 작업자 전원 폰+워치로 한 번만 배치(중복 방지). publishCreated 의 danger 재전파 미사용.

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import AppShell from '../../components/layout/AppShell';
-import { PageHeader, StatusBadge } from '../../components/ui';
+import { PageHeader, StatusBadge, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 
@@ -58,6 +58,8 @@ export default function ComplianceOrdersPage() {
   const [items, setItems] = useState<ComplianceOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [issueOpen, setIssueOpen] = useState(false);
   const [submitTarget, setSubmitTarget] = useState<ComplianceOrder | null>(null);
   const [reviewTarget, setReviewTarget] = useState<ComplianceOrder | null>(null);
@@ -73,6 +75,13 @@ export default function ComplianceOrdersPage() {
     } finally { setLoading(false); }
   };
   useEffect(() => { void refresh(); }, [scope]);
+
+  const qLower = q.trim().toLowerCase();
+  const shown = items.filter((o) => {
+    if (statusFilter && o.status !== statusFilter) return false;
+    if (qLower && !`${ORDER_TYPE_LABEL[o.order_type]} ${o.order_subtype ?? ''} ${o.target_label} ${o.supplier_company_name} ${o.bp_company_name}`.toLowerCase().includes(qLower)) return false;
+    return true;
+  });
 
   const openProof = async (id: number) => {
     try {
@@ -104,8 +113,20 @@ export default function ComplianceOrdersPage() {
             {isBp ? '아직 발행한 지시가 없습니다. 우상단 "새 지시 발행"으로 시작하세요.' : '받은 지시가 없습니다.'}
           </div>
         ) : (
-          <div className="space-y-2">
-            {items.map((o) => (
+          <>
+            <FilterBar
+              search={{ value: q, onChange: setQ, placeholder: '대상·유형·회사 검색' }}
+              activeFilterCount={[q, statusFilter].filter(Boolean).length}
+              onReset={() => { setQ(''); setStatusFilter(''); }}
+            >
+              <FilterSelect value={statusFilter} onChange={setStatusFilter} placeholder="상태 전체"
+                options={(['REQUESTED', 'SUBMITTED', 'APPROVED', 'REJECTED'] as OrderStatus[]).map((s) => ({ value: s, label: STATUS_LABEL[s] }))} />
+            </FilterBar>
+            {shown.length === 0 ? (
+              <div className="card text-sm text-slate-500">조건에 맞는 지시가 없습니다.</div>
+            ) : (
+              <div className="space-y-2">
+                {shown.map((o) => (
               <div key={o.id} className={`card ${o.overdue ? 'border-rose-300' : ''}`}>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex-1 min-w-0">
@@ -156,8 +177,10 @@ export default function ComplianceOrdersPage() {
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
         {issueOpen && (
           <IssueDialog onClose={() => setIssueOpen(false)} onIssued={() => { setIssueOpen(false); void refresh(); }} />

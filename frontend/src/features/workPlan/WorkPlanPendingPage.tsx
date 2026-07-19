@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import type { WorkPlanPage as WorkPlanPageType, WorkPlanResponse } from '../../types/workPlan';
 import type { ResourceCheckResponse } from '../../types/resourceCheck';
 import { WorkPlanStatusBadge } from './WorkPlanPage';
@@ -14,6 +15,8 @@ export default function WorkPlanPendingPage() {
   const [items, setItems] = useState<WorkPlanResponse[]>([]);
   const [checkCounts, setCheckCounts] = useState<Record<number, Counts>>({});
   const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
+  const [siteFilter, setSiteFilter] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -41,15 +44,41 @@ export default function WorkPlanPendingPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const siteOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    items.forEach((wp) => { const k = wp.site_name ?? wp.work_location; if (k) m.set(k, k); });
+    return [...m.values()].map((v) => ({ value: v, label: v }));
+  }, [items]);
+
+  const qLower = q.trim().toLowerCase();
+  const filtered = useMemo(() => items.filter((wp) => {
+    const siteKey = wp.site_name ?? wp.work_location ?? '';
+    if (siteFilter && siteKey !== siteFilter) return false;
+    if (qLower) {
+      const hay = `${wp.title} ${siteKey}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  }), [items, siteFilter, qLower]);
+
+  const activeFilterCount = [q, siteFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setSiteFilter(''); };
+
   return (
     <AppShell breadcrumb={[{ label: '투입 대기' }]}>
       <div className="mx-auto max-w-7xl space-y-4">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-950">투입 대기</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            사인 5건 완료 + 제출된 계획서. 자동차 안전점검·건강검진·안전교육 회신을 모두 받으면 현장 투입 단계로 넘어갑니다.
-          </p>
-        </header>
+        <PageHeader
+          title="투입 대기"
+          subtitle="사인 5건 완료 + 제출된 계획서. 자동차 안전점검·건강검진·안전교육 회신을 모두 받으면 현장 투입 단계로 넘어갑니다."
+        />
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '제목·현장 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={siteFilter} onChange={setSiteFilter} placeholder="현장 전체" options={siteOptions} />
+        </FilterBar>
 
         {loading ? (
           <p className="text-sm text-slate-400">불러오는 중...</p>
@@ -57,6 +86,8 @@ export default function WorkPlanPendingPage() {
           <div className="card p-10 text-center text-sm text-slate-400">
             대기 중인 계획서가 없습니다. 작성·사인·제출이 끝난 계획서가 여기로 옵니다.
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="card p-8 text-center text-sm text-slate-400">조건에 맞는 계획서가 없습니다.</div>
         ) : (
           <div className="card overflow-x-auto p-0">
             <table className="w-full text-sm">
@@ -72,7 +103,7 @@ export default function WorkPlanPendingPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {items.map((wp) => {
+                {filtered.map((wp) => {
                   const c = checkCounts[wp.id] ?? { total: 0, approved: 0, open: 0 };
                   return (
                     <tr key={wp.id} onClick={() => navigate(`/work-plans/${wp.id}`)}

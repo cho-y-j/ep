@@ -158,6 +158,7 @@ class MainActivity : AppCompatActivity() {
         btnInspect.setOnClickListener { startActivity(Intent(this, NfcScanActivity::class.java)) }
 
         ensureNotificationPermission()
+        ensureBlePermissions()
         registerFcmToken()
         loadAvatar()
     }
@@ -171,11 +172,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Android 12+(S) BLE 권한 선요청 — P5-W2 파인드미 BLE 비콘(피재자 자가발동)·근접 게이지(응답자)용.
+     * 파인드미는 사건 발생 시 자동 발동되므로 광고 권한을 평상시 홈에서 미리 확보한다.
+     */
+    private fun ensureBlePermissions() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val perms = arrayOf(
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+        )
+        if (perms.any { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }) {
+            ActivityCompat.requestPermissions(this, perms, 202)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         loadMe()
         loadPendingWorkConfirmations()
         com.dainon.skep.net.WatchLink.pushIdentity(this)
+        // P5-W3 제3자 SOS 대리중계 — OS 위임 백그라운드 스캔 등록(멱등). onResume 라 BLE 권한 부여 직후에도 반영.
+        com.dainon.skep.service.SosRelayScanner.register(this)
     }
 
     private fun toggleBreak() {
@@ -390,6 +409,7 @@ class MainActivity : AppCompatActivity() {
     private fun api() = FieldApi(Prefs.serverUrl(this))
 
     private fun logout() {
+        com.dainon.skep.service.SosRelayScanner.unregister(this)   // P5-W3 로그아웃 시 대리중계 스캔 해제.
         Prefs.clearAuth(this)
         startActivity(Intent(this, EntryActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))

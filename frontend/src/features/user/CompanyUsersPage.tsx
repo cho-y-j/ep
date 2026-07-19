@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
-import { PageHeader, DataTable, StatusBadge, type Column } from '../../components/ui';
+import { PageHeader, FilterBar, FilterSelect, DataTable, StatusBadge, type Column } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 
@@ -42,6 +42,8 @@ export default function CompanyUsersPage() {
   const [err, setErr] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CompanyUser | null>(null);
+  const [q, setQ] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'' | 'admin' | 'member'>('');
 
   useEffect(() => {
     if (!isMaster) return;
@@ -80,6 +82,19 @@ export default function CompanyUsersPage() {
       alert('비활성화 실패: ' + (e?.response?.data?.message || e?.message));
     }
   };
+
+  const qLower = q.trim().toLowerCase();
+  const filtered = useMemo(() => items.filter((u) => {
+    if (roleFilter === 'admin' && !u.is_company_admin) return false;
+    if (roleFilter === 'member' && u.is_company_admin) return false;
+    if (qLower) {
+      const hay = `${u.name} ${u.email} ${u.phone ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  }), [items, roleFilter, qLower]);
+  const activeFilterCount = [q, roleFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setRoleFilter(''); };
 
   if (!isMaster) {
     return (
@@ -171,11 +186,24 @@ export default function CompanyUsersPage() {
 
         {user?.company_id && <CompanyProfileCard companyId={user.company_id} />}
 
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '이름·이메일·전화 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect
+            value={roleFilter}
+            onChange={(v) => setRoleFilter(v as '' | 'admin' | 'member')}
+            placeholder="역할 전체"
+            options={[{ value: 'admin', label: '관리자' }, { value: 'member', label: '일반' }]}
+          />
+        </FilterBar>
+
         <DataTable
           columns={columns}
-          rows={items}
+          rows={filtered}
           rowKey={(u) => u.id}
-          empty={loading ? '로딩…' : '직원이 없습니다'}
+          empty={loading ? '로딩…' : items.length === 0 ? '직원이 없습니다' : '조건에 맞는 직원이 없습니다'}
         />
 
         {addOpen && (

@@ -48,4 +48,7 @@ dependencies {
     // Firebase FCM (공지 수신)
     implementation(platform("com.google.firebase:firebase-bom:32.7.2"))
     implementation("com.google.firebase:firebase-messaging-ktx")
+
+    // 단위테스트 (P5-W2 RssiMapper·Strobe 순수 로직)
+    testImplementation("junit:junit:4.13.2")
 }

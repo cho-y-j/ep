@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import MoneyInput from '../../components/MoneyInput';
 
 type RateType = 'DAILY' | 'MONTHLY';
@@ -31,6 +32,7 @@ export default function QuoteTemplatesPage() {
   const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<QuoteTemplate | 'new' | null>(null);
+  const [q, setQ] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -56,18 +58,23 @@ export default function QuoteTemplatesPage() {
     }
   };
 
+  const qLower = q.trim().toLowerCase();
+  const filtered = templates.filter((t) => !qLower || `${t.name} ${t.memo ?? ''}`.toLowerCase().includes(qLower));
+
   return (
     <AppShell breadcrumb={[{ label: '견적 템플릿' }]}>
       <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-950">견적 템플릿 (단가표)</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              장비 종류·규격별 5분류 단가표를 미리 등록해 두면, 견적 발송 화면에서 "템플릿 불러오기"로 한 번에 삽입할 수 있어요.
-            </p>
-          </div>
-          <button onClick={() => setEditing('new')} className="btn-primary shrink-0">+ 새 템플릿</button>
-        </header>
+        <PageHeader
+          title="견적 템플릿 (단가표)"
+          subtitle='장비 종류·규격별 5분류 단가표를 미리 등록해 두면, 견적 발송 화면에서 "템플릿 불러오기"로 한 번에 삽입할 수 있어요.'
+          actions={<button onClick={() => setEditing('new')} className="btn-primary shrink-0">+ 새 템플릿</button>}
+        />
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '템플릿 이름·메모 검색' }}
+          activeFilterCount={q ? 1 : 0}
+          onReset={() => setQ('')}
+        />
 
         {loading ? (
           <div className="text-sm text-slate-400">불러오는 중…</div>
@@ -79,9 +86,11 @@ export default function QuoteTemplatesPage() {
               우측 상단 "새 템플릿"으로 첫 단가표를 만드세요. 라인마다 장비 종류·규격 + 기본단가 + OT 5분류 단가를 담습니다.
             </p>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="card p-8 text-center text-sm text-slate-400">조건에 맞는 템플릿이 없습니다.</div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            {templates.map((t) => (
+            {filtered.map((t) => (
               <TemplateCard key={t.id} t={t} onEdit={() => setEditing(t)} onDelete={() => void remove(t)} />
             ))}
           </div>

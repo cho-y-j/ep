@@ -100,7 +100,7 @@ public class SafetyInspectionService {
                     "SAFETY_INSPECTION",
                     "[" + kindLabel + "] 일정 통보",
                     message,
-                    "SAFETY_INSPECTION", s.getId(), s.getSiteId());
+                    "SAFETY_INSPECTION", s.getId(), s.getSiteId(), notifications.senderLabelOf(actor));
             // SMS — 공급사 마스터 사용자 phone 으로 (SKEP_SMS_ENABLED=false 면 log 만).
             for (User u : users.findByCompanyIdAndIsCompanyAdminTrue(s.getSupplierCompanyId())) {
                 if (u.getPhone() != null && !u.getPhone().isBlank()) {

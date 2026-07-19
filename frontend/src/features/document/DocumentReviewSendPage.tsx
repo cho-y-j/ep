@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatOwnerSubLabel } from '../../lib/format';
 import { toast } from '../../lib/toast';
@@ -132,13 +133,10 @@ export default function DocumentReviewSendPage() {
   return (
     <AppShell breadcrumb={[{ label: '서류 심사 보내기' }]}>
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-5">
-        <div>
-          <h1 className="text-2xl font-bold">서류 심사 보내기</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            보낼 자원(장비·인원)을 고르면 각 자원의 서류를 자원별 압축파일(zip)로 묶어 입력한 이메일로 발송합니다.
-            받는 분이 시스템에 가입되어 있지 않아도 됩니다.
-          </p>
-        </div>
+        <PageHeader
+          title="서류 심사 보내기"
+          subtitle="보낼 자원(장비·인원)을 고르면 각 자원의 서류를 자원별 압축파일(zip)로 묶어 입력한 이메일로 발송합니다. 받는 분이 시스템에 가입되어 있지 않아도 됩니다."
+        />
 
         {/* 받는 사람 */}
         <section className="card p-4 space-y-2">

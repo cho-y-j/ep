@@ -37,4 +37,7 @@ public interface DailyWorkLogRepository extends JpaRepository<DailyWorkLog, Long
 
     /** P3d 이행 보고서 — 현장·기간 일일 확인서 배치 조회(서명율·미서명). */
     List<DailyWorkLog> findBySiteIdAndWorkDateBetweenOrderByWorkDateAscIdAsc(Long siteId, LocalDate from, LocalDate to);
+
+    /** P5-W4 과로 크론 — 최근 7일 전체 로그(인원별 그룹은 스케줄러에서). */
+    List<DailyWorkLog> findByWorkDateBetweenOrderByPersonIdAscWorkDateAsc(LocalDate from, LocalDate to);
 }

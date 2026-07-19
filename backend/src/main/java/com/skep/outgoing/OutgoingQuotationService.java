@@ -151,7 +151,7 @@ public class OutgoingQuotationService {
                     NotificationType.QUOTATION_RECEIVED,
                     "공급사 영업 견적 수신",
                     "공급사 견적서가 도착했습니다. 수신함에서 확인 가능합니다.",
-                    "OUTGOING_QUOTATION", row.getId(), null);
+                    "OUTGOING_QUOTATION", row.getId(), null, notifications.senderLabelOf(actor));
             row.markMailResult(true, null, pdf != null ? pdf.length : null);
         } else {
             // EMAIL 모드 — 외부 이메일 발송

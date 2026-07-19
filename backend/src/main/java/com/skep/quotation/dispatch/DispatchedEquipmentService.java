@@ -148,7 +148,7 @@ public class DispatchedEquipmentService {
             String title = "견적서 도착";
             String message = supplierName + (isRateMode ? " — 단가 응답" : " — 차량 " + entities.size() + "대") + " (견적 #" + requestId + ")";
             notifications.sendToCompany(bpCompanyId, "QUOTATION_DISPATCH", title, message,
-                    "QUOTATION_REQUEST", requestId, qr.getSiteId());
+                    "QUOTATION_REQUEST", requestId, qr.getSiteId(), notifications.senderLabelOf(actor));
         }
 
         // V80: 이 (요청,공급사)로 발송 완료 → 잔존 DRAFT 초안 폐기. confirm 경로면 이후 CONFIRMED 로 덮어씀.

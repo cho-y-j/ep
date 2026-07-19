@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import DailyWorkLogForm, { type FormOptions } from './DailyWorkLogForm';
 import LedgerPanel from './LedgerPanel';
 import { OT_COLS, SIGN_BADGE, type DailyWorkLog } from './types';
@@ -14,6 +15,7 @@ export default function DailyWorkLogPage() {
   const [loading, setLoading] = useState(true);
   const [options, setOptions] = useState<FormOptions>({ equipment: [], persons: [], contracts: [], sites: [], bps: [] });
   const [editing, setEditing] = useState<DailyWorkLog | null>(null);
+  const [q, setQ] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -49,16 +51,18 @@ export default function DailyWorkLogPage() {
 
   const onCreated = () => { void load(); setTab('list'); };
 
+  const qLower = q.trim().toLowerCase();
+  const shownLogs = qLower
+    ? logs.filter((l) => `${l.work_date} ${l.equipment_label ?? ''} ${l.person_name ?? ''} ${l.site_name ?? ''} ${l.work_location ?? ''} ${l.work_content ?? ''}`.toLowerCase().includes(qLower))
+    : logs;
+
   return (
     <AppShell breadcrumb={[{ label: '일일 확인서' }]}>
       <div className="mx-auto max-w-6xl space-y-6">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-950">일일 작업확인서</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            하루 1건씩 작업내용·위치·구분·OT를 기록하면 BP가 현장에서 서명하거나, 단독모드에선 종이 전표 사진으로 갈음합니다.
-            월간 원장·정산은 이 기록에서 자동 집계됩니다.
-          </p>
-        </header>
+        <PageHeader
+          title="일일 작업확인서"
+          subtitle="하루 1건씩 작업내용·위치·구분·OT를 기록하면 BP가 현장에서 서명하거나, 단독모드에선 종이 전표 사진으로 갈음합니다. 월간 원장·정산은 이 기록에서 자동 집계됩니다."
+        />
 
         <div className="flex gap-1 border-b border-slate-200">
           <TabBtn active={tab === 'create'} onClick={() => { setEditing(null); setTab('create'); }}>작성</TabBtn>
@@ -82,8 +86,15 @@ export default function DailyWorkLogPage() {
               <p className="mt-1 text-sm text-slate-400">“작성” 탭에서 오늘·과거 날짜의 작업을 기록하세요.</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {logs.map((l) => <LogCard key={l.id} log={l} onEdit={() => setEditing(l)} onChanged={load} />)}
+            <div className="space-y-3">
+              <FilterBar search={{ value: q, onChange: setQ, placeholder: '자원·현장·작업내용 검색' }} />
+              {shownLogs.length === 0 ? (
+                <div className="card p-8 text-center text-sm text-slate-400">검색 결과가 없습니다.</div>
+              ) : (
+                <div className="space-y-2">
+                  {shownLogs.map((l) => <LogCard key={l.id} log={l} onEdit={() => setEditing(l)} onChanged={load} />)}
+                </div>
+              )}
             </div>
           )
         )}

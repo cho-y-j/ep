@@ -67,6 +67,8 @@ type Props = {
   height?: string;
   /** 추가 className. */
   className?: string;
+  /** SDK 로드 실패 시 호출 — 부모가 대체 UI(폴백 목록)를 렌더하도록. */
+  onLoadError?: (msg: string) => void;
 };
 
 const SEOUL_CITY_HALL: LatLng = { lat: 37.5665, lng: 126.9780 };
@@ -92,7 +94,7 @@ function buildMarkerSvg(color: string, label?: string): string {
 }
 
 const KakaoMap = forwardRef<KakaoMapHandle, Props>(function KakaoMap(
-  { center, zoom = 4, markers = [], circles = [], polygon = null, onPolygonComplete, onMapClick, height = '480px', className }, ref
+  { center, zoom = 4, markers = [], circles = [], polygon = null, onPolygonComplete, onMapClick, height = '480px', className, onLoadError }, ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -107,6 +109,9 @@ const KakaoMap = forwardRef<KakaoMapHandle, Props>(function KakaoMap(
   const onMapClickRef = useRef(onMapClick);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // SDK 로드 실패를 부모에 알림 — 부모가 폴백(바이탈 목록)으로 전환하도록.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (loadError) onLoadError?.(loadError); }, [loadError]);
 
   useEffect(() => { onPolygonCompleteRef.current = onPolygonComplete; }, [onPolygonComplete]);
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);

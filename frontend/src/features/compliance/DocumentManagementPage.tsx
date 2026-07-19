@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import type { SiteResponse } from '../../types/site';
@@ -78,13 +79,10 @@ export default function DocumentManagementPage() {
   return (
     <AppShell breadcrumb={[{ label: '서류관리' }]}>
       <div className="mx-auto max-w-7xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-950">서류관리</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            작업계획서 작성 전 단계 — 현장별 자원 서류 컴플라이언스 점검 + 공급사에 보완 요청 발송.
-            서류 100% 갖춰지면 작업계획서를 만들 수 있습니다.
-          </p>
-        </div>
+        <PageHeader
+          title="서류관리"
+          subtitle="작업계획서 작성 전 단계 — 현장별 자원 서류 컴플라이언스 점검 + 공급사에 보완 요청 발송. 서류 100% 갖춰지면 작업계획서를 만들 수 있습니다."
+        />
 
         <div className="border-b border-slate-200 flex gap-1">
           {!isSupplier && (
@@ -444,6 +442,14 @@ function MyDocsExpiryView() {
     );
   };
 
+  const docFilterCount =
+    (filter !== 'all' ? 1 : 0) + (equipType ? 1 : 0) + (docTypeId ? 1 : 0) +
+    (sourcingFilter !== 'all' ? 1 : 0) + (companyFilter ? 1 : 0) + (q ? 1 : 0);
+  const resetDocFilters = () => {
+    setFilter('all'); setEquipType(''); setDocTypeId(0);
+    setSourcingFilter('all'); setCompanyFilter(''); setQ('');
+  };
+
   if (loading) return <div className="text-sm text-slate-400">불러오는 중…</div>;
 
   return (
@@ -502,7 +508,31 @@ function MyDocsExpiryView() {
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <FilterBar
+        search={{ value: q, onChange: setQ, placeholder: '차량번호·이름 또는 서류 종류 검색' }}
+        activeFilterCount={docFilterCount}
+        onReset={resetDocFilters}
+        trailing={
+          <>
+            <button onClick={reverifyAllVisible} disabled={globalReverifyBusy}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+              {globalReverifyBusy ? '검증 중…' : '전체 재검증'}
+            </button>
+            {canAddEquipment && (
+              <button onClick={() => setAddDialog('EQUIPMENT')}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg border border-blue-300 bg-white text-blue-700 hover:bg-blue-50">
+                + 장비 추가
+              </button>
+            )}
+            {canAddPerson && (
+              <button onClick={() => setAddDialog('PERSON')}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg border border-blue-300 bg-white text-blue-700 hover:bg-blue-50">
+                + 인력 추가
+              </button>
+            )}
+          </>
+        }
+      >
         <select value={filter} onChange={(e) => setFilter(e.target.value as StatusFilter)}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
           <option value="all">상태 전체</option>
@@ -545,33 +575,7 @@ function MyDocsExpiryView() {
             ))}
           </select>
         )}
-        <div className="relative flex-1 min-w-[220px]">
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="차량번호·이름 또는 서류 종류 검색"
-            className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm"
-          />
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-        </div>
-        <button onClick={reverifyAllVisible} disabled={globalReverifyBusy}
-                className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
-          {globalReverifyBusy ? '검증 중…' : '전체 재검증'}
-        </button>
-        {canAddEquipment && (
-          <button onClick={() => setAddDialog('EQUIPMENT')}
-                  className="px-4 py-2 text-sm font-semibold rounded-lg border border-blue-300 bg-white text-blue-700 hover:bg-blue-50">
-            + 장비 추가
-          </button>
-        )}
-        {canAddPerson && (
-          <button onClick={() => setAddDialog('PERSON')}
-                  className="px-4 py-2 text-sm font-semibold rounded-lg border border-blue-300 bg-white text-blue-700 hover:bg-blue-50">
-            + 인력 추가
-          </button>
-        )}
-      </div>
+      </FilterBar>
 
       {grouped.length === 0 ? (
         <div className="card p-8 text-center text-sm text-slate-400">해당 조건의 서류가 없습니다.</div>

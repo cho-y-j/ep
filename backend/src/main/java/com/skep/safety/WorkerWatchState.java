@@ -44,6 +44,10 @@ public class WorkerWatchState {
     @Column(name = "body_temp", precision = 4, scale = 1)
     private BigDecimal bodyTemp;
 
+    /** 최근 수신 위치(폰 GPS 게이트웨이) — 관제 지도 워치 마커. NULL=위치 미보고. */
+    private Double lat;
+    private Double lng;
+
     @Column(name = "site_id")
     private Long siteId;
 

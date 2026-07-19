@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader } from '../../components/ui';
 import AuditLogWidget from './AuditLogWidget';
 import WorkPlanListWidget, { type DashboardWorkPlan } from './WorkPlanListWidget';
-import { SectionCard, StatCard, TodoBanner } from './widgets';
+import { SectionCard, StatCard, EmptyState } from './widgets';
 import TodayTasksRow from './TodayTasksRow';
 
 type AdminSummary = {
@@ -33,12 +35,10 @@ export default function AdminDashboardPage() {
   return (
     <AppShell breadcrumb={[{ label: '대시보드' }]}>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">관리자 대시보드</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {user?.name}님, 전체 시스템 현황과 위험 관제를 확인하세요.
-          </p>
-        </div>
+        <PageHeader
+          title="관리자 대시보드"
+          subtitle={`${user?.name ?? ''}님, 전체 시스템 현황과 위험 관제를 확인하세요.`}
+        />
 
         <TodayTasksRow
           loading={loading}
@@ -65,14 +65,29 @@ export default function AdminDashboardPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <AuditLogWidget preloaded={summary?.recent_audit_logs ?? []} />
-              <SectionCard title="알림">
-                <TodoBanner text="알림 도메인은 Phase S-4 이후에 추가됩니다." />
+              <SectionCard title="알림"
+                action={<Link to="/notifications" className="text-sm font-medium text-brand-600 hover:underline">전체 보기</Link>}>
+                {(summary?.recent_notifications ?? []).length === 0 ? (
+                  <EmptyState text="최근 알림이 없습니다." />
+                ) : (
+                  <ul className="divide-y divide-slate-100">
+                    {(summary?.recent_notifications ?? []).slice(0, 5).map((n) => (
+                      <li key={n.id} className="py-2">
+                        <Link to="/notifications" className="group block">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="truncate text-sm font-medium text-slate-800 group-hover:text-brand-700">{n.title}</span>
+                            <span className="shrink-0 text-xs text-slate-400">
+                              {new Date(n.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                            </span>
+                          </div>
+                          {n.message && <p className="mt-0.5 truncate text-xs text-slate-500">{n.message}</p>}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </SectionCard>
             </div>
-
-            <SectionCard title="회사별/현장별 위험 요약">
-              <TodoBanner text="회사·현장별 위험 요약은 Phase S-4 서류 정책 강화 후 채워집니다." />
-            </SectionCard>
           </>
         )}
       </div>

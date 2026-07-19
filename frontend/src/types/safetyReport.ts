@@ -27,6 +27,32 @@ export type WorkComplianceSummary = {
   log_sign_rate_pct: number | null;
 };
 
+export type EmergencyTimeline = {
+  alert_id: number;
+  kind: string;
+  kind_label: string;
+  detected_at: string;
+  peer_notified_at: string | null;
+  first_response_at: string | null;
+  resolved_at: string | null;
+  notify_elapsed_seconds: number | null;
+  response_elapsed_seconds: number | null;
+  resolve_elapsed_seconds: number | null;
+  responder_count: number;
+  relayed: boolean;
+  escalated: boolean;
+};
+
+export type EmergencyResponseSummary = {
+  total: number;
+  chain_activated: number;
+  responded: number;
+  avg_first_response_seconds: number | null;
+  relayed_count: number;
+  escalated_count: number;
+  timelines: EmergencyTimeline[];
+};
+
 export type TimelineAlert = {
   id: number;
   kind: string;
@@ -101,6 +127,7 @@ export type SafetyReport = {
   alert_summary: AlertSummary;
   inspection_summary: InspectionSummary;
   work_compliance_summary: WorkComplianceSummary;
+  emergency_response: EmergencyResponseSummary;
   timeline: TimelineDay[];
   noncompliance: Noncompliance;
   standard: SafetyStandard;
@@ -137,6 +164,7 @@ export function defaultPeriod(days = 30): { from: string; to: string } {
   const to = new Date();
   const from = new Date();
   from.setDate(to.getDate() - (days - 1));
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   return { from: iso(from), to: iso(to) };
 }

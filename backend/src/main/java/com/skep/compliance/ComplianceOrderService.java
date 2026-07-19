@@ -64,7 +64,7 @@ public class ComplianceOrderService {
                 "COMPLIANCE_ORDER",
                 "이행지시 도착",
                 orderTypeLabel + " — " + targetLabel + " (마감 " + req.dueDate() + ")",
-                "COMPLIANCE_ORDER", o.getId(), null);
+                "COMPLIANCE_ORDER", o.getId(), null, notifications.senderLabelOf(actor));
 
         return toResponse(o);
     }
@@ -117,7 +117,7 @@ public class ComplianceOrderService {
                 "COMPLIANCE_ORDER_SUBMITTED",
                 "이행 완료 보고",
                 orderTypeLabel(o.getOrderType()) + " — " + resolveTargetLabel(o.getTargetType(), o.getTargetId()),
-                "COMPLIANCE_ORDER", o.getId(), null);
+                "COMPLIANCE_ORDER", o.getId(), null, notifications.senderLabelOf(actor));
         return toResponse(o);
     }
 
@@ -138,7 +138,7 @@ public class ComplianceOrderService {
                     "COMPLIANCE_ORDER_APPROVED",
                     "이행 승인됨",
                     orderTypeLabel(o.getOrderType()) + " — " + resolveTargetLabel(o.getTargetType(), o.getTargetId()),
-                    "COMPLIANCE_ORDER", o.getId(), null);
+                    "COMPLIANCE_ORDER", o.getId(), null, notifications.senderLabelOf(actor));
         } else {
             if (req.rejectionReason() == null || req.rejectionReason().isBlank()) {
                 throw ApiException.badRequest("REASON_REQUIRED", "반려 사유를 입력하세요");
@@ -148,7 +148,7 @@ public class ComplianceOrderService {
                     "COMPLIANCE_ORDER_REJECTED",
                     "이행 반려됨",
                     orderTypeLabel(o.getOrderType()) + " — " + req.rejectionReason(),
-                    "COMPLIANCE_ORDER", o.getId(), null);
+                    "COMPLIANCE_ORDER", o.getId(), null, notifications.senderLabelOf(actor));
         }
         return toResponse(o);
     }

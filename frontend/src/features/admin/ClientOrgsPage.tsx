@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 
 interface ClientOrg {
   id: number;
@@ -20,6 +21,9 @@ export default function ClientOrgsPage() {
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [editing, setEditing] = useState<ClientOrg | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 클라이언트 필터 — 로드된 목록을 좁힘.
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   async function load() {
     setLoading(true);
@@ -80,18 +84,26 @@ export default function ClientOrgsPage() {
     setError(null);
   }
 
+  const qLower = q.trim().toLowerCase();
+  const filtered = items.filter((c) => {
+    if (statusFilter === 'active' && !c.active) return false;
+    if (statusFilter === 'inactive' && c.active) return false;
+    if (qLower && !`${c.name} ${c.code}`.toLowerCase().includes(qLower)) return false;
+    return true;
+  });
+  const activeFilterCount = [q, statusFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setStatusFilter(''); };
+
   return (
     <AppShell breadcrumb={[{ label: '원청기관 관리' }]}>
       <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">원청기관 관리</h1>
-          {!creating && (
+        <PageHeader
+          title="원청기관 관리"
+          subtitle="삼성 / SK / 현대 등 발주처(원청) 명단. 자원(장비/인원) 의 이력 라벨에 사용됩니다."
+          actions={!creating ? (
             <button onClick={() => setCreating(true)} className="btn-primary">+ 새 원청기관</button>
-          )}
-        </div>
-        <p className="text-sm text-slate-500 mb-6">
-          삼성 / SK / 현대 등 발주처(원청) 명단. 자원(장비/인원) 의 이력 라벨에 사용됩니다.
-        </p>
+          ) : undefined}
+        />
 
         {creating && (
           <div className="mb-6 p-4 border border-slate-200 rounded-lg bg-slate-50">
@@ -122,6 +134,15 @@ export default function ClientOrgsPage() {
           </div>
         )}
 
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '이름·코드 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={statusFilter} onChange={setStatusFilter} placeholder="상태 전체"
+            options={[{ value: 'active', label: '활성' }, { value: 'inactive', label: '비활성' }]} />
+        </FilterBar>
+
         {loading ? <div className="text-sm text-slate-500">로딩 중…</div> : (
           <table className="w-full text-sm">
             <thead>
@@ -134,7 +155,7 @@ export default function ClientOrgsPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((c) => (
+              {filtered.map((c) => (
                 <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="py-2 font-medium">{c.name}</td>
                   <td><code className="text-xs">{c.code}</code></td>
@@ -153,8 +174,10 @@ export default function ClientOrgsPage() {
                   </td>
                 </tr>
               ))}
-              {items.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-slate-400">등록된 원청기관 없음</td></tr>
+              {filtered.length === 0 && (
+                <tr><td colSpan={5} className="py-6 text-center text-slate-400">
+                  {items.length === 0 ? '등록된 원청기관 없음' : '조건에 맞는 원청기관 없음'}
+                </td></tr>
               )}
             </tbody>
           </table>

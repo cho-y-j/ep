@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import { useAuth } from '../auth/AuthContext';
 import { toast } from '../../lib/toast';
 import type { InspectionResponse } from '../../types/safety';
@@ -27,6 +28,7 @@ export default function SafetyInspectionsPage() {
   const [list, setList] = useState<InspectionResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [q, setQ] = useState('');
 
   // BP/ADMIN 은 현장 list 가져와서 select. 공급사는 mine.
   useEffect(() => {
@@ -82,32 +84,34 @@ export default function SafetyInspectionsPage() {
 
   const pageTitle = isSupplier ? '받은 안전점검 일정' : '안전점검 관리';
 
+  const filteredList = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return list;
+    return list.filter((i) => `${i.target_label} ${i.site_name ?? ''} ${i.supplier_company_name ?? ''} ${KIND_LABEL[i.kind]}`.toLowerCase().includes(needle));
+  }, [list, q]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, InspectionResponse[]>();
-    list.forEach((i) => {
+    filteredList.forEach((i) => {
       const key = i.status;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(i);
     });
     return map;
-  }, [list]);
+  }, [filteredList]);
 
   return (
     <AppShell breadcrumb={[{ label: pageTitle }]}>
       <div className="max-w-5xl mx-auto px-6 py-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">{pageTitle}</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              {isSupplier
-                ? '받은 차량검사 / 입소검사 일정. 확인 후 검사 당일 현장에 입소하세요.'
-                : '현장 입소 전 차량검사 (사전) + 입소검사 (당일) 일정 관리.'}
-            </p>
-          </div>
-          {(isAdmin || isBP) && siteId && (
+        <PageHeader
+          title={pageTitle}
+          subtitle={isSupplier
+            ? '받은 차량검사 / 입소검사 일정. 확인 후 검사 당일 현장에 입소하세요.'
+            : '현장 입소 전 차량검사 (사전) + 입소검사 (당일) 일정 관리.'}
+          actions={(isAdmin || isBP) && siteId ? (
             <button onClick={() => setCreateOpen(true)} className="btn-primary">+ 일정 등록</button>
-          )}
-        </div>
+          ) : undefined}
+        />
 
         {/* BP/ADMIN 현장 선택 */}
         {!isSupplier && sites.length > 0 && (
@@ -128,8 +132,13 @@ export default function SafetyInspectionsPage() {
         ) : list.length === 0 ? (
           <div className="card py-12 text-center text-slate-400">등록된 검사 일정이 없습니다.</div>
         ) : (
-          <div className="space-y-3">
-            {Array.from(grouped.entries()).map(([status, items]) => (
+          <>
+            <FilterBar search={{ value: q, onChange: setQ, placeholder: '대상·현장·공급사 검색' }} />
+            {filteredList.length === 0 ? (
+              <div className="card py-12 text-center text-slate-400">검색 결과가 없습니다.</div>
+            ) : (
+              <div className="space-y-3">
+                {Array.from(grouped.entries()).map(([status, items]) => (
               <div key={status}>
                 <div className="text-xs font-semibold text-slate-500 mb-1.5">{STATUS_LABEL[status as keyof typeof STATUS_LABEL]} ({items.length})</div>
                 <div className="space-y-1.5">
@@ -171,8 +180,10 @@ export default function SafetyInspectionsPage() {
                   ))}
                 </div>
               </div>
-            ))}
-          </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 

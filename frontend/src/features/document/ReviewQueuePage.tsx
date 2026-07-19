@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { VERIFICATION_STATUS_LABEL, type DocumentTypeResponse } from '../../types/document';
 import type { ReviewItemResponse } from '../../types/notification';
 import OcrUploadDialog from './OcrUploadDialog';
@@ -189,6 +190,9 @@ export default function ReviewQueuePage() {
   const [processedCount, setProcessedCount] = useState<number | null>(null);
   const [docTypes, setDocTypes] = useState<Map<number, DocumentTypeResponse>>(new Map());
   const [reverify, setReverify] = useState<ReviewItemResponse | null>(null);
+  // 클라이언트 필터 — 로드된 큐를 좁힘(탭 유지, 백엔드 무접촉).
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
     // 모든 document_type 한 번에 fetch — applies_to=PERSON|EQUIPMENT|COMPANY 다 합쳐서
@@ -219,7 +223,7 @@ export default function ReviewQueuePage() {
       .finally(() => setLoading(false));
   }, [tab]);
 
-  useEffect(() => { setSelectedId(null); load(); }, [load]);
+  useEffect(() => { setSelectedId(null); setStatusFilter(''); load(); }, [load]);
 
   // 다른 탭의 카운트도 한 번 미리 fetch (탭 라벨에 숫자 표시용).
   useEffect(() => {
@@ -231,6 +235,22 @@ export default function ReviewQueuePage() {
   }, [tab]);
 
   const selected = useMemo(() => items.find((i) => i.id === selectedId) ?? null, [items, selectedId]);
+
+  const statusOptions = useMemo(() => {
+    const set = new Set(items.map((i) => i.verification_status));
+    return [...set].map((s) => ({ value: s, label: VERIFICATION_STATUS_LABEL[s] ?? s }));
+  }, [items]);
+  const qLower = q.trim().toLowerCase();
+  const filtered = useMemo(() => items.filter((it) => {
+    if (statusFilter && it.verification_status !== statusFilter) return false;
+    if (qLower) {
+      const hay = `${it.document_type_name} ${it.owner_name ?? ''} ${it.owner_supplier_name ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  }), [items, statusFilter, qLower]);
+  const activeFilterCount = [q, statusFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setStatusFilter(''); };
 
   function openVerifyDialog(item: ReviewItemResponse) {
     const type = docTypes.get(item.document_type_id);
@@ -270,14 +290,12 @@ export default function ReviewQueuePage() {
   return (
     <AppShell breadcrumb={[{ label: '서류 검토' }]}>
       <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold">서류 검토 큐</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {tab === 'pending'
-              ? 'OCR 검토 필요 / 반려 상태인 서류. 사진과 OCR 결과를 확인하고 검증/반려를 결정합니다.'
-              : '이미 처리 완료된 서류 — 검증 완료 또는 반려 처리한 내역.'}
-          </p>
-        </div>
+        <PageHeader
+          title="서류 검토 큐"
+          subtitle={tab === 'pending'
+            ? 'OCR 검토 필요 / 반려 상태인 서류. 사진과 OCR 결과를 확인하고 검증/반려를 결정합니다.'
+            : '이미 처리 완료된 서류 — 검증 완료 또는 반려 처리한 내역.'}
+        />
 
         <div className="flex gap-2">
           <button type="button" onClick={() => setTab('pending')}
@@ -298,6 +316,14 @@ export default function ReviewQueuePage() {
           </button>
         </div>
 
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '서류·자원·공급사 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={statusFilter} onChange={setStatusFilter} placeholder="상태 전체" options={statusOptions} />
+        </FilterBar>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* 좌측 목록 */}
           <div className="lg:col-span-5 rounded-xl border border-slate-200 bg-white overflow-x-auto">
@@ -315,11 +341,13 @@ export default function ReviewQueuePage() {
                   <tr><td colSpan={4} className="px-4 py-12 text-center text-slate-400">불러오는 중...</td></tr>
                 ) : error ? (
                   <tr><td colSpan={4} className="px-4 py-12 text-center text-rose-600">{error}</td></tr>
-                ) : items.length === 0 ? (
+                ) : filtered.length === 0 ? (
                   <tr><td colSpan={4} className="px-4 py-12 text-center text-slate-400">
-                    {tab === 'pending' ? '검토할 서류가 없습니다.' : '아직 처리 완료된 서류가 없습니다.'}
+                    {items.length === 0
+                      ? (tab === 'pending' ? '검토할 서류가 없습니다.' : '아직 처리 완료된 서류가 없습니다.')
+                      : '조건에 맞는 서류가 없습니다.'}
                   </td></tr>
-                ) : items.map((it) => {
+                ) : filtered.map((it) => {
                   const cls = it.verification_status === 'REJECTED' ? 'bg-rose-100 text-rose-700'
                     : it.verification_status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700'
                     : 'bg-amber-100 text-amber-700';

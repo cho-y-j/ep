@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { EQUIPMENT_CATEGORY_LABEL, type EquipmentCategory } from '../../types/equipment';
 import { PERSON_ROLE_LABEL, type PersonRole } from '../../types/person';
@@ -47,6 +48,10 @@ export default function OpenBidsBoardPage() {
   const [selected, setSelected] = useState<Bid | null>(null);
   /** 내가 활성 제안을 이미 보낸 견적 id 집합 — "이미 제출" chip + 다이얼로그 차단. */
   const [submittedIds, setSubmittedIds] = useState<Set<number>>(new Set());
+  // 클라이언트 필터 — 로드된 공개입찰을 좁힘.
+  const [q, setQ] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [bpFilter, setBpFilter] = useState('');
 
   async function load() {
     setLoading(true);
@@ -67,9 +72,34 @@ export default function OpenBidsBoardPage() {
   }
   useEffect(() => { void load(); }, []);
 
+  // 필터 옵션 — 로드된 데이터에서 파생(발주사).
+  const bpOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    bids.forEach((b) => { if (b.bp_company_id != null) m.set(String(b.bp_company_id), b.bp_company_name ?? `회사 #${b.bp_company_id}`); });
+    return [...m.entries()].map(([value, label]) => ({ value, label }));
+  }, [bids]);
+
+  const qLower = q.trim().toLowerCase();
+  const filteredBids = useMemo(() => bids.filter((b) => {
+    if (typeFilter === 'EQUIPMENT' && !b.equipment_category) return false;
+    if (typeFilter === 'MANPOWER' && !b.manpower_role) return false;
+    if (bpFilter && String(b.bp_company_id ?? '') !== bpFilter) return false;
+    if (qLower) {
+      const name = b.equipment_category
+        ? (EQUIPMENT_CATEGORY_LABEL[b.equipment_category as EquipmentCategory] ?? b.equipment_category)
+        : (b.manpower_role ? (PERSON_ROLE_LABEL[b.manpower_role as PersonRole] ?? b.manpower_role) : '');
+      const hay = `${name} ${b.bp_company_name ?? ''} ${b.work_location_text ?? ''} ${b.spec_text ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  }), [bids, typeFilter, bpFilter, qLower]);
+
+  const activeFilterCount = [q, typeFilter, bpFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setTypeFilter(''); setBpFilter(''); };
+
   // 등록일(created_at) 기준 최신순 + 날짜별 그룹핑 — "언제 올라왔는지" 구분.
   const dateGroups = useMemo(() => {
-    const sorted = [...bids].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
+    const sorted = [...filteredBids].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
     const m = new Map<string, Bid[]>();
     for (const b of sorted) {
       const key = (b.created_at ?? '').slice(0, 10) || 'unknown';
@@ -77,20 +107,32 @@ export default function OpenBidsBoardPage() {
       m.get(key)!.push(b);
     }
     return Array.from(m.entries());
-  }, [bids]);
+  }, [filteredBids]);
 
   return (
     <AppShell breadcrumb={[{ label: '공개입찰' }]}>
       <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">공개입찰 게시판</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            BP 사가 올린 공개입찰. 행 클릭 → 자기 자원으로 단가 제안 작성.
-          </p>
-        </div>
+        <PageHeader
+          title="공개입찰 게시판"
+          subtitle="BP 사가 올린 공개입찰. 행 클릭 → 자기 자원으로 단가 제안 작성."
+        />
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '자원·발주사·현장 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={typeFilter} onChange={setTypeFilter} placeholder="자원종류 전체"
+            options={[{ value: 'EQUIPMENT', label: '장비' }, { value: 'MANPOWER', label: '인력' }]} />
+          {bpOptions.length > 0 && (
+            <FilterSelect value={bpFilter} onChange={setBpFilter} placeholder="발주사(BP) 전체" options={bpOptions} />
+          )}
+        </FilterBar>
 
         {loading ? <div className="text-slate-400">로딩 중…</div> : bids.length === 0 ? (
           <div className="card p-8 text-center text-slate-400">아직 올라온 공개입찰이 없습니다.</div>
+        ) : dateGroups.length === 0 ? (
+          <div className="card p-8 text-center text-slate-400">조건에 맞는 공개입찰이 없습니다.</div>
         ) : (
           <div className="space-y-6">
             {dateGroups.map(([dateKey, groupBids]) => (

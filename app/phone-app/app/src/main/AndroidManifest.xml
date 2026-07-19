@@ -9,8 +9,19 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.NFC" />
+    <!-- P5-W2 파인드미 대응체인 — BLE 광고(피재자 비콘)·스캔(응답자 근접 게이지) + foreground 서비스 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- P5-W3 제3자 SOS 대리중계 — 재부팅 후 백그라운드 스캔 재등록 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <application
         android:allowBackup="false"
@@ -166,6 +177,32 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.SkepField" />
 
+        <!-- P5-W2 파인드미(피재자) 풀스크린 — 검정/흰 점멸 + [해제] -->
+        <activity
+            android:name=".ui.FindMeActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.SkepField" />
+
+        <!-- P5-W2 동료 긴급 호출(응답자) 풀스크린 — 이름·거리·[제가 갑니다]·[지도] -->
+        <activity
+            android:name=".ui.PeerEmergencyActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.SkepField" />
+
+        <!-- P5-W2 근접 게이지(응답자) — BLE RSSI 게이지 + 진동 -->
+        <activity
+            android:name=".ui.ProximityGaugeActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SkepField" />
+
         <!-- 공지 FCM 수신 -->
         <service
             android:name=".service.FieldFcmService"
@@ -184,6 +221,26 @@
                 <data android:scheme="wear" android:host="*" android:pathPrefix="/skep" />
             </intent-filter>
         </service>
+
+        <!-- P5-W2 파인드미 foreground 서비스 (사이렌·토치 스트로브·BLE 광고) -->
+        <service
+            android:name=".service.FindMeAlarmService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- P5-W3 제3자 SOS 대리중계 — OS 위임 백그라운드 스캔 매칭 수신(PendingIntent 타깃, 시스템만 전달) -->
+        <receiver
+            android:name=".service.SosRelayReceiver"
+            android:exported="false" />
+
+        <!-- P5-W3 부팅 후 SOS 대리중계 스캔 재등록 -->
+        <receiver
+            android:name=".service.BootRelayReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { EQUIPMENT_CATEGORY_LABEL, type EquipmentCategory } from '../../types/equipment';
 import { PERSON_ROLE_LABEL, type PersonRole } from '../../types/person';
@@ -44,6 +45,9 @@ export default function MyProposalsPage() {
   const [rows, setRows] = useState<ProposalRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'ACTIVE' | 'WON' | 'DONE'>('ACTIVE');
+  // 클라이언트 필터 — 탭(진행/선정/종료) 위에 검색·발주사 필터 추가.
+  const [q, setQ] = useState('');
+  const [bpFilter, setBpFilter] = useState('');
 
   useEffect(() => {
     setLoading(true);
@@ -51,18 +55,6 @@ export default function MyProposalsPage() {
       .then((r) => setRows(r.data))
       .finally(() => setLoading(false));
   }, []);
-
-  const filtered = rows.filter((p) => {
-    if (tab === 'ACTIVE') return p.status === 'SUBMITTED' || p.status === 'PENDING_REVIEW';
-    if (tab === 'WON') return p.status === 'FINAL_ACCEPTED';
-    return p.status === 'REJECTED' || p.status === 'WITHDRAWN';
-  });
-
-  const counts = {
-    active: rows.filter((p) => p.status === 'SUBMITTED' || p.status === 'PENDING_REVIEW').length,
-    won: rows.filter((p) => p.status === 'FINAL_ACCEPTED').length,
-    done: rows.filter((p) => p.status === 'REJECTED' || p.status === 'WITHDRAWN').length,
-  };
 
   const resourceLabel = (p: ProposalRow) => {
     if (p.request_type === 'MANPOWER') {
@@ -75,15 +67,44 @@ export default function MyProposalsPage() {
       : '장비';
   };
 
+  const counts = {
+    active: rows.filter((p) => p.status === 'SUBMITTED' || p.status === 'PENDING_REVIEW').length,
+    won: rows.filter((p) => p.status === 'FINAL_ACCEPTED').length,
+    done: rows.filter((p) => p.status === 'REJECTED' || p.status === 'WITHDRAWN').length,
+  };
+
+  const bpOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    rows.forEach((p) => { if (p.request_bp_company_id != null) m.set(String(p.request_bp_company_id), p.request_bp_company_name ?? `회사 #${p.request_bp_company_id}`); });
+    return [...m.entries()].map(([value, label]) => ({ value, label }));
+  }, [rows]);
+
+  const qLower = q.trim().toLowerCase();
+  const filtered = rows.filter((p) => {
+    const inTab = tab === 'ACTIVE'
+      ? (p.status === 'SUBMITTED' || p.status === 'PENDING_REVIEW')
+      : tab === 'WON'
+        ? p.status === 'FINAL_ACCEPTED'
+        : (p.status === 'REJECTED' || p.status === 'WITHDRAWN');
+    if (!inTab) return false;
+    if (bpFilter && String(p.request_bp_company_id ?? '') !== bpFilter) return false;
+    if (qLower) {
+      const hay = `${resourceLabel(p)} ${p.request_bp_company_name ?? ''} ${p.equipment_label ?? ''} ${p.person_label ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  });
+
+  const activeFilterCount = [q, bpFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setBpFilter(''); };
+
   return (
     <AppShell breadcrumb={[{ label: '내 견적 제안' }]}>
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-5">
-        <div>
-          <h1 className="text-2xl font-bold">내 견적 제안</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            BP 공개입찰에 제출한 단가 제안과 진행 상태(진행 중 · 선정 · 종료)입니다.
-          </p>
-        </div>
+        <PageHeader
+          title="내 견적 제안"
+          subtitle="BP 공개입찰에 제출한 단가 제안과 진행 상태(진행 중 · 선정 · 종료)입니다."
+        />
 
         <div className="flex gap-2 border-b border-slate-200">
           {[
@@ -103,6 +124,16 @@ export default function MyProposalsPage() {
             </button>
           ))}
         </div>
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '자원·발주사 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          {bpOptions.length > 0 && (
+            <FilterSelect value={bpFilter} onChange={setBpFilter} placeholder="발주사(BP) 전체" options={bpOptions} />
+          )}
+        </FilterBar>
 
         {loading ? (
           <div className="card p-8 text-center text-slate-400">로딩 중...</div>

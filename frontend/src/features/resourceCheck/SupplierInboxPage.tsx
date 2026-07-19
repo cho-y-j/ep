@@ -2,15 +2,23 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import {
   CHECK_TYPE_LABEL, CHECK_STATUS_LABEL, CHECK_STATUS_CHIP_CLS,
   type ResourceCheckResponse,
 } from '../../types/resourceCheck';
 
+const TYPE_OPTIONS = Object.entries(CHECK_TYPE_LABEL).map(([value, label]) => ({ value, label }));
+const STATUS_OPTIONS = Object.entries(CHECK_STATUS_LABEL).map(([value, label]) => ({ value, label }));
+
 export default function ResourceCheckSupplierInbox() {
   const [items, setItems] = useState<ResourceCheckResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
+  // 클라이언트 필터 — 로드된 요청을 좁힘.
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -36,19 +44,44 @@ export default function ResourceCheckSupplierInbox() {
     } finally { setBusy(null); }
   };
 
+  const qLower = q.trim().toLowerCase();
+  const filtered = items.filter((r) => {
+    if (statusFilter && r.status !== statusFilter) return false;
+    if (typeFilter && r.check_type !== typeFilter) return false;
+    if (qLower) {
+      const hay = `${CHECK_TYPE_LABEL[r.check_type]} ${r.owner_label} ${r.notes ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  });
+  const activeFilterCount = [q, statusFilter, typeFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setStatusFilter(''); setTypeFilter(''); };
+
   return (
     <AppShell>
-      <header className="mb-4">
-        <h1 className="text-xl font-bold text-slate-900">받은 점검 요청</h1>
-        <p className="text-xs text-slate-500 mt-1">BP 가 보낸 자동차 안전점검·건강검진·안전교육 등 요청</p>
-      </header>
+      <PageHeader
+        title="받은 점검 요청"
+        subtitle="BP 가 보낸 자동차 안전점검·건강검진·안전교육 등 요청"
+      />
+
+      <FilterBar
+        search={{ value: q, onChange: setQ, placeholder: '종류·자원 검색' }}
+        activeFilterCount={activeFilterCount}
+        onReset={resetFilters}
+      >
+        <FilterSelect value={typeFilter} onChange={setTypeFilter} placeholder="종류 전체" options={TYPE_OPTIONS} />
+        <FilterSelect value={statusFilter} onChange={setStatusFilter} placeholder="상태 전체" options={STATUS_OPTIONS} />
+      </FilterBar>
+
       {loading ? (
         <div className="text-sm text-slate-400">로딩…</div>
       ) : items.length === 0 ? (
         <div className="card p-8 text-center text-slate-400">받은 요청이 없습니다.</div>
+      ) : filtered.length === 0 ? (
+        <div className="card p-8 text-center text-slate-400">조건에 맞는 요청이 없습니다.</div>
       ) : (
         <div className="space-y-2">
-          {items.map((r) => (
+          {filtered.map((r) => (
             <div key={r.id} className="card p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">

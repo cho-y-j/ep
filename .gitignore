@@ -34,4 +34,4 @@ frontend/vite.dev-local.config.ts
 backend/firebase-admin-key.json
 
 # 실제 신분증/면허 등 PII 샘플 — 커밋 금지
-test/
+/test/

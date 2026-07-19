@@ -76,6 +76,29 @@ public class FieldSafetyAlert {
     @Column(name = "escalated_at")
     private LocalDateTime escalatedAt;
 
+    /** P5-W2 골든타임 t1 — 근접 동료 통보 시각(대응체인 발동 마커). */
+    @Column(name = "peer_notified_at")
+    private LocalDateTime peerNotifiedAt;
+
+    /** P5-W2 골든타임 t2 — 최초 [제가 갑니다] 응답 시각(최초 1회만). */
+    @Column(name = "first_response_at")
+    private LocalDateTime firstResponseAt;
+
+    /** P5-W2 60초 무응답 → 현장 전체 확대 + 관리자 통보(1회 마커, 무한 확대 방지). */
+    @Column(name = "peer_escalated_at")
+    private LocalDateTime peerEscalatedAt;
+
+    /** P5-W3 최근 BLE 대리중계 수신 시각(제3자 폰 — 터널·지하 통신불능 보완). */
+    @Column(name = "relayed_at")
+    private LocalDateTime relayedAt;
+
+    /** P5-W3 중계자 위치 — 피재자 추정 위치 보강(BLE 근거리라 중계자≈피재자). */
+    @Column(name = "relay_lat")
+    private Double relayLat;
+
+    @Column(name = "relay_lng")
+    private Double relayLng;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

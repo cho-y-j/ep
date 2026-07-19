@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useUnreadCount } from '../../lib/useUnreadCount';
@@ -21,20 +21,28 @@ type NavItem = {
   disabled?: boolean;
   /** `/quotations` 와 `/quotations/open-bids` 같은 prefix 충돌 회피용 — true 면 정확 매칭일 때만 active. */
   end?: boolean;
+  /** 2단 패널 내 소제목 그룹. 같은 값 연속이면 첫 항목 위에만 소제목 렌더(긴 대분류 가독용). */
+  section?: string;
 };
 
-type NavSection = {
+/**
+ * 미리캔버스식 2단 내비의 대분류.
+ * - `to` 있음 → 단독 대분류: 클릭 시 바로 라우트 이동(2단 패널 없음).
+ * - `items` 있음 → 패널 대분류: 클릭 시 오른쪽 2단에 세부 항목 노출(옆으로 펼침).
+ */
+type NavGroup = {
   label: string;
-  items: NavItem[];
-  /** true 면 헤더 클릭으로 펼치고 접을 수 있다. localStorage 에 상태 저장. */
-  collapsible?: boolean;
-  /** 초기 펼침 상태 (기본 닫힘). 현재 라우트가 속한 허브는 이 값과 무관하게 자동 펼침. */
-  defaultOpen?: boolean;
+  icon: ReactNode;
+  to?: string;
+  badge?: number;
+  end?: boolean;
+  items?: NavItem[];
 };
 
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Props) {
   const { user } = useAuth();
   const role = user?.role;
+  const location = useLocation();
 
   const unread = useUnreadCount();
   const supplierCounts = useSupplierIncomingCounts(
@@ -49,43 +57,41 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
     : role === 'CLIENT' ? '/client/dashboard'
     : '/';
 
-  // P4b 메뉴 다이어트 — 좌측 사이드바 = 매일 쓰는 대표 링크만(역할당 ≤12).
-  // 형제 URL 은 SubNav 공유 탭바로, 저빈도 관리(내 회사·직원·하위공급사·DOCX·알림톡·공지·로그)는 우상단 ⚙ 로 이동.
-  const home: NavItem[] = [
+  // 단독 대분류(대시보드·알림) — 1단에서 클릭 시 바로 이동. 알림 badge(unread) 유지.
+  const standalone: NavGroup[] = [
     { label: '대시보드', to: dashboardTo, icon: <IconGrid /> },
     { label: '알림', to: '/notifications', icon: <IconBell />, badge: unread > 0 ? unread : undefined },
   ];
 
-  let hubSections: NavSection[];
+  // 기존 사이드바 섹션(그룹)을 그대로 대분류로 승격. 라우트·항목 보존(데드링크 0).
+  let groups: NavGroup[];
 
   if (role === 'ADMIN') {
-    hubSections = [
-      { label: '대시보드', collapsible: true, defaultOpen: true, items: [
-        ...home,
-      ]},
-      { label: '견적·계약', collapsible: true, defaultOpen: false, items: [
+    groups = [
+      ...standalone,
+      { label: '견적·계약', icon: <IconBriefcase />, items: [
         { label: '견적 관리', to: '/quotations', icon: <IconClipboard /> },
       ]},
-      { label: '서류', collapsible: true, defaultOpen: false, items: [
+      { label: '서류', icon: <IconDoc />, items: [
         { label: '서류 검토', to: '/admin/document-review', icon: <IconShield /> },
-        // 서류관리·수집 요청·이행지시는 SubNav "서류함" 탭으로 통합 — 대표 1링크.
-        { label: '서류함', to: '/document-management', icon: <IconDoc /> },
+        { label: '서류 관리', to: '/document-management', icon: <IconDoc /> },
+        { label: '수집 요청', to: '/document-collections', icon: <IconDoc /> },
+        { label: '이행지시', to: '/compliance-orders', icon: <IconShield /> },
       ]},
-      { label: '현장 운영', collapsible: true, defaultOpen: true, items: [
+      { label: '현장 운영', icon: <IconBuilding />, items: [
         { label: '작업계획서', to: '/work-plans', icon: <IconClipboard /> },
         { label: '현장 관리', to: '/sites', icon: <IconBuilding /> },
-        { label: '전체 장비', to: '/equipment', icon: <IconTruck /> },
-        { label: '전체 인원', to: '/persons', icon: <IconUsers /> },
+        { label: '장비', to: '/equipment', icon: <IconTruck /> },
+        { label: '인원', to: '/persons', icon: <IconUsers /> },
       ]},
-      { label: '정산', collapsible: true, defaultOpen: false, items: [
-        { label: '월별 작업확인서', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
+      { label: '정산', icon: <IconMoney />, items: [
+        { label: '월별 확인서(폰 서명분)', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
       ]},
-      // 안전 조각(설정·점검·알림·보고서)은 안전 상황판 탭으로 흡수 — 대표 1링크. (기존 라우트는 유지 → 딥링크 무해)
-      { label: '안전', collapsible: true, defaultOpen: false, items: [
+      { label: '안전', icon: <IconShield />, items: [
         { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
+        { label: '혈압 체크인', to: '/bp-checkins', icon: <IconShield /> },
       ]},
-      // 관리자 특성상 시스템 관리는 좌측 유지(§4-B). 발송·템플릿·로그 유틸은 우상단 ⚙ 로.
-      { label: '시스템 관리', collapsible: true, defaultOpen: false, items: [
+      { label: '시스템 관리', icon: <IconSettings />, items: [
         { label: 'BP사 관리', to: '/admin/bp', icon: <IconBriefcase /> },
         { label: '공급사 관리', to: '/admin/suppliers', icon: <IconTruck /> },
         { label: '원청기관', to: '/admin/client-orgs', icon: <IconBuilding /> },
@@ -97,81 +103,138 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       ]},
     ];
   } else if (role === 'BP') {
-    hubSections = [
-      { label: '대시보드', collapsible: true, defaultOpen: true, items: [
-        ...home,
-      ]},
-      // 견적: 공개입찰·수신함은 SubNav 탭으로. 계약 조회는 유지 1링크.
-      { label: '견적·계약', collapsible: true, defaultOpen: false, items: [
+    groups = [
+      ...standalone,
+      { label: '견적·계약', icon: <IconBriefcase />, items: [
         { label: '견적', to: '/quotations', icon: <IconClipboard />, end: true },
+        { label: '수신함', to: '/inbox', icon: <IconClipboard /> },
         { label: '계약 조회', to: '/contracts', icon: <IconBriefcase /> },
       ]},
-      // 서류 심사(받은+소급 탭) / 서류함(관리+수집+이행 탭) 2링크.
-      { label: '서류', collapsible: true, defaultOpen: false, items: [
+      { label: '서류', icon: <IconDoc />, items: [
         { label: '서류 심사', to: '/document-reviews/received', icon: <IconShield />,
           badge: bpReviewCount || undefined },
-        { label: '서류함', to: '/document-management', icon: <IconDoc /> },
+        { label: '소급 승인', to: '/resource-onboardings/bp', icon: <IconUserCheck /> },
+        { label: '서류 관리', to: '/document-management', icon: <IconDoc /> },
+        { label: '수집 요청', to: '/document-collections', icon: <IconDoc /> },
+        { label: '이행지시', to: '/compliance-orders', icon: <IconShield /> },
       ]},
-      // 투입 관리(대기·현황·장비·인원·받은요청·보낸점검 탭) / 자원(장비·인원·업체변경 탭).
-      { label: '현장 운영', collapsible: true, defaultOpen: true, items: [
-        { label: '작업 계획서', to: '/work-plans', icon: <IconClipboard />, end: true },
-        { label: '투입 관리', to: '/work-plans/pending', icon: <IconClipboard /> },
-        { label: '자원', to: '/equipment', icon: <IconTruck /> },
-        { label: '현장 관리', to: '/sites', icon: <IconBuilding /> },
+      { label: '현장 운영', icon: <IconBuilding />, items: [
+        { label: '작업 계획서', to: '/work-plans', icon: <IconClipboard />, end: true, section: '작업·현장' },
+        { label: '현장 관리', to: '/sites', icon: <IconBuilding />, section: '작업·현장' },
+        { label: '투입 대기', to: '/work-plans/pending', icon: <IconClipboard />, section: '투입' },
+        { label: '투입 현황', to: '/work-plans/active', icon: <IconClipboard />, section: '투입' },
+        { label: '투입 장비', to: '/dispatched-equipment', icon: <IconTruck />, section: '투입' },
+        { label: '투입 인원', to: '/dispatched-persons', icon: <IconUsers />, section: '투입' },
+        { label: '받은 투입 요청', to: '/field-deployments/bp', icon: <IconClipboard />, section: '투입' },
+        { label: '장비', to: '/equipment', icon: <IconTruck />, section: '자원' },
+        { label: '인원', to: '/persons', icon: <IconUsers />, section: '자원' },
+        { label: '업체변경 신청서', to: '/resource-change-requests', icon: <IconClipboard />, section: '자원' },
+        { label: '보낸 점검 요청', to: '/resource-checks/bp', icon: <IconShield />, section: '자원' },
       ]},
-      // 정산: 월별 작업확인서·작업확인 원장 탭.
-      { label: '정산', collapsible: true, defaultOpen: false, items: [
-        { label: '정산', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
+      { label: '정산', icon: <IconMoney />, items: [
+        { label: '작업확인 원장', to: '/daily-work-logs/bp', icon: <IconClipboard /> },
+        { label: '월별 확인서(폰 서명분)', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
       ]},
-      // 안전 조각(설정·점검·알림·보고서)은 안전 상황판 탭으로 흡수 — 대표 1링크. (기존 라우트는 유지 → 딥링크 무해)
-      { label: '안전', collapsible: true, defaultOpen: false, items: [
+      { label: '안전', icon: <IconShield />, items: [
         { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
+        { label: '혈압 체크인', to: '/bp-checkins', icon: <IconShield /> },
       ]},
     ];
   } else if (role === 'EQUIPMENT_SUPPLIER' || role === 'MANPOWER_SUPPLIER') {
     const isEquip = role === 'EQUIPMENT_SUPPLIER';
-    const receivedBadge = (supplierCounts.supplements + supplierCounts.checks + supplierCounts.compliance) || undefined;
-    hubSections = [
-      { label: '대시보드', collapsible: true, defaultOpen: true, items: [
-        ...home,
+    // 서류 5채널을 2단으로 직접 노출(구 "서류 허브" 해체). 각 채널 배지 개별 표기.
+    const resourceItems: NavItem[] = isEquip
+      ? [
+          { label: '장비', to: '/equipment', icon: <IconTruck />, section: '자원' },
+          { label: '조종원', to: '/persons', icon: <IconUsers />, section: '자원' },
+        ]
+      : [
+          { label: '인원', to: '/persons', icon: <IconUsers />, section: '자원' },
+        ];
+    const settlementItems: NavItem[] = [
+      { label: '정산', to: '/settlements', icon: <IconClipboard /> },
+      { label: '월별 확인서(폰 서명분)', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
+      ...(isEquip ? [{ label: '장비 투입 통계', to: '/equipment-stats', icon: <IconTruck /> }] : []),
+    ];
+    groups = [
+      ...standalone,
+      { label: '견적·계약', icon: <IconBriefcase />, items: [
+        { label: '공개 입찰', to: '/quotations/open-bids', icon: <IconClipboard /> },
+        { label: '내 제안', to: '/my-proposals', icon: <IconClipboard /> },
+        { label: '내 발송', to: '/outgoing-quotations', icon: <IconClipboard /> },
+        { label: '받은 견적', to: '/quotations', icon: <IconClipboard />, end: true },
+        { label: '견적 템플릿', to: '/quote-templates', icon: <IconClipboard /> },
+        { label: '계약 관리', to: '/contracts', icon: <IconBriefcase /> },
       ]},
-      // 견적: 입찰·제안·발송·받은견적·템플릿·계약을 SubNav 탭으로 — 대표 1링크.
-      { label: '견적·계약', collapsible: true, defaultOpen: false, items: [
-        { label: '견적', to: '/quotations/open-bids', icon: <IconClipboard /> },
+      { label: '서류', icon: <IconDoc />, items: [
+        { label: '보완요청', to: '/document-management', icon: <IconDoc />, badge: supplierCounts.supplements || undefined },
+        { label: '자원점검', to: '/resource-checks/supplier', icon: <IconShield />, badge: supplierCounts.checks || undefined },
+        { label: '이행지시', to: '/compliance-orders', icon: <IconShield />, badge: supplierCounts.compliance || undefined },
+        { label: '서류수집', to: '/document-collections', icon: <IconDoc />, badge: supplierCounts.collections || undefined },
+        { label: '서류심사', to: '/document-review-send', icon: <IconDoc /> },
       ]},
-      // 서류 허브 = 보완요청/자원점검/이행지시/서류수집/서류심사 5채널 통합(받은 요청·심사 보내기 포함) — 1링크.
-      { label: '서류', collapsible: true, defaultOpen: false, items: [
-        { label: '서류 허브', to: '/supplier/document-hub', icon: <IconDoc />, badge: receivedBadge },
+      { label: '현장 운영', icon: <IconBuilding />, items: [
+        ...resourceItems,
+        { label: '기투입 등록', to: '/resource-onboardings', icon: <IconClipboard />, section: '자원' },
+        { label: '업체변경 신청서', to: '/resource-change-requests', icon: <IconClipboard />, section: '자원' },
+        { label: '자원 파이프라인', to: '/resource-pipeline', icon: <IconClipboard />, section: '투입' },
+        { label: '투입 요청', to: '/field-deployments/supplier', icon: <IconClipboard />, section: '투입' },
+        { label: '작업 일정', to: '/work-plans', icon: <IconClipboard />, section: '투입' },
+        { label: '현장 관리', to: '/sites', icon: <IconBuilding />, section: '투입' },
+        { label: '일일 확인서', to: '/daily-work-logs', icon: <IconClipboard />, section: '기록' },
+        { label: '인원 공지', to: '/announcements', icon: <IconBell />, section: '소통' },
       ]},
-      // 자원(장비·인원·기투입·업체변경 탭) / 투입 요청(투입요청·작업일정·현장관리 탭). 파이프라인·일일확인서는 대표 링크.
-      { label: '현장 운영', collapsible: true, defaultOpen: true, items: [
-        { label: '자원 파이프라인', to: '/resource-pipeline', icon: <IconClipboard /> },
-        { label: '자원', to: isEquip ? '/equipment' : '/persons', icon: isEquip ? <IconTruck /> : <IconUsers /> },
-        { label: '일일 확인서', to: '/daily-work-logs', icon: <IconClipboard /> },
-        { label: '투입 요청', to: '/field-deployments/supplier', icon: <IconClipboard /> },
-      ]},
-      // 정산: 투입 정산·월별 확인서(+장비 통계) 탭.
-      { label: '정산', collapsible: true, defaultOpen: false, items: [
-        { label: '정산', to: '/settlements', icon: <IconClipboard /> },
-      ]},
-      { label: '안전', collapsible: true, defaultOpen: false, items: [
+      { label: '정산', icon: <IconMoney />, items: settlementItems },
+      { label: '안전', icon: <IconShield />, items: [
         { label: '안전점검', to: '/safety-inspections', icon: <IconShield /> },
+        { label: '혈압 체크인', to: '/bp-checkins', icon: <IconShield /> },
       ]},
     ];
   } else if (role === 'CLIENT') {
-    // 원청(관제) 전용 간소 사이드바 — 읽기전용 관제 허브 + 알림.
-    hubSections = [
-      { label: '관제', collapsible: true, defaultOpen: true, items: [
+    // 원청(관제) 전용 간소 사이드바 — 읽기전용 관제 허브 + 알림(단독).
+    groups = [
+      { label: '관제', icon: <IconGrid />, items: [
         { label: '현장 관제', to: '/client/dashboard', icon: <IconGrid /> },
         { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
-        { label: '알림', to: '/notifications', icon: <IconBell />, badge: unread > 0 ? unread : undefined },
       ]},
+      { label: '알림', to: '/notifications', icon: <IconBell />, badge: unread > 0 ? unread : undefined },
     ];
   } else {
-    hubSections = [
-      { label: '대시보드', collapsible: true, defaultOpen: true, items: home },
-    ];
+    groups = [...standalone];
   }
+
+  const panelGroups = groups.filter((g) => g.items && g.items.length > 0);
+
+  // 현재 라우트가 속한 패널 대분류 = 자동 선택 대상(딥링크·이동 모두). 쿼리 무시, 경로만 비교.
+  let routeGroupLabel: string | null = null;
+  for (const g of panelGroups) {
+    const hit = g.items!.some((it) => {
+      if (it.disabled) return false;
+      const p = it.to.split('?')[0];
+      return location.pathname === p || location.pathname.startsWith(p + '/');
+    });
+    if (hit) { routeGroupLabel = g.label; break; }
+  }
+
+  // 2단에 펼쳐 보일 패널 대분류. null = 2단 닫힘(단독 라우트).
+  // 진입/이동 시 활성 라우트의 대분류가 자동 펼침(routeGroupLabel), 단독 라우트면 자동 닫힘.
+  const [selected, setSelected] = useState<string | null>(routeGroupLabel);
+  useEffect(() => { setSelected(routeGroupLabel); }, [routeGroupLabel]);
+  const selectedGroup = panelGroups.find((g) => g.label === selected) ?? null;
+  const panelOpen = !!selectedGroup;
+
+  const matchActive = (to: string) => {
+    const [p, q] = to.split('?');
+    if (location.pathname !== p) return false;
+    if (q) return location.search === '?' + q;
+    return location.search === '';
+  };
+
+  // 패널 대분류 클릭 → 2단 펼침. collapsed 상태면 먼저 펼쳐 2단이 보이도록 복원.
+  const openPanel = (label: string) => {
+    setSelected(label);
+    if (collapsed) onToggle();
+  };
 
   return (
     <>
@@ -180,39 +243,87 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={onMobileClose} aria-hidden="true" />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col bg-white border-r border-slate-200 transition-transform
+        className={`fixed inset-y-0 left-0 z-40 flex ${panelOpen ? 'w-[272px]' : 'w-[76px]'} max-w-[92vw] flex-col bg-white border-r border-slate-200 transition-transform
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:static md:z-auto md:translate-x-0 md:shrink-0 md:transition-all ${collapsed ? 'md:w-[72px]' : 'md:w-[240px]'}`}
+          md:static md:z-auto md:translate-x-0 md:shrink-0 md:max-w-none md:transition-all ${collapsed ? 'md:w-[60px]' : panelOpen ? 'md:w-[272px]' : 'md:w-[76px]'}`}
       >
-      <div className="flex items-center gap-2 h-[68px] px-5 border-b border-slate-100">
-        <div className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
-          <IconHelmet />
+        {/* 로고 헤더 — 좁은 레일이면 심볼만, 2단 펼치면 전체 로고 */}
+        <div className={`flex items-center h-[60px] border-b border-slate-100 shrink-0 ${panelOpen ? 'gap-2 px-4' : 'justify-center px-0'}`}>
+          <div className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
+            <IconHelmet />
+          </div>
+          <span className={`text-base font-bold text-slate-900 truncate ${panelOpen && !collapsed ? '' : 'hidden'}`}>현장관리 <span className="text-brand-600">Pro</span></span>
+          <button type="button" onClick={onMobileClose} aria-label="메뉴 닫기"
+            className="ml-auto shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 md:hidden">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
         </div>
-        {!collapsed && (
-          <span className="text-base font-bold text-slate-900 truncate">현장관리 <span className="text-brand-600">Pro</span></span>
-        )}
-        <button type="button" onClick={onMobileClose} aria-label="메뉴 닫기"
-          className="ml-auto shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 md:hidden">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-        </button>
-      </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
-        {hubSections.map((sec) => (
-          <NavSectionItem key={sec.label} sec={sec} collapsed={collapsed} />
-        ))}
-      </nav>
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* 1단 — 대분류(아이콘 위 + 이름 아래, 좁은 세로 레일) */}
+          <div className={`shrink-0 flex flex-col border-r border-slate-100 w-[76px] ${collapsed ? 'md:w-[60px]' : 'md:w-[76px]'}`}>
+            <nav className="flex-1 overflow-y-auto px-1.5 py-2 space-y-1">
+              {groups.map((g) => {
+                const badge = g.to ? (g.badge ?? 0) : g.items!.reduce((s, it) => s + (it.badge ?? 0), 0);
+                const isRouteHere = g.to ? matchActive(g.to) : routeGroupLabel === g.label;
+                const isOpen = !g.to && selectedGroup?.label === g.label;
+                const cls = `relative flex flex-col items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-[10.5px] font-medium leading-[1.15] transition-colors ${
+                  isRouteHere
+                    ? 'bg-brand-50 text-brand-700'
+                    : isOpen
+                      ? 'bg-slate-100 text-slate-900'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`;
+                const inner = (
+                  <>
+                    <span className="shrink-0 w-6 h-6 flex items-center justify-center">{g.icon}</span>
+                    <span className={`w-full text-center break-keep ${collapsed ? 'md:hidden' : ''}`}>{g.label}</span>
+                    {badge > 0 && (
+                      <span className={`absolute top-1 right-1 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full bg-brand-600 text-white text-[9px] font-bold ${collapsed ? 'md:hidden' : ''}`}>
+                        {badge}
+                      </span>
+                    )}
+                    {badge > 0 && (
+                      <span className={`absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600 ${collapsed ? 'hidden md:block' : 'hidden'}`} aria-hidden="true" />
+                    )}
+                  </>
+                );
+                return g.to ? (
+                  <NavLink key={g.label} to={g.to} end={g.end ?? g.to === '/'} onClick={() => setSelected(null)} className={cls} title={collapsed ? g.label : undefined}>
+                    {inner}
+                  </NavLink>
+                ) : (
+                  <button key={g.label} type="button" onClick={() => openPanel(g.label)} className={cls} title={collapsed ? g.label : undefined}>
+                    {inner}
+                  </button>
+                );
+              })}
+            </nav>
 
-      <button
-        type="button"
-        onClick={onToggle}
-        className="border-t border-slate-100 px-5 py-3 text-sm text-slate-500 hover:bg-slate-50 hidden md:flex items-center gap-2"
-      >
-        <span className={`inline-block transition-transform ${collapsed ? 'rotate-180' : ''}`}>
-          <IconChevronLeft />
-        </span>
-        {!collapsed && <span>메뉴 접기</span>}
-      </button>
+            <button
+              type="button"
+              onClick={onToggle}
+              title={collapsed ? '메뉴 펼치기' : '메뉴 접기'}
+              className="border-t border-slate-100 py-3 text-slate-400 hover:bg-slate-50 hover:text-slate-600 hidden md:flex items-center justify-center"
+            >
+              <span className={`inline-block transition-transform ${collapsed ? 'rotate-180' : ''}`}>
+                <IconChevronLeft />
+              </span>
+            </button>
+          </div>
+
+          {/* 2단 — 선택된 대분류의 세부 항목 패널(옆으로 펼침). 단독 라우트/collapsed(md) 에서는 숨김. */}
+          {selectedGroup && (
+            <div className={`flex-col w-[196px] bg-slate-50/40 flex ${collapsed ? 'md:hidden' : 'md:flex'}`}>
+              <div className="h-[44px] shrink-0 flex items-center px-4 text-[13px] font-bold text-slate-800 border-b border-slate-100">
+                {selectedGroup.label}
+              </div>
+              <div className="flex-1 overflow-y-auto p-2">
+                <NavItemsList items={selectedGroup.items!} collapsed={false} />
+              </div>
+            </div>
+          )}
+        </div>
       </aside>
     </>
   );
@@ -226,94 +337,53 @@ function NavItemsList({ items, collapsed }: { items: NavItem[]; collapsed: boole
     if (q) return location.search === '?' + q;
     return location.search === '';
   };
+  let prevSection: string | undefined;
   return (
     <ul className="space-y-0.5">
-      {items.map((it) => (
-        <li key={it.label + ':' + it.to}>
-          <NavLink
-            to={it.disabled ? '#' : it.to}
-            end={it.end ?? it.to === '/'}
-            onClick={(e) => { if (it.disabled) e.preventDefault(); }}
-            className={() => {
-              const isActive = !it.disabled && matchActive(it.to);
-              return `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                it.disabled
-                  ? 'text-slate-400 cursor-not-allowed'
-                  : isActive
-                    ? 'bg-brand-50 text-brand-700'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-              }`;
-            }}
-            title={collapsed ? it.label : undefined}
-          >
-            <span className="shrink-0 w-5 h-5">{it.icon}</span>
-            {!collapsed && (
-              <>
-                <span className="flex-1 truncate">{it.label}</span>
-                {it.badge != null && it.badge > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-brand-600 text-white text-xs font-semibold">
-                    {it.badge}
-                  </span>
-                )}
-              </>
+      {items.map((it) => {
+        const showHeader = !collapsed && !!it.section && it.section !== prevSection;
+        prevSection = it.section;
+        return (
+          <Fragment key={it.label + ':' + it.to}>
+            {showHeader && (
+              <li className="px-3 pt-3 pb-1 text-[11px] font-semibold text-slate-400 first:pt-1">
+                {it.section}
+              </li>
             )}
-          </NavLink>
-        </li>
-      ))}
+            <li>
+              <NavLink
+                to={it.disabled ? '#' : it.to}
+                end={it.end ?? it.to === '/'}
+                onClick={(e) => { if (it.disabled) e.preventDefault(); }}
+                className={() => {
+                  const isActive = !it.disabled && matchActive(it.to);
+                  return `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    it.disabled
+                      ? 'text-slate-400 cursor-not-allowed'
+                      : isActive
+                        ? 'bg-brand-50 text-brand-700'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`;
+                }}
+                title={collapsed ? it.label : undefined}
+              >
+                <span className="shrink-0 w-5 h-5">{it.icon}</span>
+                {!collapsed && (
+                  <>
+                    <span className="flex-1 truncate">{it.label}</span>
+                    {it.badge != null && it.badge > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-brand-600 text-white text-xs font-semibold">
+                        {it.badge}
+                      </span>
+                    )}
+                  </>
+                )}
+              </NavLink>
+            </li>
+          </Fragment>
+        );
+      })}
     </ul>
-  );
-}
-
-function NavSectionItem({ sec, collapsed }: { sec: NavSection; collapsed: boolean }) {
-  const location = useLocation();
-  const storageKey = `sidebar.section.${sec.label}.open`;
-  // null = 사용자가 아직 토글 안 함(자동 규칙 적용), true/false = 사용자 선택(localStorage 저장).
-  const [userSet, setUserSet] = useState<boolean | null>(() => {
-    if (!sec.collapsible) return true;
-    const raw = window.localStorage.getItem(storageKey);
-    return raw === '1' ? true : raw === '0' ? false : null;
-  });
-
-  // 현재 라우트가 이 허브에 속하면 자동 펼침(딥링크·이동 모두). 쿼리 무시하고 경로만 비교.
-  const hasActive = sec.items.some((it) => {
-    if (it.disabled) return false;
-    const p = it.to.split('?')[0];
-    return location.pathname === p || location.pathname.startsWith(p + '/');
-  });
-
-  // 허브 헤더 배지 = 그룹 내 항목 배지 합산.
-  const badgeSum = sec.items.reduce((s, it) => s + (it.badge ?? 0), 0);
-
-  const open = userSet !== null ? userSet : (hasActive || !!sec.defaultOpen);
-
-  const toggle = () => {
-    const next = !open;
-    setUserSet(next);
-    window.localStorage.setItem(storageKey, next ? '1' : '0');
-  };
-
-  if (collapsed) {
-    return <NavItemsList items={sec.items} collapsed={true} />;
-  }
-
-  return (
-    <div>
-      <button type="button" onClick={toggle}
-              className="w-full px-3 mb-1 flex items-center gap-2 text-[11px] font-semibold text-slate-500 hover:text-slate-800">
-        <span className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`}>
-          <IconChevronRight />
-        </span>
-        <span className="uppercase tracking-wide">{sec.label}</span>
-        <span className="flex-1 h-px bg-slate-200" />
-        {badgeSum > 0 && (
-          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold">
-            {badgeSum}
-          </span>
-        )}
-        <span className="text-[10px] text-slate-400">{sec.items.length}</span>
-      </button>
-      {open && <NavItemsList items={sec.items} collapsed={false} />}
-    </div>
   );
 }
 
@@ -394,17 +464,25 @@ function IconDoc() {
     </svg>
   );
 }
+function IconMoney() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 12h.01M18 12h.01" />
+    </svg>
+  );
+}
+function IconSettings() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
 function IconChevronLeft() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="15 18 9 12 15 6" />
-    </svg>
-  );
-}
-function IconChevronRight() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="9 18 15 12 9 6" />
     </svg>
   );
 }

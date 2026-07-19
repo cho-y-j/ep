@@ -97,7 +97,7 @@ public class DocumentBundleService {
                     "DOCUMENT_BUNDLE",
                     "서류 묶음 도착",
                     supplierName + " — 차량 " + eqCount + "대 / 서류 " + docCount + "건",
-                    "QUOTATION_REQUEST", requestId, qr.getSiteId());
+                    "QUOTATION_REQUEST", requestId, qr.getSiteId(), notifications.senderLabelOf(actor));
         }
 
         // 이메일 옵션 발송 (best-effort, 실패해도 send 자체는 성공)

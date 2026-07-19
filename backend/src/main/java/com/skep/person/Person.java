@@ -125,6 +125,15 @@ public class Person {
     @Column(name = "employment_type", nullable = false, length = 32)
     private EmploymentType employmentType = EmploymentType.DIRECT;
 
+    // P5-W4 2겹: 뇌심혈관 건강 위험군(건강검진 서류 기반 수동 태깅). HIGH → 워치 YELLOW + 혈압 체크인 필수.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "health_risk_level", nullable = false, length = 16)
+    private HealthRiskLevel healthRiskLevel = HealthRiskLevel.NORMAL;
+
+    public void setHealthRiskLevel(HealthRiskLevel level) {
+        this.healthRiskLevel = level != null ? level : HealthRiskLevel.NORMAL;
+    }
+
     // V11: 현재 배치 정보
     @Column(name = "current_site_id")
     private Long currentSiteId;

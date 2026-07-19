@@ -31,6 +31,15 @@ type SafetySettings = {
   default_maintenance_hours: number;
 };
 
+type BpThresholds = {
+  site_id: number;
+  configured: boolean;
+  caution_sys: number | null;
+  caution_dia: number | null;
+  block_sys: number | null;
+  block_dia: number | null;
+};
+
 /** 현장 안전설정(§3.4) — 현장 선택 → 폼(법정 배지·완화 금지 가드) → 저장. BP(자기 현장)·ADMIN. */
 export default function SafetySettingsPage() {
   const { user } = useAuth();
@@ -40,6 +49,8 @@ export default function SafetySettingsPage() {
   const [siteId, setSiteId] = useState<number | null>(null);
   const [data, setData] = useState<SafetySettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [bp, setBp] = useState<BpThresholds | null>(null);
+  const [bpSaving, setBpSaving] = useState(false);
 
   useEffect(() => {
     if (!allowed) return;
@@ -60,6 +71,13 @@ export default function SafetySettingsPage() {
         toast.error(err.response?.data?.message ?? '안전설정을 불러올 수 없습니다');
         setData(null);
       });
+  }, [siteId]);
+
+  useEffect(() => {
+    if (siteId == null) { setBp(null); return; }
+    api.get<BpThresholds>(`/api/sites/${siteId}/bp-thresholds`)
+      .then((r) => setBp(r.data))
+      .catch(() => setBp(null));
   }, [siteId]);
 
   function set<K extends keyof SafetySettings>(key: K, value: SafetySettings[K]) {
@@ -93,6 +111,30 @@ export default function SafetySettingsPage() {
     }
   }
 
+  function setBpField<K extends keyof BpThresholds>(key: K, value: BpThresholds[K]) {
+    setBp((d) => (d ? { ...d, [key]: value } : d));
+  }
+
+  async function saveBp() {
+    if (!bp || siteId == null) return;
+    setBpSaving(true);
+    try {
+      const { data: saved } = await api.put<BpThresholds>(`/api/sites/${siteId}/bp-thresholds`, {
+        caution_sys: bp.caution_sys,
+        caution_dia: bp.caution_dia,
+        block_sys: bp.block_sys,
+        block_dia: bp.block_dia,
+      });
+      setBp(saved);
+      toast.success('혈압 임계를 저장했습니다');
+    } catch (e) {
+      const err = e as AxiosError<{ message?: string }>;
+      toast.error(err.response?.data?.message ?? '저장에 실패했습니다');
+    } finally {
+      setBpSaving(false);
+    }
+  }
+
   const legalBadge = (text: string) => (
     <span className="ml-2 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
       {text}
@@ -111,7 +153,7 @@ export default function SafetySettingsPage() {
     <AppShell>
       <div className="p-6 space-y-5">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">안전 설정</h1>
+          <h1 className="h1-page">안전 설정</h1>
           <p className="mt-1 text-sm text-slate-500">
             현장별 폭염 단계·휴식·풍속 작업중지·일일점검 게이트·정비 주기를 설정합니다.
             법정 기준보다 <span className="font-medium text-rose-600">완화(느슨하게)는 불가</span>하며 강화(더 엄격)만 가능합니다.
@@ -227,6 +269,31 @@ export default function SafetySettingsPage() {
               <span className="text-xs text-slate-400">저장 시 법정 완화 여부를 서버가 검증합니다.</span>
             </div>
           </div>
+        )}
+
+        {siteId != null && bp && (
+          <section className="rounded border border-slate-200 bg-white p-4">
+            <h2 className="text-sm font-semibold text-slate-800 mb-1">혈압 체크인 임계</h2>
+            <p className="text-xs text-slate-500 mb-3">
+              혈압 체크인 판정 기준(주의·차단권고)입니다. <span className="font-medium text-slate-600">법정 기준이 아닌 현장 자유 설정</span>이며,
+              차단권고여도 출근을 막지 않고 조치 권고·관리자 통보만 합니다. 차단 임계는 주의 임계 이상이어야 합니다.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <NumField label="주의 수축기(mmHg)" value={bp.caution_sys ?? 0} step={1} onChange={(v) => setBpField('caution_sys', v)} />
+              <NumField label="주의 이완기(mmHg)" value={bp.caution_dia ?? 0} step={1} onChange={(v) => setBpField('caution_dia', v)} />
+              <NumField label="차단 수축기(mmHg)" value={bp.block_sys ?? 0} step={1} onChange={(v) => setBpField('block_sys', v)} />
+              <NumField label="차단 이완기(mmHg)" value={bp.block_dia ?? 0} step={1} onChange={(v) => setBpField('block_dia', v)} />
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                onClick={saveBp} disabled={bpSaving}
+                className="rounded bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+              >
+                {bpSaving ? '저장 중…' : '혈압 임계 저장'}
+              </button>
+              <span className="text-xs text-slate-400">기본값 주의 160/100 · 차단권고 180/110.</span>
+            </div>
+          </section>
         )}
       </div>
     </AppShell>

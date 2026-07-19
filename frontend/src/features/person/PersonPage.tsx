@@ -4,6 +4,7 @@ import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppShell from '../../components/layout/AppShell';
+import { FilterSelect, PageHeader, SearchInput } from '../../components/ui';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PersonTable from './PersonTable';
 import PersonCreateForm from './PersonCreateForm';
@@ -198,17 +199,15 @@ export default function PersonPage() {
         )}
 
         {/* 헤더 */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">{pageTitle}</h1>
-            <p className="text-sm text-slate-500 mt-1">현장에 등록된 모든 인원 정보를 확인하고 관리할 수 있습니다.</p>
-          </div>
-          {canEdit && !creating && (
+        <PageHeader
+          title={pageTitle}
+          subtitle="현장에 등록된 모든 인원 정보를 확인하고 관리할 수 있습니다."
+          actions={canEdit && !creating ? (
             <button onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700">
               <span>+</span> 인원 추가
             </button>
-          )}
-        </div>
+          ) : undefined}
+        />
 
         {/* BP 범위 전환 — 내 인원/공급사 인원 통합 화면의 화면 내 필터. */}
         {selfSupplierType === 'BP' && (
@@ -246,16 +245,13 @@ export default function PersonPage() {
           <div className="flex flex-wrap items-center gap-3">
             <form
               onSubmit={(e) => { e.preventDefault(); setPage(0); setSearchQ(searchInput.trim()); }}
-              className="relative flex-1 min-w-[240px]"
+              className="flex-1 min-w-[240px]"
             >
-              <input
-                type="text"
-                placeholder="이름, 연락처, 자격증으로 검색"
+              <SearchInput
                 value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:border-brand-300 outline-none text-sm"
+                onChange={setSearchInput}
+                placeholder="이름, 연락처, 자격증으로 검색"
               />
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
             </form>
             <FilterSelect
               value={filterTeam}
@@ -426,25 +422,5 @@ export default function PersonPage() {
         </div>
       )}
     </AppShell>
-  );
-}
-
-function FilterSelect({
-  value, onChange, placeholder, options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 min-w-[140px]"
-    >
-      <option value="">{placeholder}</option>
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
   );
 }

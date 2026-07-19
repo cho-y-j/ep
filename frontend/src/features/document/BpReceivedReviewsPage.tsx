@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import { VERIFICATION_STATUS_LABEL, type VerificationStatus } from '../../types/document';
@@ -79,6 +80,11 @@ export default function BpReceivedReviewsPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
+  // 클라이언트 필터/정렬 — 로드된 봉투 목록을 좁힘(백엔드 무접촉).
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -98,7 +104,12 @@ export default function BpReceivedReviewsPage() {
     });
   }
   function toggleAll() {
-    setSelected((prev) => (prev.size === rows.length ? new Set() : new Set(rows.map((r) => r.id))));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (filtered.length > 0 && filtered.every((r) => prev.has(r.id))) filtered.forEach((r) => next.delete(r.id));
+      else filtered.forEach((r) => next.add(r.id));
+      return next;
+    });
   }
   function markReadLocal(ids: number[]) {
     const now = new Date().toISOString();
@@ -140,8 +151,29 @@ export default function BpReceivedReviewsPage() {
     }
   }
 
+  const qLower = q.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    const out = rows.filter((r) => {
+      if (statusFilter && r.status !== statusFilter) return false;
+      if (typeFilter && !r.items.some((it) => it.owner_type === typeFilter)) return false;
+      if (qLower) {
+        const hay = `${r.supplier_company_name ?? ''} ${r.items.map((it) => it.label).join(' ')}`.toLowerCase();
+        if (!hay.includes(qLower)) return false;
+      }
+      return true;
+    });
+    out.sort((a, b) => {
+      const ta = new Date(a.sent_at).getTime();
+      const tb = new Date(b.sent_at).getTime();
+      return sort === 'oldest' ? ta - tb : tb - ta;
+    });
+    return out;
+  }, [rows, statusFilter, typeFilter, qLower, sort]);
+  const activeFilterCount = [q, statusFilter, typeFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setStatusFilter(''); setTypeFilter(''); };
+
   const openReview = openId != null ? rows.find((r) => r.id === openId) ?? null : null;
-  const allChecked = rows.length > 0 && selected.size === rows.length;
+  const allChecked = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
 
   if (openReview) {
     return (
@@ -158,12 +190,10 @@ export default function BpReceivedReviewsPage() {
   return (
     <AppShell breadcrumb={[{ label: '받은 서류 심사' }]}>
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold">받은 서류 심사</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            공급사가 보낸 자원별 서류 묶음입니다. 봉투를 열어 서류를 확인하고 승인/반려하거나, 압축파일(zip)로 내려받을 수 있습니다.
-          </p>
-        </div>
+        <PageHeader
+          title="받은 서류 심사"
+          subtitle="공급사가 보낸 자원별 서류 묶음입니다. 봉투를 열어 서류를 확인하고 승인/반려하거나, 압축파일(zip)로 내려받을 수 있습니다."
+        />
 
         {loading ? (
           <div className="card p-8 text-center text-sm text-slate-400">불러오는 중…</div>
@@ -171,6 +201,31 @@ export default function BpReceivedReviewsPage() {
           <div className="card p-8 text-center text-sm text-slate-400">받은 서류 심사가 없습니다.</div>
         ) : (
           <>
+            <FilterBar
+              search={{ value: q, onChange: setQ, placeholder: '업체·자원 검색' }}
+              activeFilterCount={activeFilterCount}
+              onReset={resetFilters}
+              sort={
+                <select value={sort} onChange={(e) => setSort(e.target.value as 'newest' | 'oldest')}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  <option value="newest">최신순</option>
+                  <option value="oldest">오래된순</option>
+                </select>
+              }
+            >
+              <FilterSelect value={statusFilter} onChange={setStatusFilter} placeholder="상태 전체"
+                options={[
+                  { value: 'PENDING', label: '심사중' },
+                  { value: 'APPROVED', label: '승인' },
+                  { value: 'REJECTED', label: '반려' },
+                ]} />
+              <FilterSelect value={typeFilter} onChange={setTypeFilter} placeholder="자원종류 전체"
+                options={[
+                  { value: 'EQUIPMENT', label: '장비' },
+                  { value: 'PERSON', label: '인원' },
+                ]} />
+            </FilterBar>
+
             {/* 선택 도구 막대 */}
             <div className="flex items-center justify-between px-1">
               <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 cursor-pointer select-none">
@@ -188,8 +243,11 @@ export default function BpReceivedReviewsPage() {
               </button>
             </div>
 
+            {filtered.length === 0 ? (
+              <div className="card p-8 text-center text-sm text-slate-400">조건에 맞는 서류 심사가 없습니다.</div>
+            ) : (
             <div className="space-y-3">
-              {rows.map((rev) => {
+              {filtered.map((rev) => {
                 const badge = STATUS_BADGE[rev.status];
                 return (
                   <div key={rev.id} className={`card p-4 ${selected.has(rev.id) ? 'ring-2 ring-brand-200 border-brand-300' : ''}`}>
@@ -248,6 +306,7 @@ export default function BpReceivedReviewsPage() {
                 );
               })}
             </div>
+            )}
           </>
         )}
       </div>

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
-import { EmptyState } from '../../components/ui';
+import { EmptyState, PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import PipelineDetail from './PipelineDetail';
@@ -44,6 +44,7 @@ export default function ResourcePipelinePage() {
   const type = params.get('type') ?? '';        // '' | 'EQUIPMENT' | 'PERSON'
   const stage = (params.get('stage') ?? '') as '' | StageFilter;
   const resourceKey = params.get('resource') ?? '';
+  const q = params.get('q') ?? '';              // 자원명 검색
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -67,14 +68,16 @@ export default function ResourcePipelinePage() {
   }, [items]);
   const showCompanyFilter = companyOptions.length > 1; // 하위공급사(협력사) 있을 때만
 
-  // site/company/type 로 좁힌 기본 집합 — 단계 칩 집계의 분모(단계 필터엔 영향 안 받게).
+  // site/company/type/검색 으로 좁힌 기본 집합 — 단계 칩 집계의 분모(단계 필터엔 영향 안 받게).
+  const qLower = q.trim().toLowerCase();
   const baseItems = useMemo(() => items.filter((it) => {
     if (type && it.resource_type !== type) return false;
     if (company && it.supplier_company_id !== Number(company)) return false;
     if (site === 'none') { if (it.site_id != null) return false; }
     else if (site && it.site_id !== Number(site)) return false;
+    if (qLower && !it.label.toLowerCase().includes(qLower)) return false;
     return true;
-  }), [items, type, company, site]);
+  }), [items, type, company, site, qLower]);
 
   const stageCounts = useMemo(() => {
     const c: Record<StageFilter, number> = { docs: 0, inspection: 0, readiness: 0, deployed: 0, work: 0, settlement: 0, done: 0 };
@@ -85,7 +88,7 @@ export default function ResourcePipelinePage() {
   const listItems = stage ? baseItems.filter((it) => currentStage(it.stages) === stage) : baseItems;
 
   const selected = resourceKey ? items.find((it) => itemKey(it) === resourceKey) ?? null : null;
-  const activeFilterCount = [site, company, type].filter(Boolean).length + (stage ? 1 : 0);
+  const activeFilterCount = [site, company, type, q].filter(Boolean).length + (stage ? 1 : 0);
 
   // 개별 자원 선택 시 = 1대 뷰(상세 패널).
   if (selected) {
@@ -100,56 +103,43 @@ export default function ResourcePipelinePage() {
     <AppShell breadcrumb={[{ label: '자원 파이프라인' }]}>
       {/* 상단 고정 필터바 */}
       <div className="sticky top-[68px] z-20 bg-slate-50 pb-3 pt-1">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-slate-900">
-              자원 파이프라인
-              <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-600 align-middle">
+        <PageHeader
+          title="자원 파이프라인"
+          subtitle="장비·인력의 서류 → 검사 → 투입대기 → 투입 → 작업 → 정산 진행 상태. 단계를 눌러 그 단계만, 자원을 눌러 상세를 봅니다."
+          actions={
+            <>
+              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-600">
                 {listItems.length}
                 {listItems.length !== items.length && <span className="text-slate-400"> / {items.length}</span>}
               </span>
-            </h1>
-            <p className="mt-0.5 hidden text-sm text-slate-500 sm:block">
-              장비·인력의 서류 → 검사 → 투입대기 → 투입 → 작업 → 정산 진행 상태. 단계를 눌러 그 단계만, 자원을 눌러 상세를 봅니다.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {activeFilterCount > 0 && (
-              <button onClick={() => { setParams(resourceKey ? new URLSearchParams({ resource: resourceKey }) : new URLSearchParams(), { replace: true }); }}
-                      className="text-xs font-medium text-slate-500 hover:text-slate-800">필터 초기화</button>
-            )}
-            <button onClick={() => setFiltersOpen((o) => !o)}
-                    className="btn-ghost md:hidden">
-              필터{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-            </button>
-          </div>
-        </div>
+              <button onClick={() => setFiltersOpen((o) => !o)} className="btn-ghost md:hidden">
+                필터{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+              </button>
+            </>
+          }
+        />
 
         {/* 필터 컨트롤 — 모바일 접힘 */}
-        <div className={`${filtersOpen ? 'flex' : 'hidden'} mt-2 flex-wrap items-center gap-2 md:flex`}>
-          <ResourcePicker items={items} onPick={(it) => setParam('resource', itemKey(it))} />
-          <select value={type} onChange={(e) => setParam('type', e.target.value)} className="input w-auto">
-            <option value="">유형 전체</option>
-            <option value="EQUIPMENT">장비</option>
-            <option value="PERSON">인원</option>
-          </select>
-          {showCompanyFilter && (
-            <select value={company} onChange={(e) => setParam('company', e.target.value)} className="input w-auto">
-              <option value="">업체 전체</option>
-              {companyOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.id === user?.company_id ? `${c.name} (우리 회사)` : c.name}
-                </option>
-              ))}
-            </select>
-          )}
-          {(siteOptions.length > 0 || hasUnassigned) && (
-            <select value={site} onChange={(e) => setParam('site', e.target.value)} className="input w-auto">
-              <option value="">현장 전체</option>
-              {siteOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              {hasUnassigned && <option value="none">현장 미배정</option>}
-            </select>
-          )}
+        <div className={`${filtersOpen ? 'block' : 'hidden'} md:block`}>
+          <FilterBar
+            search={{ value: q, onChange: (v) => setParam('q', v), placeholder: '자원명 검색' }}
+            activeFilterCount={activeFilterCount}
+            onReset={() => setParams(resourceKey ? new URLSearchParams({ resource: resourceKey }) : new URLSearchParams(), { replace: true })}
+          >
+            <FilterSelect value={type} onChange={(v) => setParam('type', v)} placeholder="유형 전체"
+              options={[{ value: 'EQUIPMENT', label: '장비' }, { value: 'PERSON', label: '인원' }]} />
+            {showCompanyFilter && (
+              <FilterSelect value={company} onChange={(v) => setParam('company', v)} placeholder="업체 전체"
+                options={companyOptions.map((c) => ({ value: String(c.id), label: c.id === user?.company_id ? `${c.name} (우리 회사)` : c.name }))} />
+            )}
+            {(siteOptions.length > 0 || hasUnassigned) && (
+              <FilterSelect value={site} onChange={(v) => setParam('site', v)} placeholder="현장 전체"
+                options={[
+                  ...siteOptions.map((s) => ({ value: String(s.id), label: s.name })),
+                  ...(hasUnassigned ? [{ value: 'none', label: '현장 미배정' }] : []),
+                ]} />
+            )}
+          </FilterBar>
         </div>
 
         {/* 단계 집계 칩 = 드릴다운(클릭 시 그 단계만, 다시 클릭 해제) */}
@@ -206,46 +196,6 @@ export default function ResourcePipelinePage() {
         )}
       </div>
     </AppShell>
-  );
-}
-
-/** 개별 자원 검색 드롭다운 — 입력으로 좁혀 선택하면 그 자원의 1대 뷰로. */
-function ResourcePicker({ items, onPick }: { items: PipelineItem[]; onPick: (it: PipelineItem) => void }) {
-  const [q, setQ] = useState('');
-  const [open, setOpen] = useState(false);
-  const needle = q.trim().toLowerCase();
-  const matches = (needle ? items.filter((it) => it.label.toLowerCase().includes(needle)) : items).slice(0, 10);
-
-  return (
-    <div className="relative">
-      <input
-        value={q}
-        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="개별 자원 검색·선택…"
-        className="input w-full sm:w-56"
-      />
-      {open && matches.length > 0 && (
-        <ul className="absolute z-30 mt-1 max-h-64 w-full min-w-[220px] overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
-          {matches.map((it) => (
-            <li key={itemKey(it)}>
-              <button
-                type="button"
-                onMouseDown={(e) => { e.preventDefault(); onPick(it); setQ(''); setOpen(false); }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-              >
-                <span className={`rounded px-1 py-0.5 text-[9px] font-semibold ${
-                  it.resource_type === 'EQUIPMENT' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                  {it.resource_type === 'EQUIPMENT' ? '장비' : '인원'}
-                </span>
-                <span className="truncate">{it.label}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }
 

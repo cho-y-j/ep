@@ -117,6 +117,11 @@ class WatchSafetyListenerService : WearableListenerService() {
 
         // 앱이 포그라운드면 즉시 띄우기(백그라운드/잠금은 풀스크린 인텐트가 처리).
         runCatching { startActivity(fullScreen) }
+
+        // P5-W2 자가발동 — /skep/safety 는 모두 긴급이므로(위 클래스 주석) 서버 왕복 없이 파인드미
+        // (사이렌·플래시 스트로브·BLE 비콘) 동시 시작(특허 §5.6). alertId 는 서버 미할당이라 -1.
+        val myPersonId = Prefs.workerId(this)?.toLongOrNull() ?: -1L
+        FindMeAlarmService.start(this, -1L, myPersonId)
     }
 
     private fun vibrateAlarm() {

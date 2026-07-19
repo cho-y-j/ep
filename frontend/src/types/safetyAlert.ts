@@ -23,6 +23,21 @@ export type SafetyAlertResponse = {
   acknowledged_at?: string | null;
   ack_person_id?: number | null;
   escalated_at?: string | null;
+  // P5-W2/W3 대응체인 골든타임 + 응답자 + BLE 릴레이 위치 보강.
+  peer_notified_at?: string | null;
+  first_response_at?: string | null;
+  peer_escalated_at?: string | null;
+  relayed_at?: string | null;
+  relay_lat?: number | null;
+  relay_lng?: number | null;
+  responder_count?: number | null;
+  responders?: SafetyAlertResponder[] | null;
+  created_at: string;
+};
+
+export type SafetyAlertResponder = {
+  person_id: number;
+  name: string | null;
   created_at: string;
 };
 

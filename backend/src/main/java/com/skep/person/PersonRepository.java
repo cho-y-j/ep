@@ -25,6 +25,12 @@ public interface PersonRepository extends JpaRepository<Person, Long> {
     /** 후보 조회: 여러 공급사 인원 일괄 조회. */
     List<Person> findBySupplierIdInOrderByIdDesc(Collection<Long> supplierIds);
 
+    /** P5-W4: 현장 배치 + 특정 위험등급 인원(오늘 미측정 고위험군 산출용). */
+    List<Person> findByCurrentSiteIdAndHealthRiskLevel(Long currentSiteId, HealthRiskLevel healthRiskLevel);
+
+    /** 현장 배치 인원 전체(이름순) — 혈압 체크인 작업자 선택 등. */
+    List<Person> findByCurrentSiteIdOrderByNameAsc(Long currentSiteId);
+
     /** FCM 발송 대상 — 토큰 보유 person 전체. */
     List<Person> findByFcmTokenIsNotNull();
 

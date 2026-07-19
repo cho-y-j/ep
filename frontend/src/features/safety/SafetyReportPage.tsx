@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader } from '../../components/ui';
 import MiniBarChart, { type BarDatum } from '../dashboard/MiniBarChart';
 import { useAuth } from '../auth/AuthContext';
 import {
@@ -10,6 +11,8 @@ import {
   SEVERITY_CHIP,
   SEVERITY_LABEL,
   timeOnly,
+  type EmergencyResponseSummary,
+  type EmergencyTimeline,
   type SafetyReport,
   type TimelineAlert,
 } from '../../types/safetyReport';
@@ -61,17 +64,15 @@ export default function SafetyReportPage() {
 
   return (
     <AppShell breadcrumb={[{ label: '안전' }, { label: '이행 보고서' }]}>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-950">안전관리 이행 보고서</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            현장·기간의 고지·확인·점검·서명 이력을 일괄 집계합니다. 사고·감사 시 증빙으로 제출하세요.
-          </p>
-        </div>
-        <button type="button" onClick={openPrint} disabled={!report} className="btn-primary disabled:opacity-50">
-          인쇄 / PDF
-        </button>
-      </div>
+      <PageHeader
+        title="안전관리 이행 보고서"
+        subtitle="현장·기간의 고지·확인·점검·서명 이력을 일괄 집계합니다. 사고·감사 시 증빙으로 제출하세요."
+        actions={
+          <button type="button" onClick={openPrint} disabled={!report} className="btn-primary disabled:opacity-50">
+            인쇄 / PDF
+          </button>
+        }
+      />
 
       {/* 조회 조건 */}
       <div className="card mb-5 flex flex-wrap items-center gap-4">
@@ -141,6 +142,9 @@ function ReportBody({ report }: { report: SafetyReport }) {
         <MiniBarChart title="일자별 안전알림 건수" data={alertCountBars} emptyText="기간 내 안전알림이 없습니다" />
         <MiniBarChart title="일자별 알림 확인율(%)" data={ackRateBars} emptyText="확인 대상 알림이 없습니다" />
       </div>
+
+      {/* 긴급 대응 이력 (개인 응급 골든타임) */}
+      {report.emergency_response.total > 0 && <EmergencyResponseSection er={report.emergency_response} />}
 
       {/* ② 타임라인 */}
       <section>
@@ -236,6 +240,48 @@ function ReportBody({ report }: { report: SafetyReport }) {
         발행 {report.generated_at.slice(0, 16).replace('T', ' ')} · 발행자 {report.generated_by ?? '-'} ·
         서명 이미지는 유무·건수만 표기(개인정보 최소화).
       </p>
+    </div>
+  );
+}
+
+function EmergencyResponseSection({ er }: { er: EmergencyResponseSummary }) {
+  return (
+    <section>
+      <h2 className="mb-2 text-sm font-bold text-slate-800">
+        긴급 대응 이력 <span className="font-normal text-slate-400">(개인 응급 SOS·낙상·BLE 중계 · 골든타임)</span>
+      </h2>
+      <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatCard label="긴급 발생" value={er.total} unit="건" sub={`대응체인 발동 ${er.chain_activated}`} tone="rose" />
+        <StatCard label="동료 응답" value={er.responded} unit="건" sub={`60초 무응답 확대 ${er.escalated_count}`} tone={er.escalated_count > 0 ? 'amber' : 'emerald'} />
+        <StatCard label="평균 최초응답" value={er.avg_first_response_seconds == null ? '-' : formatElapsed(Math.round(er.avg_first_response_seconds))} sub="통보 → 응답" tone="brand" />
+        <StatCard label="BLE 대리중계" value={er.relayed_count} unit="건" sub="통신음영 보완" tone="slate" />
+      </div>
+      <div className="space-y-2">
+        {er.timelines.map((t) => <EmergencyRow key={t.alert_id} t={t} />)}
+      </div>
+    </section>
+  );
+}
+
+function EmergencyRow({ t }: { t: EmergencyTimeline }) {
+  const steps: string[] = [`감지 ${timeOnly(t.detected_at)}`];
+  if (t.peer_notified_at) steps.push(`통보 ${timeOnly(t.peer_notified_at)}`);
+  if (t.first_response_at) {
+    steps.push(`응답 ${timeOnly(t.first_response_at)}${t.response_elapsed_seconds != null ? ` (${formatElapsed(t.response_elapsed_seconds)})` : ''}`);
+  }
+  if (t.resolved_at) steps.push(`해제 ${timeOnly(t.resolved_at)}`);
+  return (
+    <div className="card flex flex-wrap items-center gap-2 text-sm">
+      <span className="font-semibold text-slate-700">{t.kind_label}</span>
+      {t.relayed && <Tag tone="amber">BLE중계</Tag>}
+      {t.escalated && <Tag tone="rose">현장확대</Tag>}
+      {t.responder_count > 0 && (
+        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">{t.responder_count}명 응답</span>
+      )}
+      {t.peer_notified_at && !t.first_response_at && !t.resolved_at && (
+        <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">응답 없음</span>
+      )}
+      <span className="text-xs text-slate-500">{steps.join(' → ')}</span>
     </div>
   );
 }

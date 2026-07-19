@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader } from '../../components/ui';
 import AuditLogWidget from './AuditLogWidget';
 import WorkPlanListWidget, { type DashboardWorkPlan } from './WorkPlanListWidget';
 import { EmptyState, SectionCard, StatCard } from './widgets';
@@ -40,12 +41,10 @@ export default function BpDashboardPage() {
   return (
     <AppShell breadcrumb={[{ label: '대시보드' }]}>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">{company?.name ?? 'BP'} 대시보드</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {user?.name}님, 현장 운영과 배치 현황을 확인하세요.
-          </p>
-        </div>
+        <PageHeader
+          title={`${company?.name ?? 'BP'} 대시보드`}
+          subtitle={`${user?.name ?? ''}님, 현장 운영과 배치 현황을 확인하세요.`}
+        />
 
         <BpPendingQueueWidget />
 

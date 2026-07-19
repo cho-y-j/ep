@@ -4,6 +4,7 @@ import SignupPage from './features/auth/SignupPage';
 import PendingApprovalPage from './features/auth/PendingApprovalPage';
 import AdminUsersPage from './features/user/AdminUsersPage';
 import AdminAnnouncementsPage from './features/announcement/AdminAnnouncementsPage';
+import SupplierAnnouncementPage from './features/announcement/SupplierAnnouncementPage';
 import CompanyUsersPage from './features/user/CompanyUsersPage';
 import AdminCompaniesPage from './features/company/AdminCompaniesPage';
 import AdminBpCompaniesPage from './features/company/AdminBpCompaniesPage';
@@ -32,6 +33,7 @@ import SitePage from './features/site/SitePage';
 import SiteDetailPage from './features/site/SiteDetailPage';
 import SafetyInspectionsPage from './features/safety/SafetyInspectionsPage';
 import SafetySettingsPage from './features/safety/SafetySettingsPage';
+import BpCheckinPage from './features/health/BpCheckinPage';
 import SafetyReportPage from './features/safety/SafetyReportPage';
 import SafetyReportPrintPage from './features/safety/SafetyReportPrintPage';
 import SafetyAlertsPage from './features/safetyAlerts/SafetyAlertsPage';
@@ -64,8 +66,7 @@ import DocumentManagementPage from './features/compliance/DocumentManagementPage
 import ComplianceOrdersPage from './features/compliance/ComplianceOrdersPage';
 import ResourceCheckBpList from './features/resourceCheck/BpListPage';
 import ResourceCheckSupplierInbox from './features/resourceCheck/SupplierInboxPage';
-import SupplierReceivedPage from './features/supplier/SupplierReceivedPage';
-import SupplierDocumentHubPage from './features/document/SupplierDocumentHubPage';
+import DocumentReviewSendPage from './features/document/DocumentReviewSendPage';
 import WorksheetEditorPage from './features/workPlan/edit/WorksheetEditorPage';
 import SignaturePage from './features/signature/SignaturePage';
 import CollectPublicPage from './features/collection/CollectPublicPage';
@@ -81,7 +82,6 @@ import WorkerDashboardPage from './features/dashboard/WorkerDashboardPage';
 import ClientDashboardPage from './features/client/ClientDashboardPage';
 import AuditLogPage from './features/dashboard/AuditLogPage';
 import ReviewQueuePage from './features/document/ReviewQueuePage';
-import DocumentReviewSendPage from './features/document/DocumentReviewSendPage';
 import BpReceivedReviewsPage from './features/document/BpReceivedReviewsPage';
 import AdminExpiringDocumentsPage from './features/document/AdminExpiringDocumentsPage';
 import NotificationsPage from './features/notification/NotificationsPage';
@@ -206,6 +206,14 @@ export default function App() {
           }
         />
         <Route
+          path="/announcements"
+          element={
+            <ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}>
+              <SupplierAnnouncementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin/companies"
           element={
             <ProtectedRoute roles={['ADMIN']}>
@@ -251,8 +259,6 @@ export default function App() {
                element={<ProtectedRoute><OpenBidsBoardPage /></ProtectedRoute>} />
         <Route path="/my-proposals"
                element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><MyProposalsPage /></ProtectedRoute>} />
-        <Route path="/document-review-send"
-               element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><DocumentReviewSendPage /></ProtectedRoute>} />
         <Route path="/document-reviews/received"
                element={<ProtectedRoute roles={['BP', 'ADMIN']}><BpReceivedReviewsPage /></ProtectedRoute>} />
         <Route path="/outgoing-quotations"
@@ -323,6 +329,7 @@ export default function App() {
         <Route path="/safety-inspections" element={<ProtectedRoute><SafetyInspectionsPage /></ProtectedRoute>} />
         <Route path="/safety-alerts" element={<ProtectedRoute roles={['ADMIN','BP']}><SafetyAlertsPage /></ProtectedRoute>} />
         <Route path="/safety-settings" element={<ProtectedRoute roles={['ADMIN','BP']}><SafetySettingsPage /></ProtectedRoute>} />
+        <Route path="/bp-checkins" element={<ProtectedRoute roles={['ADMIN','BP','EQUIPMENT_SUPPLIER','MANPOWER_SUPPLIER']}><BpCheckinPage /></ProtectedRoute>} />
         <Route path="/safety-reports" element={<ProtectedRoute roles={['ADMIN','BP','CLIENT']}><SafetyReportPage /></ProtectedRoute>} />
         <Route path="/safety-reports/print" element={<ProtectedRoute roles={['ADMIN','BP','CLIENT']}><SafetyReportPrintPage /></ProtectedRoute>} />
         <Route path="/equipment" element={<ProtectedRoute><EquipmentPage /></ProtectedRoute>} />
@@ -404,15 +411,10 @@ export default function App() {
           path="/resource-checks/supplier"
           element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><ResourceCheckSupplierInbox /></ProtectedRoute>}
         />
-        {/* 공급사 "받은 요청" 통합 탭 (점검요청/이행지시/보완요청) — 기존 라우트도 유지 */}
+        {/* 공급사 서류심사 발송 — 자원 서류를 zip 으로 묶어 이메일/BP계정 발송 (구 서류 허브 "서류심사" 채널) */}
         <Route
-          path="/supplier/received"
-          element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><SupplierReceivedPage /></ProtectedRoute>}
-        />
-        {/* 공급사 "서류 허브" 통합 탭 (보완요청/자원점검/이행지시/서류수집/서류심사) — 기존 개별 라우트도 유지 */}
-        <Route
-          path="/supplier/document-hub"
-          element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><SupplierDocumentHubPage /></ProtectedRoute>}
+          path="/document-review-send"
+          element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><DocumentReviewSendPage /></ProtectedRoute>}
         />
 
         {/* S-12: 작업계획서 생성 중 OnlyOffice 새 탭 편집기 (wp.id 없이 임시 세션) */}

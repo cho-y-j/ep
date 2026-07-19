@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import CalendarWorkConfirmationView from './CalendarWorkConfirmationView';
@@ -48,6 +50,7 @@ export default function MonthlyWorkConfirmationPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [view, setView] = useState<'table' | 'calendar'>('table');
   const [calPersonId, setCalPersonId] = useState<number | null>(null);
+  const [q, setQ] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -77,46 +80,58 @@ export default function MonthlyWorkConfirmationPage() {
 
   const years = [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
 
+  const qLower = q.trim().toLowerCase();
+  const shown = qLower
+    ? rows.filter((m) => `${m.person_name} ${m.supplier_name ?? ''}`.toLowerCase().includes(qLower))
+    : rows;
+
   return (
     <AppShell breadcrumb={[{ label: '월별 작업확인서' }]}>
       <div className="mx-auto max-w-6xl px-6 py-8 space-y-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">월별 작업확인서</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              인원별로 한 달치 일별 작업확인서를 집계합니다. 인원 행을 펼치면 일별 내역, PDF 버튼으로 월별 확인서를 내려받습니다.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="input h-9 text-sm">
-              {years.map((y) => <option key={y} value={y}>{y}년</option>)}
-            </select>
-            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="input h-9 text-sm">
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((mm) => <option key={mm} value={mm}>{mm}월</option>)}
-            </select>
-            <div className="ml-1 inline-flex overflow-hidden rounded-lg border border-slate-200">
-              <button onClick={() => setView('table')}
-                      className={`h-9 px-3 text-sm ${view === 'table' ? 'bg-brand-600 text-white' : 'bg-white text-slate-600'}`}>표</button>
-              <button onClick={() => setView('calendar')}
-                      className={`h-9 px-3 text-sm ${view === 'calendar' ? 'bg-brand-600 text-white' : 'bg-white text-slate-600'}`}>달력</button>
-            </div>
-          </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          폰 출퇴근 서명분 집계 화면입니다. 일일 기록·정산용 월간 원장은{' '}
+          <Link to="/daily-work-logs/bp" className="font-semibold underline hover:text-amber-900">작업확인 원장</Link>
+          에서 확인하세요.
         </div>
+        <PageHeader
+          title="월별 작업확인서"
+          subtitle="인원별로 한 달치 일별 작업확인서를 집계합니다. 인원 행을 펼치면 일별 내역, PDF 버튼으로 월별 확인서를 내려받습니다."
+          actions={
+            <>
+              <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="input h-9 text-sm">
+                {years.map((y) => <option key={y} value={y}>{y}년</option>)}
+              </select>
+              <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="input h-9 text-sm">
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((mm) => <option key={mm} value={mm}>{mm}월</option>)}
+              </select>
+              <div className="ml-1 inline-flex overflow-hidden rounded-lg border border-slate-200">
+                <button onClick={() => setView('table')}
+                        className={`h-9 px-3 text-sm ${view === 'table' ? 'bg-brand-600 text-white' : 'bg-white text-slate-600'}`}>표</button>
+                <button onClick={() => setView('calendar')}
+                        className={`h-9 px-3 text-sm ${view === 'calendar' ? 'bg-brand-600 text-white' : 'bg-white text-slate-600'}`}>달력</button>
+              </div>
+            </>
+          }
+        />
+
+        <FilterBar search={{ value: q, onChange: setQ, placeholder: '인원·소속 검색' }} />
 
         {loading ? (
           <div className="card p-8 text-center text-slate-400">불러오는 중…</div>
         ) : rows.length === 0 ? (
           <div className="card p-8 text-center text-sm text-slate-400">{year}년 {month}월 작업확인서가 없습니다.</div>
+        ) : shown.length === 0 ? (
+          <div className="card p-8 text-center text-sm text-slate-400">검색 결과가 없습니다.</div>
         ) : view === 'calendar' ? (
           (() => {
-            const cur = rows.find((r) => r.person_id === (calPersonId ?? rows[0].person_id)) ?? rows[0];
+            const cur = shown.find((r) => r.person_id === (calPersonId ?? shown[0].person_id)) ?? shown[0];
             return (
               <div className="card p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-slate-600">인원</span>
                   <select className="input h-9 text-sm" value={cur.person_id}
                           onChange={(e) => setCalPersonId(Number(e.target.value))}>
-                    {rows.map((m) => <option key={m.person_id} value={m.person_id}>{m.person_name}</option>)}
+                    {shown.map((m) => <option key={m.person_id} value={m.person_id}>{m.person_name}</option>)}
                   </select>
                   <button onClick={() => downloadPdf(cur)}
                           className="ml-auto rounded bg-slate-100 px-2.5 py-1 text-xs font-semibold hover:bg-slate-200">PDF</button>
@@ -142,7 +157,7 @@ export default function MonthlyWorkConfirmationPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((m) => (
+                {shown.map((m) => (
                   <PersonRow key={m.person_id} m={m}
                     open={expanded === m.person_id}
                     onToggle={() => setExpanded(expanded === m.person_id ? null : m.person_id)}

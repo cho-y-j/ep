@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import MoneyInput from '../../components/MoneyInput';
 import { useAuth } from '../auth/AuthContext';
 import { FD_STATUS_LABEL, type FieldDeploymentResponse, type ResourceType } from '../../types/fieldDeployment';
@@ -95,6 +96,9 @@ export default function FieldDeploymentSupplierPage() {
     });
   }, [candidates, search, bpFilter]);
 
+  const activeFilterCount = [search, bpFilter].filter(Boolean).length;
+  const resetFilters = () => { setSearch(''); setBpFilter(''); };
+
   const selectedRows = useMemo(() => candidates.filter((c) => selected.has(c.id)), [candidates, selected]);
 
   const toggle = (id: number) => setSelected((prev) => {
@@ -122,27 +126,23 @@ export default function FieldDeploymentSupplierPage() {
   return (
     <AppShell breadcrumb={[{ label: '현장 투입 요청' }]}>
       <div className="mx-auto max-w-7xl space-y-6">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-950">현장 투입 요청</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            수락된 자원을 여러 건 선택하고, 일대·월대·OT·야간 단가를 넣어 한 번에 BP로 투입 요청을 보냅니다.
-          </p>
-        </header>
+        <PageHeader
+          title="현장 투입 요청"
+          subtitle="수락된 자원을 여러 건 선택하고, 일대·월대·OT·야간 단가를 넣어 한 번에 BP로 투입 요청을 보냅니다."
+        />
 
         <section>
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-            <h2 className="font-bold text-slate-900">
-              수락된 자원 ({filtered.length}{filtered.length !== candidates.length ? `/${candidates.length}` : ''})
-            </h2>
-            <div className="flex items-center gap-2">
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="자원·BP 검색"
-                     className="input h-9 w-40 text-sm" />
-              <select value={bpFilter} onChange={(e) => setBpFilter(e.target.value)} className="input h-9 text-sm">
-                <option value="">전체 BP사</option>
-                {bpOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-              </select>
-            </div>
-          </div>
+          <h2 className="font-bold text-slate-900 mb-2">
+            수락된 자원 ({filtered.length}{filtered.length !== candidates.length ? `/${candidates.length}` : ''})
+          </h2>
+          <FilterBar
+            search={{ value: search, onChange: setSearch, placeholder: '자원·BP 검색' }}
+            activeFilterCount={activeFilterCount}
+            onReset={resetFilters}
+          >
+            <FilterSelect value={bpFilter} onChange={setBpFilter} placeholder="전체 BP사"
+              options={bpOptions.map(([id, name]) => ({ value: String(id), label: name }))} />
+          </FilterBar>
 
           {loading ? <div className="text-sm text-slate-400">불러오는 중…</div>
            : candidates.length === 0 ? (

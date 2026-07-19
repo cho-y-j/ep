@@ -36,7 +36,7 @@ export default function SupplierTodayTasksWidget({ role, companyId, expiringDocs
     <TodayTasksRow
       loading={loading}
       tasks={[
-        { label: '받은 요청', count: received, to: '/supplier/received' },
+        { label: '받은 요청', count: received, to: '/document-management' },
         { label: '만료 임박 서류', count: expiringDocsCount, to: '/document-management' },
         { label: '미서명 일일확인', count: unsignedLog ?? 0, to: '/daily-work-logs' },
         { label: '투입 요청', count: candidates ?? 0, to: '/field-deployments/supplier' },

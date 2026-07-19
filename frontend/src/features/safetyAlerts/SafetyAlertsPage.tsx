@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import { Client as StompClient } from '@stomp/stompjs';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import KakaoMap, { type MapMarker, type MapCircle, type KakaoMapHandle } from '../../components/KakaoMap';
 import { useAuth } from '../auth/AuthContext';
 import { toast } from '../../lib/toast';
@@ -37,6 +38,40 @@ function AckBadge({ r }: { r: SafetyAlertResponse }) {
   }
   return <span className="inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">미확인</span>;
 }
+
+/** P5-W2/W3 대응 상태 — 대응체인 발동(개인 응급) 경보면 응답자+골든타임, 아니면 확인응답 배지. */
+function ResponseCell({ r }: { r: SafetyAlertResponse }) {
+  if (!r.peer_notified_at) return <AckBadge r={r} />;
+  const count = r.responder_count ?? 0;
+  const firstName = r.responders?.find((x) => x.name)?.name ?? null;
+  return (
+    <div className="space-y-1">
+      {count > 0 ? (
+        <span className="inline-block rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+          {count}명 응답{firstName ? ` — ${firstName} 이동중` : ''}
+        </span>
+      ) : (
+        <span className="inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-300">
+          동료 응답 대기{r.peer_escalated_at ? ' · 현장확대' : ''}
+        </span>
+      )}
+      <GoldenTimeline r={r} />
+    </div>
+  );
+}
+
+/** 골든타임 압축 표시 — 감지 → 통보 → 응답 → (중계) → 해제 시각(HH:MM:SS). */
+function GoldenTimeline({ r }: { r: SafetyAlertResponse }) {
+  const t = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : null;
+  const steps: string[] = [`감지 ${t(r.created_at)}`];
+  if (r.peer_notified_at) steps.push(`통보 ${t(r.peer_notified_at)}`);
+  if (r.first_response_at) steps.push(`응답 ${t(r.first_response_at)}`);
+  if (r.relayed_at) steps.push(`중계 ${t(r.relayed_at)}`);
+  if (r.resolved && r.resolved_at) steps.push(`해제 ${t(r.resolved_at)}`);
+  return <div className="text-[10px] leading-tight text-slate-400 whitespace-nowrap">{steps.join(' → ')}</div>;
+}
+
 type SiteRow = { id: number; name: string; latitude?: number | null; longitude?: number | null; geofenceRadiusM?: number | null };
 
 /** 작업자 안전알림 — ADMIN/BP. 현장 탭으로 분리 + 미해결 알람 지도 + 표(사진/전화 포함). */
@@ -46,6 +81,7 @@ export default function SafetyAlertsPage() {
 
   const [unresolvedOnly, setUnresolvedOnly] = useState(true);
   const [unackedOnly, setUnackedOnly] = useState(false);
+  const [q, setQ] = useState('');
   const [rows, setRows] = useState<SafetyAlertResponse[]>([]);
   const [liveCount, setLiveCount] = useState(0);
   const [sites, setSites] = useState<SiteRow[]>([]);
@@ -98,7 +134,7 @@ export default function SafetyAlertsPage() {
       onConnect: () => {
         client.subscribe('/topic/safety-alerts/all', (msg) => {
           try {
-            const payload = JSON.parse(msg.body) as SafetyAlertResponse & { event?: string };
+            const payload = JSON.parse(msg.body) as SafetyAlertResponse & { event?: string; responder_name?: string };
             if (payload.event === 'resolved') {
               setRows((prev) =>
                 prev.map((r) => (r.id === payload.id ? { ...r, resolved: true } : r)),
@@ -110,6 +146,38 @@ export default function SafetyAlertsPage() {
                 prev.map((r) =>
                   r.id === payload.id
                     ? { ...r, acknowledged_at: payload.acknowledged_at, ack_person_id: payload.ack_person_id }
+                    : r,
+                ),
+              );
+              return;
+            }
+            // P5-W2 동료 응답 — "N명 응답 — ○○○ 이동중" 실시간 갱신.
+            if (payload.event === 'responded') {
+              setRows((prev) =>
+                prev.map((r) =>
+                  r.id === payload.id
+                    ? {
+                        ...r,
+                        responder_count: payload.responder_count ?? r.responder_count,
+                        first_response_at: payload.first_response_at ?? r.first_response_at,
+                        responders:
+                          r.responders && r.responders.length > 0
+                            ? r.responders
+                            : payload.responder_name
+                              ? [{ person_id: 0, name: payload.responder_name, created_at: payload.first_response_at ?? '' }]
+                              : r.responders,
+                      }
+                    : r,
+                ),
+              );
+              return;
+            }
+            // P5-W3 BLE 대리중계 — 피재자 추정 위치(지도 마커) 갱신.
+            if (payload.event === 'relayed') {
+              setRows((prev) =>
+                prev.map((r) =>
+                  r.id === payload.id
+                    ? { ...r, lat: payload.lat ?? r.lat, lng: payload.lng ?? r.lng, relayed_at: payload.relayed_at, relay_lat: payload.relay_lat, relay_lng: payload.relay_lng }
                     : r,
                 ),
               );
@@ -136,6 +204,12 @@ export default function SafetyAlertsPage() {
     if (unackedOnly) list = list.filter((r) => ackState(r) === 'pending' || ackState(r) === 'escalated');
     return list;
   }, [rows, activeTab, unackedOnly]);
+
+  // 표(목록) 검색 — 지도 마커는 filteredRows 기준 유지, 표만 좁힌다.
+  const qLower = q.trim().toLowerCase();
+  const tableRows = qLower
+    ? filteredRows.filter((r) => `${r.person_name ?? ''} ${KIND_LABEL[r.kind] ?? r.kind} ${r.person_phone ?? ''}`.toLowerCase().includes(qLower))
+    : filteredRows;
 
   // 미해결 + 좌표 있는 알람 마커. tooltipHtml 로 hover/클릭 시 상세 표시.
   const mapMarkers = useMemo<MapMarker[]>(() => {
@@ -263,40 +337,40 @@ export default function SafetyAlertsPage() {
   return (
     <AppShell>
       <div className="p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-slate-900">
-            작업자 안전알림
-            {liveCount > 0 && (
-              <span className="ml-2 inline-block rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">
-                실시간 +{liveCount}
-              </span>
-            )}
-          </h1>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={unresolvedOnly}
-                onChange={(e) => setUnresolvedOnly(e.target.checked)}
-              />
-              미처리만
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={unackedOnly}
-                onChange={(e) => setUnackedOnly(e.target.checked)}
-              />
-              미확인만
-            </label>
-            <button
-              onClick={load}
-              className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-            >
-              새로고침
-            </button>
-          </div>
-        </div>
+        <PageHeader
+          title="작업자 안전알림"
+          actions={
+            <>
+              {liveCount > 0 && (
+                <span className="inline-block rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">
+                  실시간 +{liveCount}
+                </span>
+              )}
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={unresolvedOnly}
+                  onChange={(e) => setUnresolvedOnly(e.target.checked)}
+                />
+                미처리만
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={unackedOnly}
+                  onChange={(e) => setUnackedOnly(e.target.checked)}
+                />
+                미확인만
+              </label>
+              <button
+                onClick={load}
+                className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+              >
+                새로고침
+              </button>
+            </>
+          }
+        />
 
         {/* 현장 탭 */}
         <div className="flex flex-wrap gap-1 border-b border-slate-200">
@@ -343,9 +417,11 @@ export default function SafetyAlertsPage() {
           </div>
         )}
 
-        {filteredRows.length === 0 ? (
+        <FilterBar search={{ value: q, onChange: setQ, placeholder: '작업자·종류·연락처 검색' }} />
+
+        {tableRows.length === 0 ? (
           <div className="rounded border border-dashed border-slate-300 p-10 text-center text-slate-500">
-            표시할 알림이 없습니다.
+            {qLower ? '검색 결과가 없습니다.' : '표시할 알림이 없습니다.'}
           </div>
         ) : (
           <div className="overflow-x-auto rounded border border-slate-200 bg-white">
@@ -364,7 +440,7 @@ export default function SafetyAlertsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((r) => (
+                {tableRows.map((r) => (
                   <tr key={r.id}
                       onClick={() => focusOnAlert(r)}
                       className={`border-t border-slate-100 cursor-pointer transition-colors ${
@@ -400,7 +476,7 @@ export default function SafetyAlertsPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <AckBadge r={r} />
+                      <ResponseCell r={r} />
                     </td>
                     <td className="px-3 py-2 text-slate-700 whitespace-nowrap">
                       {r.hr != null && <span className="mr-2">심박 {r.hr}</span>}

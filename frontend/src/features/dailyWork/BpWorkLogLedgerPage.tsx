@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar } from '../../components/ui';
 import { SignaturePadDialog } from '../workPlan/create/components/SignaturePadDialog';
 import LedgerPanel from './LedgerPanel';
 import { OT_COLS, SIGN_BADGE, type DailyWorkLog } from './types';
@@ -13,6 +14,7 @@ export default function BpWorkLogLedgerPage() {
   const [logs, setLogs] = useState<DailyWorkLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [unsignedOnly, setUnsignedOnly] = useState(true);
+  const [q, setQ] = useState('');
   const [signTarget, setSignTarget] = useState<DailyWorkLog | null>(null);
 
   const load = async () => {
@@ -29,7 +31,12 @@ export default function BpWorkLogLedgerPage() {
   useEffect(() => { void load(); }, []);
 
   const unsignedCount = useMemo(() => logs.filter((l) => l.sign_status === 'UNSIGNED').length, [logs]);
-  const shown = useMemo(() => (unsignedOnly ? logs.filter((l) => l.sign_status === 'UNSIGNED') : logs), [logs, unsignedOnly]);
+  const shown = useMemo(() => {
+    const base = unsignedOnly ? logs.filter((l) => l.sign_status === 'UNSIGNED') : logs;
+    const needle = q.trim().toLowerCase();
+    if (!needle) return base;
+    return base.filter((l) => `${l.work_date} ${l.equipment_label ?? ''} ${l.person_name ?? ''} ${l.supplier_company_name ?? ''} ${l.site_name ?? ''} ${l.work_content ?? ''}`.toLowerCase().includes(needle));
+  }, [logs, unsignedOnly, q]);
 
   const doSign = async (pngBase64: string) => {
     if (!signTarget) return;
@@ -46,19 +53,15 @@ export default function BpWorkLogLedgerPage() {
   return (
     <AppShell breadcrumb={[{ label: '작업확인 원장' }]}>
       <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-950">작업확인 원장 (서명)</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              공급사가 올린 일일 작업확인서를 현장에서 확인하고 서명합니다. 월간 원장은 정산주기(현장정산일) 기준으로 집계됩니다.
-            </p>
-          </div>
-          {unsignedCount > 0 && (
+        <PageHeader
+          title="작업확인 원장 (서명)"
+          subtitle="공급사가 올린 일일 작업확인서를 현장에서 확인하고 서명합니다. 월간 원장은 정산주기(현장정산일) 기준으로 집계됩니다."
+          actions={unsignedCount > 0 ? (
             <span className="shrink-0 rounded-full bg-amber-100 text-amber-800 text-sm font-semibold px-3 py-1">
               미서명 {unsignedCount}건
             </span>
-          )}
-        </header>
+          ) : undefined}
+        />
 
         <div className="flex gap-1 border-b border-slate-200">
           <TabBtn active={tab === 'sign'} onClick={() => setTab('sign')}>서명 목록</TabBtn>
@@ -67,10 +70,12 @@ export default function BpWorkLogLedgerPage() {
 
         {tab === 'sign' && (
           <div className="space-y-3">
-            <label className="flex items-center gap-2 text-sm text-slate-600">
-              <input type="checkbox" checked={unsignedOnly} onChange={(e) => setUnsignedOnly(e.target.checked)} />
-              미서명만 보기
-            </label>
+            <FilterBar search={{ value: q, onChange: setQ, placeholder: '자원·현장·작업내용 검색' }}>
+              <label className="flex items-center gap-2 whitespace-nowrap text-sm text-slate-600">
+                <input type="checkbox" checked={unsignedOnly} onChange={(e) => setUnsignedOnly(e.target.checked)} />
+                미서명만 보기
+              </label>
+            </FilterBar>
             {loading ? (
               <div className="text-sm text-slate-400">불러오는 중…</div>
             ) : shown.length === 0 ? (

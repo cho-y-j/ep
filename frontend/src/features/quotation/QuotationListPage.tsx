@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import {
@@ -33,6 +34,27 @@ function formatRelative(iso: string | undefined): string {
   return `${Math.floor(mo / 12)}년 전`;
 }
 
+/** 묶음의 현장 표시명 — 지정배차는 현장명, 공개입찰은 작업위치 텍스트. 현장 필터/검색 공용. */
+function siteLabelOf(b: QuotationBundleResponse): string {
+  return b.site_name ?? b.items[0]?.work_location_text ?? '';
+}
+
+/** 묶음 안 장비/인력 요약 문자열 — 카드 제목 + 검색 대상. */
+function summarizeItems(b: QuotationBundleResponse): string {
+  const eq = b.items.filter((i) => i.request_type === 'EQUIPMENT');
+  const mp = b.items.filter((i) => i.request_type === 'MANPOWER');
+  const parts: string[] = [];
+  if (eq.length) {
+    const cats = eq.map((i) => i.equipment_category ? equipmentCategoryLabel(i.equipment_category) : '장비').join(', ');
+    parts.push(`장비 ${cats}`);
+  }
+  if (mp.length) {
+    const roles = mp.map((i) => i.manpower_role ? PERSON_ROLE_LABEL[i.manpower_role] : '인력').join(', ');
+    parts.push(`인력 ${roles}`);
+  }
+  return parts.join(' · ');
+}
+
 /** 견적 묶음 목록 — 현장 1건 = 카드 1개. 안에 장비/인력 요약 + 진행률. */
 export default function QuotationListPage() {
   const { user } = useAuth();
@@ -42,6 +64,12 @@ export default function QuotationListPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<QuotationStatus | ''>('');
   const [modeTab, setModeTab] = useState<'OPEN_BID' | 'TARGETED'>('OPEN_BID');
+  // 클라이언트 필터 — 로드된 묶음을 좁힘.
+  const [q, setQ] = useState('');
+  const [siteFilter, setSiteFilter] = useState('');
+  const [bpFilter, setBpFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const canCreate = user?.role === 'ADMIN' || user?.role === 'BP';
@@ -94,31 +122,46 @@ export default function QuotationListPage() {
     return { open, tgt };
   }, [bundles]);
 
-  const filtered = useMemo(() => {
-    const base = modeTab === 'OPEN_BID' ? byMode.open : byMode.tgt;
-    return statusFilter ? base.filter((b) => b.aggregate_status === statusFilter) : base;
-  }, [byMode, modeTab, statusFilter]);
+  // 현재 탭의 묶음(필터 옵션·목록의 분모).
+  const base = useMemo(() => (modeTab === 'OPEN_BID' ? byMode.open : byMode.tgt), [modeTab, byMode]);
+
+  const siteOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    base.forEach((b) => { const l = siteLabelOf(b); if (l) m.set(l, l); });
+    return [...m.values()].map((v) => ({ value: v, label: v }));
+  }, [base]);
+  const bpOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    base.forEach((b) => { if (b.bp_company_id != null) m.set(String(b.bp_company_id), b.bp_company_name ?? `발주사 #${b.bp_company_id}`); });
+    return [...m.entries()].map(([value, label]) => ({ value, label }));
+  }, [base]);
+
+  const qLower = q.trim().toLowerCase();
+  const filtered = useMemo(() => base.filter((b) => {
+    if (statusFilter && b.aggregate_status !== statusFilter) return false;
+    if (siteFilter && siteLabelOf(b) !== siteFilter) return false;
+    if (bpFilter && String(b.bp_company_id ?? '') !== bpFilter) return false;
+    const created = b.created_at?.slice(0, 10) ?? '';
+    if (dateFrom && created < dateFrom) return false;
+    if (dateTo && created > dateTo) return false;
+    if (qLower) {
+      const hay = `${summarizeItems(b)} ${siteLabelOf(b)} ${b.bp_company_name ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  }), [base, statusFilter, siteFilter, bpFilter, dateFrom, dateTo, qLower]);
+
+  const activeFilterCount =
+    [statusFilter, siteFilter, bpFilter, q].filter(Boolean).length + (dateFrom || dateTo ? 1 : 0);
+  const resetFilters = () => {
+    setStatusFilter(''); setSiteFilter(''); setBpFilter(''); setQ(''); setDateFrom(''); setDateTo('');
+  };
 
   const stats = useMemo(() => {
     const counts = { SENT: 0, CLOSED: 0, CANCELLED: 0, DRAFT: 0 } as Record<QuotationStatus, number>;
     bundles.forEach((b) => { counts[b.aggregate_status] = (counts[b.aggregate_status] ?? 0) + 1; });
     return counts;
   }, [bundles]);
-
-  const summarizeItems = (b: QuotationBundleResponse) => {
-    const eq = b.items.filter((i) => i.request_type === 'EQUIPMENT');
-    const mp = b.items.filter((i) => i.request_type === 'MANPOWER');
-    const parts: string[] = [];
-    if (eq.length) {
-      const cats = eq.map((i) => i.equipment_category ? equipmentCategoryLabel(i.equipment_category) : '장비').join(', ');
-      parts.push(`장비 ${cats}`);
-    }
-    if (mp.length) {
-      const roles = mp.map((i) => i.manpower_role ? PERSON_ROLE_LABEL[i.manpower_role] : '인력').join(', ');
-      parts.push(`인력 ${roles}`);
-    }
-    return parts.join(' · ');
-  };
 
   const navigateToBundle = (b: QuotationBundleResponse) => {
     if (b.bundle_id) navigate(`/quotations/bundles/${b.bundle_id}`);
@@ -139,18 +182,12 @@ export default function QuotationListPage() {
   return (
     <AppShell breadcrumb={[{ label: pageTitle }]}>
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-950">
-              {pageTitle}
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {isSupplier
-                ? '받은 견적 요청을 검토하고 수락 또는 거부 응답을 보냅니다.'
-                : '현장 단위 묶음으로 발송된 견적과 공급사 응답을 검토합니다.'}
-            </p>
-          </div>
-          {canCreate && (
+        <PageHeader
+          title={pageTitle}
+          subtitle={isSupplier
+            ? '받은 견적 요청을 검토하고 수락 또는 거부 응답을 보냅니다.'
+            : '현장 단위 묶음으로 발송된 견적과 공급사 응답을 검토합니다.'}
+          actions={canCreate ? (
             <button
               type="button"
               onClick={() => navigate(modeTab === 'OPEN_BID' ? '/quotations/new/open-bid' : '/quotations/new')}
@@ -158,8 +195,8 @@ export default function QuotationListPage() {
             >
               + 새 {modeTab === 'OPEN_BID' ? '공개입찰' : '지정배차'} 견적
             </button>
-          )}
-        </div>
+          ) : null}
+        />
 
         {/* 모드 탭 */}
         <div className="flex gap-1 border-b border-slate-200">
@@ -184,19 +221,29 @@ export default function QuotationListPage() {
           <Stat label="전체" value={bundles.length} tone="brand" />
         </div>
 
-        <div className="flex gap-2 items-center">
-          <span className="text-xs font-semibold text-slate-500">상태:</span>
-          <select
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '장비·인력·현장·발주사 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={siteFilter} onChange={setSiteFilter} placeholder="현장 전체" options={siteOptions} />
+          <FilterSelect value={bpFilter} onChange={setBpFilter} placeholder="발주사(BP) 전체" options={bpOptions} />
+          <FilterSelect
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as QuotationStatus | '')}
-            className="input bg-white py-1 px-2 text-sm"
-          >
-            <option value="">전체</option>
-            <option value="SENT">응답 대기</option>
-            <option value="CLOSED">완료</option>
-            <option value="CANCELLED">취소됨</option>
-          </select>
-        </div>
+            onChange={(v) => setStatusFilter(v as QuotationStatus | '')}
+            placeholder="상태 전체"
+            options={[
+              { value: 'SENT', label: '응답 대기' },
+              { value: 'CLOSED', label: '완료' },
+              { value: 'CANCELLED', label: '취소됨' },
+            ]}
+          />
+          <div className="flex items-center gap-1">
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input w-auto" />
+            <span className="text-xs text-slate-400">~</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input w-auto" />
+          </div>
+        </FilterBar>
 
         {error && (
           <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>

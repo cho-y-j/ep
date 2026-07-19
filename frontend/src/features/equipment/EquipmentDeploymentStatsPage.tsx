@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { EQUIPMENT_CATEGORY_LABEL, type EquipmentCategory } from '../../types/equipment';
 
@@ -22,6 +23,9 @@ export default function EquipmentDeploymentStatsPage() {
   const [rows, setRows] = useState<DeploymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [cat, setCat] = useState('');
+  const [bp, setBp] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -33,14 +37,38 @@ export default function EquipmentDeploymentStatsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const totalCount = rows.reduce((s, r) => s + r.deploy_count, 0);
-  const equipCount = new Set(rows.map((r) => r.equipment_id)).size;
-  const companyCount = new Set(rows.map((r) => r.bp_company_id ?? 0)).size;
+  // 필터 옵션 — 로드된 통계에서 파생(종류·발주사).
+  const catOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    rows.forEach((r) => { if (r.category) m.set(r.category, catLabel(r.category)); });
+    return [...m.entries()].map(([value, label]) => ({ value, label }));
+  }, [rows]);
+  const bpOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    rows.forEach((r) => m.set(String(r.bp_company_id ?? 'none'), r.bp_company_name ?? '(발주사 미지정)'));
+    return [...m.entries()].map(([value, label]) => ({ value, label }));
+  }, [rows]);
+
+  const qLower = q.trim().toLowerCase();
+  const filteredRows = useMemo(() => rows.filter((r) => {
+    if (cat && r.category !== cat) return false;
+    if (bp && String(r.bp_company_id ?? 'none') !== bp) return false;
+    if (qLower) {
+      const hay = `${equipName(r)} ${r.model ?? ''} ${catLabel(r.category)} ${r.owner_name ?? ''} ${r.bp_company_name ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  }), [rows, cat, bp, qLower]);
+
+  const totalCount = filteredRows.reduce((s, r) => s + r.deploy_count, 0);
+  const equipCount = new Set(filteredRows.map((r) => r.equipment_id)).size;
+  const companyCount = new Set(filteredRows.map((r) => r.bp_company_id ?? 0)).size;
+  const activeFilterCount = [q, cat, bp].filter(Boolean).length;
 
   // BP 회사별 그룹 (합계 내림차순) — "이 회사에 어떤 차가 몇 번"
   const groups = useMemo(() => {
     const m = new Map<string, { name: string; rows: DeploymentRow[]; total: number }>();
-    for (const r of rows) {
+    for (const r of filteredRows) {
       const key = String(r.bp_company_id ?? 'none');
       if (!m.has(key)) m.set(key, { name: r.bp_company_name ?? '(발주사 미지정)', rows: [], total: 0 });
       const g = m.get(key)!;
@@ -51,15 +79,15 @@ export default function EquipmentDeploymentStatsPage() {
     arr.forEach((g) => g.rows.sort((a, b) => b.deploy_count - a.deploy_count));
     arr.sort((a, b) => b.total - a.total);
     return arr;
-  }, [rows]);
+  }, [filteredRows]);
 
   return (
     <AppShell breadcrumb={[{ label: '장비 투입 통계' }]}>
       <div className="space-y-5">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">장비 투입 통계</h1>
-          <p className="mt-1 text-sm text-slate-500">내 장비가 어느 발주사(BP) 작업계획서에 몇 번 투입됐는지 — 취소·초안 제외.</p>
-        </div>
+        <PageHeader
+          title="장비 투입 통계"
+          subtitle="내 장비가 어느 발주사(BP) 작업계획서에 몇 번 투입됐는지 — 취소·초안 제외."
+        />
 
         <div className="grid grid-cols-3 gap-3">
           <StatCard label="총 투입 건수" value={totalCount} />
@@ -67,12 +95,23 @@ export default function EquipmentDeploymentStatsPage() {
           <StatCard label="거래 발주사" value={companyCount} />
         </div>
 
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '장비·소유주·발주사 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={() => { setQ(''); setCat(''); setBp(''); }}
+        >
+          <FilterSelect value={cat} onChange={setCat} placeholder="종류 전체" options={catOptions} />
+          <FilterSelect value={bp} onChange={setBp} placeholder="발주사 전체" options={bpOptions} />
+        </FilterBar>
+
         {loading ? (
           <p className="text-sm text-slate-400">불러오는 중…</p>
         ) : error ? (
           <p className="text-sm text-red-600">{error}</p>
         ) : groups.length === 0 ? (
-          <div className="card p-8 text-center text-sm text-slate-400">투입 이력이 없습니다.</div>
+          <div className="card p-8 text-center text-sm text-slate-400">
+            {rows.length === 0 ? '투입 이력이 없습니다.' : '조건에 맞는 투입 이력이 없습니다.'}
+          </div>
         ) : (
           <div className="space-y-4">
             {groups.map((g, i) => (

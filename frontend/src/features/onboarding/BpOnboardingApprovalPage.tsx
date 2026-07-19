@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 
 type ResourceType = 'EQUIPMENT' | 'PERSON';
 type Onboarding = {
@@ -39,6 +40,9 @@ export default function BpOnboardingApprovalPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
+  // 클라이언트 필터 — 두 섹션(대기·완료) 카드를 좁힘. 선택·일괄승인은 보이는 대기 건 기준.
+  const [q, setQ] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -55,16 +59,33 @@ export default function BpOnboardingApprovalPage() {
   const pending = useMemo(() => rows.filter((r) => r.mode === 'REQUESTED'), [rows]);
   const done = useMemo(() => rows.filter((r) => r.mode !== 'REQUESTED'), [rows]);
 
+  const qLower = q.trim().toLowerCase();
+  const match = (r: Onboarding) => {
+    if (typeFilter && r.owner_type !== typeFilter) return false;
+    if (qLower) {
+      const hay = `${r.owner_label} ${r.supplier_company_name ?? ''} ${r.site_name ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  };
+  const filteredPending = pending.filter(match);
+  const filteredDone = done.filter(match);
+  const activeFilterCount = [q, typeFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setTypeFilter(''); };
+
   const toggle = (id: number) => setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const allSelected = pending.length > 0 && pending.every((r) => selected.has(r.id));
+  // 선택·일괄승인은 보이는(필터된) 대기 건 기준으로만 동작.
+  const selectedPending = filteredPending.filter((r) => selected.has(r.id));
+  const allSelected = filteredPending.length > 0 && filteredPending.every((r) => selected.has(r.id));
   const toggleAll = () => setSelected((p) => {
+    const allSel = filteredPending.length > 0 && filteredPending.every((r) => p.has(r.id));
     const n = new Set(p);
-    if (allSelected) pending.forEach((r) => n.delete(r.id)); else pending.forEach((r) => n.add(r.id));
+    if (allSel) filteredPending.forEach((r) => n.delete(r.id)); else filteredPending.forEach((r) => n.add(r.id));
     return n;
   });
 
   const approve = async () => {
-    const ids = pending.filter((r) => selected.has(r.id)).map((r) => r.id);
+    const ids = selectedPending.map((r) => r.id);
     if (ids.length === 0) { toast.error('승인할 건을 선택하세요'); return; }
     setBusy(true);
     const results = await Promise.allSettled(ids.map((id) => api.post(`/api/resource-onboardings/${id}/approve`, {})));
@@ -82,12 +103,19 @@ export default function BpOnboardingApprovalPage() {
   return (
     <AppShell breadcrumb={[{ label: '소급 승인' }]}>
       <div className="mx-auto max-w-5xl space-y-6">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-950">기투입 소급 승인</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            공급사가 이미 투입 중이라고 신고한 자원입니다. 확인 후 <b>일괄 승인</b>하면 반입검사·건강검진·안전교육 통과가 자동 반영됩니다.
-          </p>
-        </header>
+        <PageHeader
+          title="기투입 소급 승인"
+          subtitle="공급사가 이미 투입 중이라고 신고한 자원입니다. 확인 후 일괄 승인하면 반입검사·건강검진·안전교육 통과가 자동 반영됩니다."
+        />
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '자원·공급사·현장 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={typeFilter} onChange={setTypeFilter} placeholder="자원종류 전체"
+            options={[{ value: 'EQUIPMENT', label: '장비' }, { value: 'PERSON', label: '인원' }]} />
+        </FilterBar>
 
         <section>
           <div className="flex items-center justify-between mb-2">
@@ -107,9 +135,11 @@ export default function BpOnboardingApprovalPage() {
               <div className="font-semibold text-slate-700">승인 대기 중인 건이 없습니다</div>
               <p className="mt-1 text-sm text-slate-400">공급사가 기투입 소급 요청을 보내면 여기에 표시됩니다.</p>
             </div>
+          ) : filteredPending.length === 0 ? (
+            <div className="card p-6 text-center text-xs text-slate-400">조건에 맞는 대기 건이 없습니다.</div>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
-              {pending.map((r) => {
+              {filteredPending.map((r) => {
                 const on = selected.has(r.id);
                 return (
                   <button key={r.id} type="button" onClick={() => toggle(r.id)}
@@ -132,14 +162,14 @@ export default function BpOnboardingApprovalPage() {
             </div>
           )}
 
-          {selected.size > 0 && (
+          {selectedPending.length > 0 && (
             <div className="sticky bottom-3 mt-3 flex items-center justify-between gap-3 card px-4 py-2.5 shadow-lg border-brand-200">
-              <div className="text-sm text-slate-600"><b className="text-slate-900">{selected.size}</b>건 선택됨</div>
+              <div className="text-sm text-slate-600"><b className="text-slate-900">{selectedPending.length}</b>건 선택됨</div>
               <div className="flex gap-2">
                 <button onClick={() => setSelected(new Set())} className="px-3 py-1.5 text-sm text-slate-500 hover:text-slate-900">선택 해제</button>
                 <button onClick={approve} disabled={busy}
                         className="px-4 py-1.5 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50">
-                  {busy ? '승인 중…' : `${selected.size}건 일괄 승인`}
+                  {busy ? '승인 중…' : `${selectedPending.length}건 일괄 승인`}
                 </button>
               </div>
             </div>
@@ -150,9 +180,11 @@ export default function BpOnboardingApprovalPage() {
           <h2 className="font-bold text-slate-900 mb-2">처리 완료 ({done.length})</h2>
           {done.length === 0 ? (
             <div className="card p-6 text-center text-xs text-slate-400">아직 승인/기록된 건이 없습니다.</div>
+          ) : filteredDone.length === 0 ? (
+            <div className="card p-6 text-center text-xs text-slate-400">조건에 맞는 건이 없습니다.</div>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
-              {done.map((r) => (
+              {filteredDone.map((r) => (
                 <div key={r.id} className="card p-3.5 flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-semibold text-slate-800 truncate">

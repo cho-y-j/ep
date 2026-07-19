@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { CHANGE_KIND_LABEL, type ResourceChangeRequestResponse } from '../../types/resourceChange';
 
 /** 업체변경 신청서 v0 목록 (L2a). 공급사=본인 발신, BP=본인 앞, ADMIN=전체. */
@@ -9,6 +10,8 @@ export default function ResourceChangeListPage() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<ResourceChangeRequestResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
     api.get<ResourceChangeRequestResponse[]>('/api/resource-change-requests')
@@ -17,16 +20,40 @@ export default function ResourceChangeListPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const qLower = q.trim().toLowerCase();
+  const filtered = useMemo(() => rows.filter((r) => {
+    if (statusFilter && r.status !== statusFilter) return false;
+    if (qLower) {
+      const before = r.old_label ?? r.old_operator_name ?? '';
+      const after = r.new_label ?? r.new_operator_name ?? '';
+      const hay = `${r.site_name ?? ''} ${before} ${after} ${r.supplier_name ?? ''} ${r.bp_name ?? ''} ${CHANGE_KIND_LABEL[r.change_kind]}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  }), [rows, statusFilter, qLower]);
+
+  const activeFilterCount = [q, statusFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setStatusFilter(''); };
+
   return (
     <AppShell breadcrumb={[{ label: '업체변경 신청서' }]}>
       <div className="mx-auto max-w-5xl space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-950">업체변경 신청서</h1>
-            <p className="text-xs text-slate-500">같은 현장 기검증 자원 교체 신청 (임의양식 v0)</p>
-          </div>
-          <button type="button" onClick={() => navigate('/resource-change-requests/new')} className="btn-primary">+ 신규 작성</button>
-        </div>
+        <PageHeader
+          title="업체변경 신청서"
+          subtitle="같은 현장 기검증 자원 교체 신청 (임의양식 v0)"
+          actions={
+            <button type="button" onClick={() => navigate('/resource-change-requests/new')} className="btn-primary">+ 신규 작성</button>
+          }
+        />
+
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '현장·자원·업체 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect value={statusFilter} onChange={setStatusFilter} placeholder="상태 전체"
+            options={[{ value: 'DRAFT', label: '작성중' }, { value: 'CONFIRMED', label: '확정' }]} />
+        </FilterBar>
 
         <div className="card overflow-x-auto">
           {loading ? (
@@ -35,6 +62,8 @@ export default function ResourceChangeListPage() {
             <div className="py-10 text-center text-sm text-slate-400">
               작성된 업체변경 신청서가 없습니다. <button type="button" onClick={() => navigate('/resource-change-requests/new')} className="font-semibold text-blue-600 underline">신규 작성</button>
             </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-10 text-center text-sm text-slate-400">조건에 맞는 신청서가 없습니다.</div>
           ) : (
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-slate-500">
@@ -49,7 +78,7 @@ export default function ResourceChangeListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((r) => {
+                {filtered.map((r) => {
                   const before = r.old_label ?? r.old_operator_name ?? '-';
                   const after = r.new_label ?? r.new_operator_name ?? '-';
                   const snap = r.l3_snapshot;

@@ -144,6 +144,39 @@ class FieldApi(private val baseUrl: String) {
         }
     }
 
+    /**
+     * POST /api/field-auth/safety-alerts/{id}/respond {response} (X-Field-Token) — P5-W2 동료 응답([제가 갑니다]).
+     * 서버 미구현(404) 등엔 throw 하지 않고 false 반환 → 호출부에서 graceful 처리(재시도·토스트).
+     */
+    fun respondSafetyAlert(token: String, alertId: Long, response: String): Boolean {
+        val payload = gson.toJson(mapOf("response" to response))
+        val req = Request.Builder()
+            .url("$baseUrl/api/field-auth/safety-alerts/$alertId/respond")
+            .header("X-Field-Token", token)
+            .post(payload.toRequestBody(jsonType))
+            .build()
+        client.newCall(req).execute().use { resp -> return resp.isSuccessful }
+    }
+
+    /**
+     * POST /api/field-auth/sos-relay (X-Field-Token=중계자) — P5-W3 제3자 폰 SOS 대리중계.
+     * 서버 미구현(404) 등엔 throw 하지 않고 false 반환 → 호출부 graceful(로그만·재시도 없음). 중복 dedupe 는 서버.
+     */
+    fun sosRelay(token: String, victimPersonId: Int, alertId: Int, rssi: Int, relayLat: Double?, relayLng: Double?): Boolean {
+        val payload = HashMap<String, Any?>()
+        payload["victim_person_id"] = victimPersonId
+        payload["alert_id"] = alertId
+        payload["rssi"] = rssi
+        payload["relay_lat"] = relayLat
+        payload["relay_lng"] = relayLng
+        val req = Request.Builder()
+            .url("$baseUrl/api/field-auth/sos-relay")
+            .header("X-Field-Token", token)
+            .post(gson.toJson(payload).toRequestBody(jsonType))
+            .build()
+        client.newCall(req).execute().use { resp -> return resp.isSuccessful }
+    }
+
     /** GET /api/field-auth/watch-policy (X-Field-Token) — P5-W0 워치 전송 정책 JSON(원문 그대로 워치에 전달). */
     fun watchPolicyJson(token: String): String {
         val req = Request.Builder()

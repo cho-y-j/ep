@@ -24,7 +24,10 @@ public final class SafetyAlertClassifier {
                     ? "폭염 작업 중지입니다. 즉시 그늘에서 쉬세요."
                     : "폭염 주의입니다. 물을 마시고 그늘에서 쉬세요.";
             case "rest" -> "휴식 시간입니다. 20분간 쉬세요.";
+            case "heat_risk" -> "체온이 오르고 있습니다. 그늘에서 휴식하세요.";
+            case "vital_anomaly" -> "몸 상태를 확인하세요. 괜찮으면 확인을 눌러주세요.";
             case "watch_offline" -> "워치 신호를 확인하세요. 정상이면 확인을 눌러주세요.";
+            case "overwork" -> "최근 근무가 많습니다. 충분히 휴식하세요.";
             case "emergency", "fall", "fall_detected" -> "긴급 상황입니다. 즉시 확인하세요.";
             default -> "안전 알림입니다. 확인하세요.";
         };

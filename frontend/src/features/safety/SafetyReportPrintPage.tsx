@@ -6,6 +6,7 @@ import {
   formatElapsed,
   SEVERITY_LABEL,
   timeOnly,
+  type EmergencyTimeline,
   type SafetyReport,
   type TimelineAlert,
 } from '../../types/safetyReport';
@@ -106,6 +107,41 @@ export default function SafetyReportPrintPage() {
             </tr>
           </tbody>
         </table>
+
+        {/* 긴급 대응 이력 (개인 응급 골든타임) */}
+        {r.emergency_response.total > 0 && (
+          <>
+            <H2>긴급 대응 이력 (개인 응급 SOS·낙상·BLE 중계 · 골든타임)</H2>
+            <table className="w-full border-collapse text-[12px]">
+              <tbody>
+                <tr>
+                  <Th className="w-40">요약</Th>
+                  <Td>긴급 {r.emergency_response.total}건 · 대응체인 발동 {r.emergency_response.chain_activated}건 · 동료 응답 {r.emergency_response.responded}건
+                    · 평균 최초응답 {r.emergency_response.avg_first_response_seconds == null ? '-' : formatElapsed(Math.round(r.emergency_response.avg_first_response_seconds))}
+                    · 60초 무응답 확대 {r.emergency_response.escalated_count}건 · BLE 대리중계 {r.emergency_response.relayed_count}건</Td>
+                </tr>
+              </tbody>
+            </table>
+            <table className="mt-1 w-full border-collapse text-[11px]">
+              <thead>
+                <tr>
+                  <Th className="w-28">종류</Th>
+                  <Th>감지 → 통보 → 응답 → 해제</Th>
+                  <Th className="w-20">응답자</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {r.emergency_response.timelines.map((t) => (
+                  <tr key={t.alert_id}>
+                    <Td className="align-top">{t.kind_label}{t.relayed ? ' (중계)' : ''}{t.escalated ? ' (확대)' : ''}</Td>
+                    <Td className="align-top">{emergencyLine(t)}</Td>
+                    <Td className="align-top">{t.responder_count}명</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
 
         {/* ② 타임라인 */}
         <H2>② 일자별 타임라인 (발송 → 확인 사슬)</H2>
@@ -208,6 +244,18 @@ export default function SafetyReportPrintPage() {
       </div>
     </div>
   );
+}
+
+function emergencyLine(t: EmergencyTimeline): string {
+  const steps: string[] = [`감지 ${timeOnly(t.detected_at)}`];
+  if (t.peer_notified_at) steps.push(`통보 ${timeOnly(t.peer_notified_at)}`);
+  if (t.first_response_at) {
+    steps.push(`응답 ${timeOnly(t.first_response_at)}${t.response_elapsed_seconds != null ? ` (${formatElapsed(t.response_elapsed_seconds)})` : ''}`);
+  } else if (t.peer_notified_at) {
+    steps.push('응답 없음');
+  }
+  if (t.resolved_at) steps.push(`해제 ${timeOnly(t.resolved_at)}`);
+  return steps.join(' → ');
 }
 
 function alertLine(al: TimelineAlert): string {

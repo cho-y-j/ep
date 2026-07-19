@@ -4,8 +4,9 @@ import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppShell from '../../components/layout/AppShell';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import type { CompanyResponse } from '../../types/auth';
-import { SITE_STATUS_LABEL, type CreateSitePayload, type SiteResponse } from '../../types/site';
+import { SITE_STATUS_LABEL, type CreateSitePayload, type SiteResponse, type SiteStatus } from '../../types/site';
 import SiteMapEditor from './SiteMapEditor';
 
 export default function SitePage() {
@@ -21,6 +22,8 @@ export default function SitePage() {
   const [form, setForm] = useState<CreateSitePayload>({ name: '' });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState<SiteStatus | ''>('');
 
   const canCreate = user?.role === 'ADMIN' || user?.role === 'BP';
   const isAdmin = user?.role === 'ADMIN';
@@ -30,6 +33,18 @@ export default function SitePage() {
     const participants = sites.reduce((sum, s) => sum + s.participant_count, 0);
     return { active, participants };
   }, [sites]);
+
+  const qLower = q.trim().toLowerCase();
+  const filteredSites = useMemo(() => sites.filter((s) => {
+    if (statusFilter && s.status !== statusFilter) return false;
+    if (qLower) {
+      const hay = `${s.name} ${s.code ?? ''} ${s.bp_company_name ?? ''}`.toLowerCase();
+      if (!hay.includes(qLower)) return false;
+    }
+    return true;
+  }), [sites, statusFilter, qLower]);
+  const activeFilterCount = [q, statusFilter].filter(Boolean).length;
+  const resetFilters = () => { setQ(''); setStatusFilter(''); };
 
   async function load() {
     setLoading(true);
@@ -116,19 +131,15 @@ export default function SitePage() {
      
     >
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-950">현장 관리</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              BP사가 현장을 만들고 장비공급사와 인력공급사를 현장 참여 업체로 구성합니다.
-            </p>
-          </div>
-          {canCreate && !creating && (
+        <PageHeader
+          title="현장 관리"
+          subtitle="BP사가 현장을 만들고 장비공급사와 인력공급사를 현장 참여 업체로 구성합니다."
+          actions={canCreate && !creating ? (
             <button type="button" onClick={startCreate} className="btn-primary">
               현장 등록
             </button>
-          )}
-        </div>
+          ) : null}
+        />
 
         <section className="grid gap-4 md:grid-cols-3">
           <StatCard label="전체 현장" value={sites.length} />
@@ -239,6 +250,19 @@ export default function SitePage() {
           </form>
         )}
 
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '현장명·코드·BP사 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={resetFilters}
+        >
+          <FilterSelect
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v as SiteStatus | '')}
+            placeholder="상태 전체"
+            options={(Object.keys(SITE_STATUS_LABEL) as SiteStatus[]).map((s) => ({ value: s, label: SITE_STATUS_LABEL[s] }))}
+          />
+        </FilterBar>
+
         {loading ? (
           <p className="text-sm text-slate-400">불러오는 중...</p>
         ) : (
@@ -255,7 +279,7 @@ export default function SitePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {sites.map((site) => (
+                {filteredSites.map((site) => (
                   <tr key={site.id} onClick={() => navigate(`/sites/${site.id}`)} className="cursor-pointer hover:bg-slate-50">
                     <td className="px-4 py-3">
                       <div className="font-semibold text-slate-900">{site.name}</div>
@@ -272,9 +296,11 @@ export default function SitePage() {
                     </td>
                   </tr>
                 ))}
-                {sites.length === 0 && (
+                {filteredSites.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">등록된 현장이 없습니다.</td>
+                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                      {sites.length === 0 ? '등록된 현장이 없습니다.' : '조건에 맞는 현장이 없습니다.'}
+                    </td>
                   </tr>
                 )}
               </tbody>

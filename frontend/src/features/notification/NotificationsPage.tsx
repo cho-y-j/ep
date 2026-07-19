@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import AppShell from '../../components/layout/AppShell';
+import { GroupPill, PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import {
   NOTIFICATION_TYPE_LABEL,
   NOTIFICATION_GROUPS,
@@ -52,8 +53,9 @@ export default function NotificationsPage() {
   const [qInput, setQInput] = useState('');
   const [q, setQ] = useState('');
 
-  const filtersActive =
-    groupKey !== 'all' || readFilter !== 'all' || period !== 'all' || q !== '';
+  const activeFilterCount =
+    (groupKey !== 'all' ? 1 : 0) + (readFilter !== 'all' ? 1 : 0) + (period !== 'all' ? 1 : 0) + (q !== '' ? 1 : 0);
+  const filtersActive = activeFilterCount > 0;
 
   // 검색어 디바운스 — 입력 후 300ms 뒤 적용, 페이지 0 리셋.
   useEffect(() => {
@@ -114,19 +116,19 @@ export default function NotificationsPage() {
   return (
     <AppShell breadcrumb={[{ label: '알림' }]}>
       <div className="space-y-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">알림</h1>
-            <p className="text-sm text-slate-500 mt-1">권한 범위 내 알림을 유형·기간·발신자로 찾아보세요.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void markAllRead()}
-            className="px-3 py-2 rounded-lg text-sm font-semibold bg-slate-900 text-white hover:bg-slate-800"
-          >
-            전체 읽음
-          </button>
-        </div>
+        <PageHeader
+          title="알림"
+          subtitle="권한 범위 내 알림을 유형·기간·발신자로 찾아보세요."
+          actions={
+            <button
+              type="button"
+              onClick={() => void markAllRead()}
+              className="px-3 py-2 rounded-lg text-sm font-semibold bg-slate-900 text-white hover:bg-slate-800"
+            >
+              전체 읽음
+            </button>
+          }
+        />
 
         {/* 필터 바 */}
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
@@ -138,27 +140,28 @@ export default function NotificationsPage() {
               </GroupPill>
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={readFilter}
-              onChange={(e) => { setReadFilter(e.target.value as ReadFilter); setPage(0); }}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
-            >
-              <option value="all">읽음 상태 전체</option>
-              <option value="unread">안읽음</option>
-              <option value="read">읽음</option>
-            </select>
-            <select
-              value={period}
-              onChange={(e) => { setPeriod(e.target.value as PeriodFilter); setPage(0); }}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
-            >
-              <option value="all">기간 전체</option>
-              <option value="today">오늘</option>
-              <option value="7d">최근 7일</option>
-              <option value="30d">최근 30일</option>
-              <option value="custom">직접 지정</option>
-            </select>
+          <FilterBar
+            search={{ value: qInput, onChange: setQInput, placeholder: '제목·내용·발신자 검색' }}
+            activeFilterCount={activeFilterCount}
+            onReset={resetFilters}
+          >
+            <FilterSelect
+              value={readFilter === 'all' ? '' : readFilter}
+              onChange={(v) => { setReadFilter((v || 'all') as ReadFilter); setPage(0); }}
+              placeholder="읽음 상태 전체"
+              options={[{ value: 'unread', label: '안읽음' }, { value: 'read', label: '읽음' }]}
+            />
+            <FilterSelect
+              value={period === 'all' ? '' : period}
+              onChange={(v) => { setPeriod((v || 'all') as PeriodFilter); setPage(0); }}
+              placeholder="기간 전체"
+              options={[
+                { value: 'today', label: '오늘' },
+                { value: '7d', label: '최근 7일' },
+                { value: '30d', label: '최근 30일' },
+                { value: 'custom', label: '직접 지정' },
+              ]}
+            />
             {period === 'custom' && (
               <input
                 type="date"
@@ -167,26 +170,7 @@ export default function NotificationsPage() {
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
               />
             )}
-            <div className="relative flex-1 min-w-[200px]">
-              <input
-                type="search"
-                value={qInput}
-                onChange={(e) => setQInput(e.target.value)}
-                placeholder="제목·내용·발신자 검색"
-                className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm"
-              />
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-            </div>
-            {filtersActive && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="px-3 py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-slate-50"
-              >
-                필터 초기화
-              </button>
-            )}
-          </div>
+          </FilterBar>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white">
@@ -260,21 +244,5 @@ export default function NotificationsPage() {
         )}
       </div>
     </AppShell>
-  );
-}
-
-function GroupPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition ${
-        active
-          ? 'bg-brand-600 text-white border-brand-600'
-          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-      }`}
-    >
-      {children}
-    </button>
   );
 }

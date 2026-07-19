@@ -35,6 +35,13 @@ public class FieldSafetyController {
     private final FieldTokenRateLimiter rateLimiter;
     private final WorkerWatchStateRepository watchStateRepo;
     private final WatchPolicyService watchPolicyService;
+    private final VitalAnomalyService vitalAnomalyService;
+    private final VitalBaselineService vitalBaselineService;
+    private final EmergencyResponseService emergencyResponseService;
+    private final SafetyAlertResponseRepository responseRepo;
+
+    /** P5-W1 2차 판정 평가창(분) — 추세·연속 판정용 최근 readings. */
+    private static final long EVAL_WINDOW_MIN = 20;
 
     /**
      * 센서 데이터 수신 — raw 저장(그래프용) + 워치 상태 upsert(P5-W0 데드맨·관제 타일).
@@ -68,16 +75,37 @@ public class FieldSafetyController {
         }
 
         upsertWatchState(p, ctx, req, last);   // 데드맨 last_seen 갱신 + 수신 재개 시 자동 해소.
+
+        // P5-W1 서버 2차 판정 — 개인 베이스라인 대비 맥락 평가(CAUTION만). 판정 실패가 센서 저장을 롤백하면 안 됨.
+        try {
+            List<FieldSensorReading> window = sensorRepo.findByPersonIdAndRecordedAtAfterOrderByRecordedAtAsc(
+                    p.getId(), LocalDateTime.now().minusMinutes(EVAL_WINDOW_MIN));
+            vitalAnomalyService.evaluate(p, ctx.siteId, ctx.bpCompanyId, window);
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(FieldSafetyController.class)
+                    .warn("vital 2차 판정 실패 person={}: {}", p.getId(), e.getMessage());
+        }
         return Map.of("ok", true, "id", last != null ? last.getId() : null);
     }
 
-    /** P5-W0 워치 원격 정책 — 현장 폭염/강풍 맥락으로 전송주기·심박 듀티 가변(폰이 워치로 전달). */
+    /**
+     * P5-W0 워치 원격 정책 — 현장 폭염/강풍 맥락으로 전송주기·심박 듀티 가변(폰이 워치로 전달).
+     * P5-W1: 개인 심박 대역(보정 반영)을 실어 워치 온디바이스 1차 판정 임계로 사용(미학습이면 null).
+     */
     @GetMapping("/watch-policy")
     public WatchPolicyService.WatchPolicy watchPolicy(@RequestHeader("X-Field-Token") String token,
                                                       HttpServletRequest request) {
         rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
-        return watchPolicyService.policyForSite(openContext(p).siteId);
+        // P5-W4 2겹: 고위험군(HIGH)이면 현장/기상 무관 YELLOW 상향.
+        boolean highRisk = p.getHealthRiskLevel() == com.skep.person.HealthRiskLevel.HIGH;
+        WatchPolicyService.WatchPolicy policy = watchPolicyService.policyForSite(openContext(p).siteId, highRisk);
+        PersonVitalBaseline pv = vitalBaselineService.find(p.getId()).orElse(null);
+        if (pv != null && pv.isLearned()) {
+            Integer high = VitalBaselineService.effectiveWorkHrHigh(pv.getWorkHrHigh(), pv.getAdjustPct());
+            policy = policy.withBand(pv.getRestHrLow(), high);
+        }
+        return policy;
     }
 
     /**
@@ -100,6 +128,11 @@ public class FieldSafetyController {
             ws.setSpo2(last.getSpo2());
             ws.setBodyTemp(last.getBodyTemp());
             ws.setState(WatchPolicyService.colorOf(last.getState()));
+            // 위치 보고가 있을 때만 갱신(폰 GPS 없는 워치 직접 폴백은 이전 위치 보존).
+            if (last.getLat() != null && last.getLng() != null) {
+                ws.setLat(last.getLat());
+                ws.setLng(last.getLng());
+            }
         }
         if (ws.getDeadmanAlertId() != null) {
             FieldSafetyAlert open = alertRepo.findById(ws.getDeadmanAlertId()).orElse(null);
@@ -139,7 +172,57 @@ public class FieldSafetyController {
         a.setLng(req.lng);
         alertRepo.save(a);
         broadcaster.publishCreated(a, p);
+        emergencyResponseService.onEmergencyAlert(a, p);   // P5-W2 대응체인: 파인드미 + 근접 동료 3인.
         return Map.of("ok", true, "alert_id", a.getId());
+    }
+
+    /**
+     * P5-W2 근접 동료 응답([제가 갑니다]) — GOING 저장(동료 1인 1응답, 멱등)·first_response_at 최초 1회·
+     * 관제 WS 실시간 갱신. 응답자는 어느 현장 작업자든 가능(발신자 본인 아님) — alertId 로 특정.
+     */
+    @PostMapping("/safety-alerts/{alertId}/respond")
+    @Transactional
+    public Map<String, Object> respond(@RequestHeader("X-Field-Token") String token,
+                                       @org.springframework.web.bind.annotation.PathVariable Long alertId,
+                                       @RequestBody RespondRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
+        Person p = fieldAuth.authenticate(token);
+        FieldSafetyAlert a = alertRepo.findById(alertId)
+                .orElseThrow(() -> ApiException.notFound("ALERT_NOT_FOUND", "알림을 찾을 수 없습니다"));
+        String response = (req.response == null || req.response.isBlank()) ? "GOING" : req.response.trim();
+
+        // 멱등 — 이미 응답한 동료면 중복 저장 안 함.
+        SafetyAlertResponse r = responseRepo.findByAlertIdAndPersonId(alertId, p.getId()).orElse(null);
+        if (r == null) {
+            r = new SafetyAlertResponse();
+            r.setAlertId(alertId);
+            r.setPersonId(p.getId());
+            r.setResponse(response);
+            responseRepo.save(r);
+        }
+        if (a.getFirstResponseAt() == null) {   // 최초 응답만 t2 기록.
+            a.setFirstResponseAt(LocalDateTime.now());
+            alertRepo.save(a);
+        }
+        int count = responseRepo.findByAlertIdOrderByCreatedAtAsc(alertId).size();
+        broadcaster.publishResponded(a, p.getName(), count);
+        return Map.of("ok", true, "responder_count", count, "first_response_at", a.getFirstResponseAt());
+    }
+
+    /**
+     * P5-W3 제3자 폰 BLE 대리중계 수신 — 피재자 활성 EMERGENCY 경보 위치 보강, 없으면 신규 생성 + 대응체인.
+     * 인증 토큰 = 중계자(누구든). victim_person_id 로 피재자 특정. 서버가 victim당 5분 dedupe.
+     */
+    @PostMapping("/sos-relay")
+    @Transactional
+    public Map<String, Object> sosRelay(@RequestHeader("X-Field-Token") String token,
+                                        @RequestBody SosRelayRequest req, HttpServletRequest request) {
+        rateLimiter.check(request);
+        fieldAuth.authenticate(token);   // 중계자 인증(신원 기록은 불필요 — 익명 중계).
+        if (req.victimPersonId == null) {
+            throw ApiException.badRequest("NO_VICTIM", "피재자 식별자가 없습니다");
+        }
+        return emergencyResponseService.receiveRelay(req.victimPersonId, req.relayLat, req.relayLng);
     }
 
     /** 베이스라인 동기화 (워치 → 서버). 30분 주기. */
@@ -149,6 +232,10 @@ public class FieldSafetyController {
                                             @RequestBody BaselineRequest req, HttpServletRequest request) {
         rateLimiter.check(request);
         Person p = fieldAuth.authenticate(token);
+        // 무징후 실패 가드 — 안정시 심박(seedFromCalibration 의 부트스트랩 필수값)이 없으면 관대한 무시 대신 명시 오류.
+        if (req.hrRestMean == null) {
+            throw ApiException.badRequest("BAD_BASELINE", "베이스라인 필수 값(안정시 심박)이 없습니다");
+        }
         FieldBaseline b = baselineRepo.findById(p.getId()).orElseGet(() -> {
             FieldBaseline nb = new FieldBaseline();
             nb.setPersonId(p.getId());
@@ -169,6 +256,7 @@ public class FieldSafetyController {
         b.setSamplesCount(req.samplesCount != null ? req.samplesCount : 0);
         b.setLastLearnedAt(LocalDateTime.now());
         baselineRepo.save(b);
+        vitalBaselineService.seedFromCalibration(p.getId(), b);   // P5-W1 개인 대역 부트스트랩(최초 1회).
         return Map.of("ok", true);
     }
 
@@ -209,6 +297,10 @@ public class FieldSafetyController {
         a.setResolvedAt(LocalDateTime.now());
         alertRepo.save(a);
         broadcaster.publishResolved(a);
+        // 대응체인 발동(peer_notified)됐던 경보 해제 → 피재자(본인) 폰 파인드미 해제. 신 경로(SafetyAlertController.resolve)와 정합.
+        if (a.getPeerNotifiedAt() != null) {
+            emergencyResponseService.sendFindMeStop(p);
+        }
         return Map.of("ok", true);
     }
 
@@ -233,6 +325,12 @@ public class FieldSafetyController {
             a.setAckPersonId(p.getId());
             alertRepo.save(a);
             broadcaster.publishAcked(a);
+            // P5-W1 학습 오탐 피드백 — vital 경보를 창 내 본인 확인(=이상없음) 시 개인 임계 완화.
+            // 낙상·SOS·데드맨·폭염은 LEARN_KINDS 에 없음(민감도 저하 금지).
+            if (VitalAnomalyService.LEARN_KINDS.contains(a.getKind())
+                    && VitalBaselineService.isSelfCancel(a.getCreatedAt(), a.getAcknowledgedAt())) {
+                vitalBaselineService.markFalsePositive(p.getId());
+            }
         }
         return Map.of("ok", true, "acknowledged_at", a.getAcknowledgedAt());
     }
@@ -338,6 +436,23 @@ public class FieldSafetyController {
         public Integer stress;
         public Double lat;
         public Double lng;
+    }
+
+    /** P5-W2 동료 응답. */
+    public static class RespondRequest {
+        public String response;   // GOING (현재 유일값).
+    }
+
+    /**
+     * P5-W3 BLE 대리중계 요청(FieldApi.kt:165-177 계약).
+     * alertId(-1 가능)·rssi 는 폰 근접 게이지용 — 서버는 victimPersonId·relayLat/Lng 만 사용.
+     */
+    public static class SosRelayRequest {
+        public Long victimPersonId;
+        public Long alertId;
+        public Integer rssi;
+        public Double relayLat;
+        public Double relayLng;
     }
 
     public static class BaselineRequest {
