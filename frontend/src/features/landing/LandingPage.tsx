@@ -83,7 +83,7 @@ export default function LandingPage() {
 
       {/* 히어로 */}
       <section className="relative flex min-h-screen items-center justify-center overflow-hidden">
-        <BgVideo src="/hero-forest.mp4" className="absolute inset-0 h-full w-full object-cover" />
+        <BgVideo src="/hero-macro.mp4" className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/50 to-black/70" />
         <div className="relative z-10 mx-auto max-w-3xl px-4 text-center text-white">
           <h1 className="text-3xl font-bold leading-tight sm:text-5xl">
@@ -130,7 +130,7 @@ export default function LandingPage() {
 
       {/* 무드 섹션 */}
       <section className="relative flex min-h-[60vh] items-center justify-center overflow-hidden">
-        <BgVideo src="/hero-macro.mp4" className="absolute inset-0 h-full w-full object-cover" />
+        <BgVideo src="/hero-forest.mp4" className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-black/45" />
         <div className="relative z-10 px-4 text-center text-white">
           <p className="text-2xl font-semibold leading-snug sm:text-4xl">
