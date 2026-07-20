@@ -84,7 +84,7 @@ export default function SignaturePage() {
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200">
         <div className="mx-auto max-w-3xl px-4 py-4">
-          <div className="text-xs text-slate-500">SKEP · 전자서명</div>
+          <div className="text-xs text-slate-500">원온 · 전자서명</div>
           <h1 className="text-lg font-bold text-slate-900 mt-0.5">{info.workPlan.title}</h1>
           <div className="mt-1 text-sm text-slate-600">
             <span className="font-semibold">{info.signature.role_label}</span>

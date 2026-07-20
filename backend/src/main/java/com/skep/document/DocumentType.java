@@ -82,6 +82,10 @@ public class DocumentType {
     @Column(name = "ocr_region_template", columnDefinition = "text")
     private String ocrRegionTemplate;
 
+    /** V116: 서류 수집 '샘플 보기' — ADMIN 이 업로드한 마스킹된 예시 이미지의 스토리지 키. NULL = 미등록. */
+    @Column(name = "sample_image_key", length = 255)
+    private String sampleImageKey;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -134,4 +138,5 @@ public class DocumentType {
     public void setAppliesToCategories(String v) { this.appliesToCategories = v; }
     public void setAppliesToPersonRoles(String v) { this.appliesToPersonRoles = v; }
     public void setOcrRegionTemplate(String v) { this.ocrRegionTemplate = v; }
+    public void setSampleImageKey(String v) { this.sampleImageKey = v; }
 }

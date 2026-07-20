@@ -9,6 +9,9 @@ import { toast } from '../../lib/toast';
 import { ackState, KIND_LABEL, LEVEL_LABEL, SEVERITY_LABEL } from '../../types/safetyAlert';
 import type { BoardSite, SiteBoard, AlertMarker, RecipientStatus, WatchWorker, PersonVitals } from '../../types/safetyBoard';
 import LegalInspectionStatusCard from '../safety/LegalInspectionStatusCard';
+import FilterBar from '../../components/ui/FilterBar';
+import FilterSelect from '../../components/ui/FilterSelect';
+import { PERSON_ROLE_LABEL, type PersonRole } from '../../types/person';
 
 const HAS_KAKAO_KEY = !!import.meta.env.VITE_KAKAO_JS_KEY;
 const POLL_MS = 10_000;
@@ -78,6 +81,12 @@ export default function SafetyBoardPage() {
   const [alertQueue, setAlertQueue] = useState<AlertMarker[]>([]);
   const [soundOn, setSoundOn] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);   // 카카오 SDK 로드 실패 시 폴백 목록으로.
+  // 안전 지도 필터 — 검색(차량번호·이름)·차량 가동상태·건강·공급사·BP. 클라 필터(마커·목록·요약 좁힘).
+  const [q, setQ] = useState('');
+  const [fVehicle, setFVehicle] = useState('');
+  const [fHealth, setFHealth] = useState('');
+  const [fSupplier, setFSupplier] = useState('');
+  const [fBp, setFBp] = useState('');
   const soundOnRef = useRef(false);
   useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
 
@@ -122,6 +131,7 @@ export default function SafetyBoardPage() {
     seenAlertIds.current = new Set();
     primedRef.current = false;
     setAlertQueue([]);
+    setQ(''); setFVehicle(''); setFHealth(''); setFSupplier(''); setFBp('');
   }, [siteId]);
 
   const geo = board && board.latitude != null && board.longitude != null;
@@ -137,6 +147,17 @@ export default function SafetyBoardPage() {
     return [{ id: `site-${board!.site_id}`, center: mapCenter!, radiusM: board!.geofence_radius_m ?? 300, color: 'amber' }];
   }, [geo, board, mapCenter]);
 
+  // 필터 적용 대상 = 워치 작업자(안전 지도 주체 — 차량번호·조종사·안전원·건강). 클라 필터로 좁힘.
+  const allWatch = board?.watch_workers ?? [];
+  const filtersActive = !!(q || fVehicle || fHealth || fSupplier || fBp);
+  const activeFilterCount = [fVehicle, fHealth, fSupplier, fBp].filter(Boolean).length;
+  const filteredWatch = useMemo(
+    () => allWatch.filter((w) => matchWatch(w, { q, vehicle: fVehicle, health: fHealth, supplier: fSupplier, bp: fBp })),
+    [allWatch, q, fVehicle, fHealth, fSupplier, fBp],
+  );
+  const supplierOptions = useMemo(() => uniqueCompanyOptions(allWatch, 'supplier'), [allWatch]);
+  const bpOptions = useMemo(() => uniqueCompanyOptions(allWatch, 'bp'), [allWatch]);
+
   const markers = useMemo<MapMarker[]>(() => {
     if (!board) return [];
     const out: MapMarker[] = [];
@@ -147,11 +168,10 @@ export default function SafetyBoardPage() {
         tooltipHtml: `<div style="padding:6px 10px;font-size:12px"><b>${escapeHtml(board.site_name)}</b><div style="margin-top:2px;color:#64748b">현장 범위${board.geofence_radius_m ? ` ${board.geofence_radius_m}m` : ''}</div></div>`,
       });
     }
-    // 워치 마커 — 최근 수신 위치에 바이탈 팝오버(맥박·체온·배터리·상태·혈압). 위험은 펄스.
-    const watchOnMap = new Set<number>();
-    for (const w of board.watch_workers) {
+    // 워치 마커 — 필터 통과분만. 최근 수신 위치에 바이탈 팝오버(맥박·체온·배터리·상태·혈압·차량·역할·소속). 위험은 펄스.
+    const watchAllIds = new Set(board.watch_workers.map((w) => w.person_id));
+    for (const w of filteredWatch) {
       if (w.lat == null || w.lng == null) continue;
-      watchOnMap.add(w.person_id);
       const d = watchDisplay(w);
       out.push({
         id: `watch-${w.person_id}`, position: { lat: w.lat, lng: w.lng },
@@ -159,10 +179,11 @@ export default function SafetyBoardPage() {
         tooltipHtml: watchTooltip(w, d.label),
       });
     }
-    // 작업자 마커 — 워치 마커로 이미 표시된 사람은 제외(중복 방지). 체크인=파랑 / 체크아웃=회색.
+    // 작업자 마커 — 워치 대상은 제외(중복 방지). 필터 활성 시엔 속성 없는 출근-only 마커 숨김. 체크인=파랑 / 체크아웃=회색.
     for (const w of board.workers) {
       if (w.lat == null || w.lng == null) continue;
-      if (watchOnMap.has(w.person_id)) continue;
+      if (watchAllIds.has(w.person_id)) continue;
+      if (filtersActive) continue;
       const when = new Date(w.check_in_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
       out.push({
         id: `worker-${w.person_id}`, position: { lat: w.lat, lng: w.lng },
@@ -185,7 +206,7 @@ export default function SafetyBoardPage() {
       });
     }
     return out;
-  }, [board, geo, mapCenter]);
+  }, [board, geo, mapCenter, filteredWatch, filtersActive]);
 
   // 보드 갱신(최초/폴링)마다 위험 경보 diff. 최초 로드는 기존 경보를 조용히 prime(스톰 방지) — "새로 생긴" 것만 팝업.
   useEffect(() => {
@@ -286,6 +307,25 @@ export default function SafetyBoardPage() {
           </div>
         )}
 
+        {/* 안전 지도 필터 — 검색(차량번호·이름)·차량 가동상태·건강·공급사·BP. 지도 마커·워치 목록·요약을 좁힘. */}
+        <FilterBar
+          search={{ value: q, onChange: setQ, placeholder: '차량번호·이름 검색' }}
+          activeFilterCount={activeFilterCount}
+          onReset={() => { setFVehicle(''); setFHealth(''); setFSupplier(''); setFBp(''); }}
+        >
+          <FilterSelect value={fVehicle} onChange={setFVehicle} placeholder="차량 전체"
+            options={[{ value: 'ASSIGNED', label: '가동중' }, { value: 'AVAILABLE', label: '대기' }, { value: 'BROKEN', label: '정비' }]} />
+          <FilterSelect value={fHealth} onChange={setFHealth} placeholder="건강 전체"
+            options={[{ value: 'normal', label: '정상' }, { value: 'caution', label: '주의' }, { value: 'danger', label: '경보' }]} />
+          <FilterSelect value={fSupplier} onChange={setFSupplier} placeholder="공급사 전체" options={supplierOptions} />
+          <FilterSelect value={fBp} onChange={setFBp} placeholder="원청(BP) 전체" options={bpOptions} />
+        </FilterBar>
+        {filtersActive && (
+          <div className="text-xs text-slate-500 -mt-2">
+            워치 {filteredWatch.length}/{allWatch.length}명 표시 중 (필터 적용)
+          </div>
+        )}
+
         {/* 상단 지도 — 화면의 주인공 */}
         <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-slate-100">
@@ -306,7 +346,7 @@ export default function SafetyBoardPage() {
               markers={markers} circles={circles} polygon={polygon} height="56vh"
               onLoadError={() => setMapFailed(true)} />
           ) : (
-            <MapFallback board={board} hasKey={HAS_KAKAO_KEY} hasGeo={!!geo} mapFailed={mapFailed} />
+            <MapFallback board={board} watchWorkers={filteredWatch} hasKey={HAS_KAKAO_KEY} hasGeo={!!geo} mapFailed={mapFailed} />
           )}
         </div>
 
@@ -367,7 +407,7 @@ export default function SafetyBoardPage() {
 
         <div className="tab-fade-in">
           {tab === 'alerts' && <AlertsTab board={board} onFocus={focusOnAlert} canManage={canManage} />}
-          {tab === 'watch' && <WatchTab board={board} canManage={canManage} />}
+          {tab === 'watch' && <WatchTab workers={filteredWatch} canManage={canManage} />}
           {tab === 'inspection' && <InspectionTab board={board} canManage={canManage} siteId={siteId} />}
           {tab === 'announcement' && (
             <AnnouncementTab board={board} canManage={canManage} expanded={expandedAnn}
@@ -424,8 +464,8 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
   );
 }
 
-/** 지도 우아한 폴백 — 카카오 키 미설정 또는 현장 좌표 미설정. 마커를 목록으로 표시. */
-function MapFallback({ board, hasKey, hasGeo, mapFailed }: { board: SiteBoard | null; hasKey: boolean; hasGeo: boolean; mapFailed?: boolean }) {
+/** 지도 우아한 폴백 — 카카오 키 미설정 또는 현장 좌표 미설정. 마커를 목록으로 표시(워치는 필터 반영). */
+function MapFallback({ board, watchWorkers, hasKey, hasGeo, mapFailed }: { board: SiteBoard | null; watchWorkers: WatchWorker[]; hasKey: boolean; hasGeo: boolean; mapFailed?: boolean }) {
   const reason = mapFailed ? '지도 SDK를 불러오지 못해(카카오 콘솔에 도메인 등록 필요)' : !hasKey ? '지도 키가 설정되지 않아' : !hasGeo ? '현장 좌표가 설정되지 않아' : '';
   return (
     <div className="p-4" style={{ minHeight: '52vh' }}>
@@ -471,18 +511,21 @@ function MapFallback({ board, hasKey, hasGeo, mapFailed }: { board: SiteBoard | 
         </div>
       </div>
       <div className="mt-4">
-        <div className="text-sm font-semibold text-slate-800 mb-1">워치 바이탈 ({board?.watch_workers.length ?? 0})</div>
-        {(board?.watch_workers.length ?? 0) === 0 ? (
-          <div className="text-sm text-slate-400">워치 보고 없음</div>
+        <div className="text-sm font-semibold text-slate-800 mb-1">워치 바이탈 ({watchWorkers.length})</div>
+        {watchWorkers.length === 0 ? (
+          <div className="text-sm text-slate-400">표시할 워치 작업자가 없습니다</div>
         ) : (
           <ul className="space-y-1">
-            {board!.watch_workers.map((w) => {
+            {watchWorkers.map((w) => {
               const d = watchDisplay(w);
               return (
                 <li key={w.person_id} className="flex flex-wrap items-center gap-2 text-sm">
                   <span className={`w-2 h-2 rounded-full ${d.dot} ${d.pulse ? 'animate-pulse' : ''}`} />
                   <span className="font-medium text-slate-800">{w.name}</span>
                   <span className={`text-xs ${d.tone}`}>{d.label}</span>
+                  {w.role && <span className="text-xs text-slate-500">{roleLabel(w.role)}</span>}
+                  {w.vehicle_no && <span className="text-xs font-medium text-slate-700">🚜 {w.vehicle_no}{w.vehicle_status ? ` (${VEHICLE_STATUS_LABEL[w.vehicle_status] ?? w.vehicle_status})` : ''}</span>}
+                  {w.supplier_name && <span className="text-xs text-slate-400">{w.supplier_name}</span>}
                   {w.hr != null && w.hr > 0 && <span className="text-xs text-slate-500">심박 {w.hr}</span>}
                   {w.body_temp != null && <span className="text-xs text-slate-500">체온 {w.body_temp}℃</span>}
                   {w.battery != null && <span className="text-xs text-slate-500">배터리 {w.battery}%</span>}
@@ -599,6 +642,47 @@ function watchDisplay(w: WatchWorker): { dot: string; label: string; tone: strin
 }
 
 const BP_VERDICT_LABEL: Record<string, string> = { OK: '혈압 정상', CAUTION: '혈압 주의', BLOCK: '혈압 위험' };
+const VEHICLE_STATUS_LABEL: Record<string, string> = { ASSIGNED: '가동중', AVAILABLE: '대기', BROKEN: '정비' };
+
+/** 건강 필터 분류 — 워치 상태등(RED/YELLOW) + 오늘 혈압 판정(BLOCK/CAUTION) 통합. */
+function healthCat(w: WatchWorker): 'normal' | 'caution' | 'danger' {
+  if (w.state === 'RED' || w.bp_verdict === 'BLOCK') return 'danger';
+  if (w.state === 'YELLOW' || w.bp_verdict === 'CAUTION') return 'caution';
+  return 'normal';
+}
+
+/** 투입 역할 한글 라벨 — PersonRole enum 명 매핑(미상은 원문). */
+function roleLabel(role: string | null): string {
+  if (!role) return '';
+  return PERSON_ROLE_LABEL[role as PersonRole] ?? role;
+}
+
+type WatchFilters = { q: string; vehicle: string; health: string; supplier: string; bp: string };
+
+/** 클라 필터 — 검색(차량번호·이름) + 차량 가동상태 + 건강 + 공급사 + BP. */
+function matchWatch(w: WatchWorker, f: WatchFilters): boolean {
+  if (f.q) {
+    const q = f.q.trim().toLowerCase();
+    if (!w.name.toLowerCase().includes(q) && !(w.vehicle_no?.toLowerCase().includes(q) ?? false)) return false;
+  }
+  if (f.vehicle && w.vehicle_status !== f.vehicle) return false;
+  if (f.health && healthCat(w) !== f.health) return false;
+  if (f.supplier && String(w.supplier_company_id ?? '') !== f.supplier) return false;
+  if (f.bp && String(w.bp_company_id ?? '') !== f.bp) return false;
+  return true;
+}
+
+/** 공급사·BP 필터 옵션 — 워치 목록에서 등장하는 회사만(중복 제거). */
+function uniqueCompanyOptions(list: WatchWorker[], kind: 'supplier' | 'bp'): Array<{ value: string; label: string }> {
+  const seen = new Map<string, string>();
+  for (const w of list) {
+    const id = kind === 'supplier' ? w.supplier_company_id : w.bp_company_id;
+    if (id == null) continue;
+    const name = kind === 'supplier' ? w.supplier_name : w.bp_name;
+    seen.set(String(id), name ?? `#${id}`);
+  }
+  return [...seen].map(([value, label]) => ({ value, label }));
+}
 
 /** 워치 지도 마커 색 — 상태등 팔레트(정상 emerald·주의 amber·경보 rose·미착용/두절 slate). watchDisplay 와 동일 기준. */
 function watchColor(w: WatchWorker): NonNullable<MapMarker['color']> {
@@ -609,17 +693,23 @@ function watchColor(w: WatchWorker): NonNullable<MapMarker['color']> {
   return 'emerald';
 }
 
-/** 워치 마커 바이탈 팝오버 — 이름·상태·심박·체온·배터리·마지막 수신·고위험·혈압. */
+/** 워치 마커 바이탈 팝오버 — 이름·역할·차량번호·소속·상태·심박·체온·배터리·마지막 수신·고위험·혈압. */
 function watchTooltip(w: WatchWorker, stateLabel: string): string {
   const hr = w.hr != null && w.hr > 0 ? `${w.hr} bpm` : '—';
   const temp = w.body_temp != null ? `${w.body_temp}℃` : '—';
   const bat = w.battery != null ? `${w.battery}%` : '—';
   const highRisk = w.health_risk_level === 'HIGH'
     ? '<span style="margin-left:4px;padding:1px 5px;border-radius:4px;background:#ffe4e6;color:#e11d48;font-weight:700;font-size:10px">고위험</span>' : '';
+  const roleTxt = roleLabel(w.role);
+  const affil = [roleTxt, w.supplier_name].filter(Boolean).map((t) => escapeHtml(t as string)).join(' · ');
+  const affilLine = affil ? `<div style="margin-top:2px;color:#64748b">${affil}${w.bp_name ? ` <span style="color:#94a3b8">· 원청 ${escapeHtml(w.bp_name)}</span>` : ''}</div>` : '';
+  const vehicle = w.vehicle_no
+    ? `<div style="margin-top:2px;color:#334155;font-weight:600">🚜 ${escapeHtml(w.vehicle_no)}${w.vehicle_status ? ` <span style="color:#94a3b8;font-weight:400">${escapeHtml(VEHICLE_STATUS_LABEL[w.vehicle_status] ?? w.vehicle_status)}</span>` : ''}</div>` : '';
   const bp = w.bp_verdict
     ? `<div style="margin-top:3px;font-weight:600;color:${w.bp_verdict === 'OK' ? '#059669' : w.bp_verdict === 'BLOCK' ? '#e11d48' : '#d97706'}">${BP_VERDICT_LABEL[w.bp_verdict] ?? w.bp_verdict}</div>` : '';
   return `<div style="padding:8px 10px;font-size:12px;min-width:170px">`
     + `<b>${escapeHtml(w.name)}</b> <span style="color:#64748b">${escapeHtml(stateLabel)}</span>${highRisk}`
+    + `${affilLine}${vehicle}`
     + `<div style="margin-top:3px;color:#475569">심박 ${hr} · 체온 ${temp}</div>`
     + `<div style="margin-top:2px;color:#64748b">배터리 ${bat} · ${minsAgo(w.seconds_since_seen)} 수신</div>`
     + `${bp}</div>`;
@@ -658,11 +748,33 @@ function Sparkline({ series, low, high, width = 132, height = 34 }:
   );
 }
 
-function WatchTab({ board, canManage }: { board: SiteBoard | null; canManage: boolean }) {
-  const workers = board?.watch_workers ?? [];
+function WatchTab({ workers, canManage }: { workers: WatchWorker[]; canManage: boolean }) {
   const [openId, setOpenId] = useState<number | null>(null);
+  // 관리자 그룹 요약 — 공급사별 인원·경보(건강 경보=워치 RED 또는 혈압 BLOCK) 수.
+  const groups = useMemo(() => {
+    const m = new Map<string, { name: string; count: number; alerts: number }>();
+    for (const w of workers) {
+      const key = String(w.supplier_company_id ?? '0');
+      const g = m.get(key) ?? { name: w.supplier_name ?? '소속 미지정', count: 0, alerts: 0 };
+      g.count += 1;
+      if (healthCat(w) === 'danger') g.alerts += 1;
+      m.set(key, g);
+    }
+    return [...m.values()].sort((a, b) => b.alerts - a.alerts || b.count - a.count);
+  }, [workers]);
   return (
     <div className="space-y-3">
+      {canManage && groups.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {groups.map((g) => (
+            <div key={g.name} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+              <span className="text-sm font-medium text-slate-800">{g.name}</span>
+              <span className="ml-2 text-xs text-slate-500">인원 {g.count}</span>
+              {g.alerts > 0 && <span className="ml-1.5 rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-semibold text-rose-700">경보 {g.alerts}</span>}
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-slate-600">워치 보고 작업자 {workers.length}명 · 상태등·최근 심박·배터리·착용</div>
         <div className="flex items-center gap-3 text-xs text-slate-500">
@@ -700,6 +812,13 @@ function WatchTab({ board, canManage }: { board: SiteBoard | null; canManage: bo
                     <div className="text-xs text-slate-400">
                       {minsAgo(w.seconds_since_seen)} 수신{w.hr != null && w.hr > 0 ? ` · 심박 ${w.hr}` : ''}
                     </div>
+                    {(w.role || w.vehicle_no || w.supplier_name) && (
+                      <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-1.5">
+                        {w.role && <span>{roleLabel(w.role)}</span>}
+                        {w.vehicle_no && <span className="font-medium text-slate-700">🚜 {w.vehicle_no}{w.vehicle_status ? ` (${VEHICLE_STATUS_LABEL[w.vehicle_status] ?? w.vehicle_status})` : ''}</span>}
+                        {w.supplier_name && <span className="text-slate-400 truncate">{w.supplier_name}</span>}
+                      </div>
+                    )}
                   </div>
                   <Sparkline series={w.hr_series ?? []} low={w.rest_hr_low} high={w.work_hr_high} />
                   <div className="text-right shrink-0">

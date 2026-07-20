@@ -203,7 +203,7 @@ export default function OpenBidCreatePage() {
                       onChange={(e) => update('emailRecipients', e.target.value)}
                       placeholder="example1@company.com, example2@company.com" />
             <div className="text-[11px] text-slate-500 mt-1">
-              입력한 이메일 주소로 공개입찰 안내 메일 발송. skep 계정 없는 공급사에게 확장 발송용.
+              입력한 이메일 주소로 공개입찰 안내 메일 발송. 원온 계정 없는 공급사에게 확장 발송용.
             </div>
           </Field>
 

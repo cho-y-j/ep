@@ -514,7 +514,7 @@ public class QuotationService {
                 + "위치: " + location + "\n"
                 + (qr.getSpecText() != null ? "스펙: " + qr.getSpecText() + "\n" : "")
                 + (qr.getNotes() != null ? "메모: " + qr.getNotes() + "\n" : "")
-                + "\nskep 공개입찰 게시판에서 응찰 가능합니다: https://skep.on1.kr/quotations/open-bids\n";
+                + "\n원온 공개입찰 게시판에서 응찰 가능합니다: https://one.on1.kr/quotations/open-bids\n";
         for (String to : addrs) {
             to = to.trim();
             if (to.isEmpty() || !to.contains("@")) continue;

@@ -167,8 +167,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         { label: '계약 관리', to: '/contracts', icon: <IconBriefcase /> },
       ]},
       { label: '서류', icon: <IconDoc />, items: [
+        { label: '서류 관리', to: '/document-management', icon: <IconDoc />, badge: supplierCounts.supplements || undefined },
         { label: '서류심사', to: '/document-review-send', icon: <IconDoc /> },
-        { label: '보완요청', to: '/document-management', icon: <IconDoc />, badge: supplierCounts.supplements || undefined },
         { label: '서류수집', to: '/document-collections', icon: <IconDoc />, badge: supplierCounts.collections || undefined },
         { label: '자원점검', to: '/resource-checks/supplier', icon: <IconShield />, badge: supplierCounts.checks || undefined },
         { label: '이행지시', to: '/compliance-orders', icon: <IconShield />, badge: supplierCounts.compliance || undefined },
@@ -252,7 +252,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           <div className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
             <IconHelmet />
           </div>
-          <span className={`text-base font-bold text-slate-900 truncate ${panelOpen && !collapsed ? '' : 'hidden'}`}>현장관리 <span className="text-brand-600">Pro</span></span>
+          <span className={`text-base font-bold text-slate-900 truncate ${panelOpen && !collapsed ? '' : 'hidden'}`}>원온 <span className="text-brand-600">ONEON</span></span>
           <button type="button" onClick={onMobileClose} aria-label="메뉴 닫기"
             className="ml-auto shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 md:hidden">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>

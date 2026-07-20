@@ -9,6 +9,7 @@ type PublicItem = {
   required: boolean;
   uploaded: boolean;
   file_name?: string | null;
+  sample_image_url?: string | null;
 };
 type PublicResponse = {
   title?: string | null;
@@ -26,6 +27,7 @@ export default function CollectPublicPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [sampleUrl, setSampleUrl] = useState<string | null>(null);
   const inputs = useRef<Record<number, HTMLInputElement | null>>({});
 
   async function load() {
@@ -90,11 +92,11 @@ export default function CollectPublicPage() {
           <div className="mt-5 space-y-5">
             {requiredItems.length > 0 && (
               <Section label="필수 서류" items={requiredItems} disabled={info.expired || info.status === 'CANCELLED'}
-                uploadingId={uploadingId} inputs={inputs} onUpload={upload} accent="rose" />
+                uploadingId={uploadingId} inputs={inputs} onUpload={upload} onShowSample={setSampleUrl} accent="rose" />
             )}
             {optionalItems.length > 0 && (
               <Section label="선택 서류" items={optionalItems} disabled={info.expired || info.status === 'CANCELLED'}
-                uploadingId={uploadingId} inputs={inputs} onUpload={upload} accent="amber" />
+                uploadingId={uploadingId} inputs={inputs} onUpload={upload} onShowSample={setSampleUrl} accent="amber" />
             )}
           </div>
 
@@ -105,14 +107,27 @@ export default function CollectPublicPage() {
           <p className="mt-2 text-center text-xs text-slate-400">PDF / 사진(JPG·PNG) 파일을 올릴 수 있습니다.</p>
         </div>
       </div>
+
+      {sampleUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSampleUrl(null)}>
+          <div className="max-h-full w-full max-w-lg overflow-auto rounded-xl bg-white p-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-700">제출 예시</span>
+              <button type="button" onClick={() => setSampleUrl(null)} className="rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="닫기">✕</button>
+            </div>
+            <img src={sampleUrl} alt="제출 예시" className="mx-auto max-h-[70vh] w-auto rounded border border-slate-100" />
+            <p className="mt-2 text-center text-xs text-slate-500">개인정보가 가려진 예시입니다. 이런 형식으로 촬영·스캔해서 올려주세요.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function Section({ label, items, disabled, uploadingId, inputs, onUpload, accent }: {
+function Section({ label, items, disabled, uploadingId, inputs, onUpload, onShowSample, accent }: {
   label: string; items: PublicItem[]; disabled: boolean; uploadingId: number | null;
   inputs: React.MutableRefObject<Record<number, HTMLInputElement | null>>;
-  onUpload: (typeId: number, file: File) => void; accent: 'rose' | 'amber';
+  onUpload: (typeId: number, file: File) => void; onShowSample: (url: string) => void; accent: 'rose' | 'amber';
 }) {
   return (
     <div>
@@ -126,6 +141,12 @@ function Section({ label, items, disabled, uploadingId, inputs, onUpload, accent
                   {accent === 'rose' ? '필수' : '선택'}
                 </span>
                 <span className="truncate text-sm font-medium text-slate-800">{it.name}</span>
+                {it.sample_image_url && (
+                  <button type="button" onClick={() => onShowSample(it.sample_image_url!)}
+                    className="shrink-0 rounded border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 hover:bg-brand-100">
+                    샘플 보기
+                  </button>
+                )}
               </div>
               {it.uploaded && <div className="mt-0.5 truncate text-xs text-emerald-600">✓ 업로드됨{it.file_name ? ` · ${it.file_name}` : ''}</div>}
             </div>

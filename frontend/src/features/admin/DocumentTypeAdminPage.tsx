@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
 import { PageHeader, FilterBar } from '../../components/ui';
@@ -20,6 +20,7 @@ type DocType = {
   applies_to_person_roles: string | null;
   applies_to_categories: string | null;
   ocr_region_template: string | null;
+  sample_image_key: string | null;
 };
 
 const APPLIES_LABEL: Record<DocType['applies_to'], string> = {
@@ -60,6 +61,38 @@ function Chips({ value, options, labels, onChange }: {
   );
 }
 
+/** 서류종류별 마스킹된 예시 이미지 1장 — 업로드/미리보기/교체/삭제. */
+function SampleControl({ typeId, sampleKey, busy, onUpload, onDelete }: {
+  typeId: number; sampleKey: string | null; busy: boolean;
+  onUpload: (file: File) => void; onDelete: () => void;
+}) {
+  const ref = useRef<HTMLInputElement | null>(null);
+  // sampleKey 는 업로드마다 새 UUID → 쿼리에 넣어 교체 시 캐시 무효화.
+  const src = sampleKey ? `/api/document-types/${typeId}/sample?v=${encodeURIComponent(sampleKey)}` : null;
+  return (
+    <div className="ml-auto flex items-center gap-1.5">
+      <input ref={ref} type="file" accept="image/*" className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }} />
+      {src ? (
+        <>
+          <a href={src} target="_blank" rel="noreferrer" title="샘플 이미지 크게 보기">
+            <img src={src} alt="샘플" className="h-8 w-11 rounded border border-slate-200 object-cover" />
+          </a>
+          <button type="button" disabled={busy} onClick={() => ref.current?.click()}
+            className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50">교체</button>
+          <button type="button" disabled={busy} onClick={onDelete}
+            className="text-xs px-2 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-50">삭제</button>
+        </>
+      ) : (
+        <button type="button" disabled={busy} onClick={() => ref.current?.click()}
+          className="text-xs px-2.5 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+          {busy ? '올리는 중…' : '＋ 샘플 등록'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function DocumentTypeAdminPage() {
   const navigate = useNavigate();
   const [types, setTypes] = useState<DocType[]>([]);
@@ -71,6 +104,7 @@ export default function DocumentTypeAdminPage() {
   const [newHasExpiry, setNewHasExpiry] = useState(false);
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState('');
+  const [sampleBusyId, setSampleBusyId] = useState<number | null>(null);
 
   async function load() {
     setLoading(true);
@@ -99,6 +133,31 @@ export default function DocumentTypeAdminPage() {
     if ('applies_to_person_roles' in body) out.applies_to_person_roles = (body.applies_to_person_roles as string) || null;
     if ('applies_to_categories' in body) out.applies_to_categories = (body.applies_to_categories as string) || null;
     return out as Partial<DocType>;
+  }
+
+  /** 마스킹된 예시 이미지 업로드(교체). */
+  async function uploadSample(id: number, file: File) {
+    setSampleBusyId(id);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      await api.post(`/api/document-types/${id}/sample`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success('샘플 이미지를 등록했습니다');
+      await load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? '샘플 등록 실패');
+    } finally { setSampleBusyId(null); }
+  }
+
+  async function deleteSample(id: number) {
+    setSampleBusyId(id);
+    try {
+      await api.delete(`/api/document-types/${id}/sample`);
+      toast.success('샘플 이미지를 삭제했습니다');
+      await load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? '샘플 삭제 실패');
+    } finally { setSampleBusyId(null); }
   }
 
   async function addType() {
@@ -211,8 +270,11 @@ export default function DocumentTypeAdminPage() {
                                  onChange={(csv) => patch(t.id, { applies_to_categories: csv })} />
                         </div>
                       )}
+                      <SampleControl typeId={t.id} sampleKey={t.sample_image_key}
+                        busy={sampleBusyId === t.id}
+                        onUpload={(f) => uploadSample(t.id, f)} onDelete={() => deleteSample(t.id)} />
                       <button type="button" onClick={() => navigate(`/admin/document-types/${t.id}/regions`)}
-                        className="ml-auto text-xs px-2.5 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50">
+                        className="text-xs px-2.5 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50">
                         영역 편집
                       </button>
                       <label className="flex items-center gap-1.5 text-xs text-slate-500">

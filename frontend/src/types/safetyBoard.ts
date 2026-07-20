@@ -86,6 +86,13 @@ export type WatchWorker = {
   baseline_learned: boolean;
   health_risk_level: string;   // P5-W4 2겹: NORMAL|CAUTION|HIGH (HIGH=🔴 뱃지).
   bp_verdict: string | null;   // 오늘 혈압 판정 OK|CAUTION|BLOCK (null=미측정).
+  vehicle_no: string | null;        // 조종 장비 차량번호 (null=장비 미매칭).
+  vehicle_status: string | null;    // 장비 배치상태 ASSIGNED|AVAILABLE|BROKEN.
+  role: string | null;              // 투입 역할 (PersonRole enum 명).
+  supplier_name: string | null;     // 소속 공급사명.
+  supplier_company_id: number | null;
+  bp_name: string | null;           // 원청 BP사명.
+  bp_company_id: number | null;
 };
 
 // P5-W1 타일 클릭 상세 — GET /api/safety-alerts/person/{id}/vitals.

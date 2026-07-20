@@ -321,7 +321,7 @@ export default function BusinessRegUploadDialog({
                 <Field
                   label="상호 (법인명)"
                   value={fields.businessName ?? ''}
-                  placeholder="예: ㈜SKEP중기"
+                  placeholder="예: ㈜원온중기"
                   onChange={(v) => updateField('businessName', v)}
                 />
                 <Field

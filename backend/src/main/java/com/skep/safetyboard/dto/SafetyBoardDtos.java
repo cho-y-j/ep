@@ -29,6 +29,8 @@ public class SafetyBoardDtos {
      * 회색(미착용/두절) 판정은 프론트에서 worn·secondsSinceSeen 로 파생.
      * P5-W1: hrSeries=최근 2h 심박(스파크라인), rest/work 대역=정상범위 밴드, baselineLearned=학습 여부(미학습 뱃지).
      * 지도 통합: bodyTemp(체온)·lat/lng(최근 위치, 워치 지도 마커)·bpVerdict(오늘 혈압 판정 OK|CAUTION|BLOCK, null=미측정).
+     * 안전 지도: vehicleNo(조종 장비 차량번호)·vehicleStatus(장비 배치상태 ASSIGNED|AVAILABLE|BROKEN)·role(투입 역할)·
+     * supplierName/supplierCompanyId(소속 공급사)·bpName/bpCompanyId(원청 BP) — work_plan_persons+장비+work_plan 조인.
      */
     public record WatchWorker(
             Long personId, String name, String state,
@@ -40,7 +42,10 @@ public class SafetyBoardDtos {
             Integer restHrLow, Integer restHrHigh, Integer workHrLow, Integer workHrHigh,
             boolean baselineLearned,
             String healthRiskLevel,      // P5-W4 2겹: NORMAL|CAUTION|HIGH (HIGH=관제 뱃지).
-            String bpVerdict) {}
+            String bpVerdict,
+            String vehicleNo, String vehicleStatus, String role,
+            String supplierName, Long supplierCompanyId,
+            String bpName, Long bpCompanyId) {}
 
     /** 오늘 출근 작업자 마커. checkedIn=체크인 중(미퇴근). */
     public record WorkerMarker(

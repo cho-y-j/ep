@@ -2,8 +2,11 @@ package com.skep.document;
 
 import com.skep.common.ApiException;
 import com.skep.document.dto.CreateDocumentTypeRequest;
+import com.skep.storage.FileStorage;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -12,9 +15,11 @@ import java.util.List;
 public class DocumentTypeService {
 
     private final DocumentTypeRepository repo;
+    private final FileStorage storage;
 
-    public DocumentTypeService(DocumentTypeRepository repo) {
+    public DocumentTypeService(DocumentTypeRepository repo, FileStorage storage) {
         this.repo = repo;
+        this.storage = storage;
     }
 
     @Transactional(readOnly = true)
@@ -57,4 +62,79 @@ public class DocumentTypeService {
         if (active) t.activate(); else t.deactivate();
         return t;
     }
+
+    // ── V116: '샘플 보기' 예시 이미지 (마스킹은 ADMIN 이 수동, 시스템은 저장·표시만) ──
+
+    /** ADMIN: 서류종류에 마스킹된 예시 이미지 1장 업로드(교체). 기존 파일이 있으면 삭제 후 교체. */
+    public DocumentType uploadSample(Long id, MultipartFile file) {
+        DocumentType t = get(id);
+        if (file == null || file.isEmpty()) {
+            throw ApiException.badRequest("EMPTY_FILE", "이미지 파일을 첨부하세요");
+        }
+        String ext = imageExt(file.getContentType());
+        if (ext == null) {
+            throw ApiException.badRequest("UNSUPPORTED_IMAGE_TYPE", "이미지(PNG/JPG/WEBP/GIF)만 등록할 수 있습니다");
+        }
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (java.io.IOException e) {
+            throw ApiException.badRequest("FILE_READ_FAILED", "파일을 읽지 못했습니다");
+        }
+        String oldKey = t.getSampleImageKey();
+        String key = storage.storeBytes(bytes, "." + ext);
+        t.setSampleImageKey(key);
+        repo.save(t);
+        if (oldKey != null && !oldKey.isBlank()) storage.delete(oldKey);
+        return t;
+    }
+
+    /** ADMIN: 샘플 이미지 삭제. */
+    public DocumentType deleteSample(Long id) {
+        DocumentType t = get(id);
+        String key = t.getSampleImageKey();
+        t.setSampleImageKey(null);
+        repo.save(t);
+        if (key != null && !key.isBlank()) storage.delete(key);
+        return t;
+    }
+
+    /** 공개(무로그인): 샘플 이미지 로드 — 마스킹된 예시라 민감정보 아님. 없으면 404. */
+    @Transactional(readOnly = true)
+    public SampleImage loadSample(Long id) {
+        DocumentType t = get(id);
+        String key = t.getSampleImageKey();
+        if (key == null || key.isBlank()) {
+            throw ApiException.notFound("SAMPLE_NOT_FOUND", "등록된 샘플 이미지가 없습니다");
+        }
+        return new SampleImage(storage.load(key), contentTypeForKey(key));
+    }
+
+    /** 서류종류 응답에 넣을 샘플 이미지 URL. 미등록이면 null. */
+    public static String sampleImageUrl(DocumentType t) {
+        return t.getSampleImageKey() != null && !t.getSampleImageKey().isBlank()
+                ? "/api/document-types/" + t.getId() + "/sample" : null;
+    }
+
+    /** 허용 이미지 content-type → 저장 확장자. 허용 외 형식은 null. */
+    private static String imageExt(String ct) {
+        return switch (ct == null ? "" : ct.toLowerCase()) {
+            case "image/png" -> "png";
+            case "image/jpeg", "image/jpg" -> "jpg";
+            case "image/webp" -> "webp";
+            case "image/gif" -> "gif";
+            default -> null;
+        };
+    }
+
+    /** 저장 키 확장자 → 응답 content-type. */
+    private static String contentTypeForKey(String key) {
+        String k = key.toLowerCase();
+        if (k.endsWith(".png")) return "image/png";
+        if (k.endsWith(".webp")) return "image/webp";
+        if (k.endsWith(".gif")) return "image/gif";
+        return "image/jpeg";
+    }
+
+    public record SampleImage(Resource resource, String contentType) {}
 }

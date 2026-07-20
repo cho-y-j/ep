@@ -408,7 +408,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, Props>(function KakaoMap(
           <div className="text-sm font-semibold text-amber-800">지도를 불러올 수 없습니다</div>
           <div className="text-xs text-amber-700 max-w-md">{loadError}</div>
           <div className="text-xs text-slate-500 mt-2">
-            카카오 디벨로퍼 콘솔에서 <code>skep.on1.kr</code> 도메인이 등록되어 있는지 확인하세요.
+            카카오 디벨로퍼 콘솔에서 <code>one.on1.kr</code> 도메인이 등록되어 있는지 확인하세요.
             지도 없이도 주소 입력 + 저장은 정상 동작합니다.
           </div>
         </div>

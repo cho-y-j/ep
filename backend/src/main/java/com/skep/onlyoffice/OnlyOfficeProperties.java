@@ -48,7 +48,7 @@ public class OnlyOfficeProperties {
         }
         if (publicBackendUrl == null || publicBackendUrl.isBlank()) {
             throw new IllegalStateException(
-                "PUBLIC_BACKEND_URL 미설정 — OnlyOffice 가 콜백/파일 fetch 못함. 예: https://skep.on1.kr");
+                "PUBLIC_BACKEND_URL 미설정 — OnlyOffice 가 콜백/파일 fetch 못함. 예: https://one.on1.kr");
         }
         if (!publicBackendUrl.startsWith("https://")) {
             throw new IllegalStateException(

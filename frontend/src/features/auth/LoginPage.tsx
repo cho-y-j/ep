@@ -54,7 +54,7 @@ export default function LoginPage() {
     <main className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <form onSubmit={onSubmit} className="card w-full max-w-md space-y-4">
         <div>
-          <h1 className="text-2xl font-bold">SKEP 로그인</h1>
+          <h1 className="text-2xl font-bold">원온 로그인</h1>
           <p className="text-sm text-slate-500 mt-1">이메일과 비밀번호를 입력하세요.</p>
         </div>
 

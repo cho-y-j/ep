@@ -110,7 +110,7 @@ export function PdfMailDialog({ open, buildBlob, onClose }: PdfMailDialogProps) 
             type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            placeholder="[SKEP] 작업계획서"
+            placeholder="[원온] 작업계획서"
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             disabled={sending}
           />

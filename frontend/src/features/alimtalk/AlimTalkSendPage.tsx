@@ -45,11 +45,11 @@ export default function AlimTalkSendPage() {
   const tpl = useMemo(() => templates.find((t) => t.name === selected), [templates, selected]);
   const varNames = useMemo(() => (tpl ? extractVars(tpl.content) : []), [tpl]);
 
-  // 템플릿 바뀌면 변수 초기화 (브랜드명=SKEP 기본, 나머지 빈값)
+  // 템플릿 바뀌면 변수 초기화 (브랜드명=원온 기본, 나머지 빈값)
   useEffect(() => {
     if (!tpl) return;
     const next: Record<string, string> = {};
-    extractVars(tpl.content).forEach((v) => { next[v] = v === '브랜드명' ? 'SKEP' : ''; });
+    extractVars(tpl.content).forEach((v) => { next[v] = v === '브랜드명' ? '원온' : ''; });
     setVars(next);
     setResults([]);
   }, [tpl]);

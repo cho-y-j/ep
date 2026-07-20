@@ -7,6 +7,8 @@ import com.skep.announcement.AnnouncementRepository;
 import com.skep.attendance.AttendanceSession;
 import com.skep.attendance.AttendanceSessionRepository;
 import com.skep.common.ApiException;
+import com.skep.company.Company;
+import com.skep.company.CompanyRepository;
 import com.skep.equipment.DailyEquipmentInspection;
 import com.skep.equipment.DailyEquipmentInspectionRepository;
 import com.skep.equipment.Equipment;
@@ -86,6 +88,7 @@ public class SafetyBoardService {
     private final BpCheckinRepository bpCheckins;
     private final KmaWeatherClient weatherClient;
     private final PersonRepository persons;
+    private final CompanyRepository companies;
     private final AnnouncementRepository announcements;
     private final AnnouncementRecipientRepository announcementRecipients;
 
@@ -106,11 +109,12 @@ public class SafetyBoardService {
         LocalDateTime todayStart = today.atStartOfDay();
 
         // 현장 작업계획서 → 배치 인원 + 오늘 출근 세션(위치 마커).
-        List<Long> wpIds = workPlans.findBySiteIdAndStatusInOrderByIdDesc(siteId, ACTIVE_WP)
-                .stream().map(WorkPlan::getId).toList();
-        List<Long> deployedPersonIds = wpIds.isEmpty() ? List.of()
-                : wpPersons.findByWorkPlanIdIn(wpIds).stream()
-                    .map(WorkPlanPerson::getPersonId).distinct().toList();
+        List<WorkPlan> activePlans = workPlans.findBySiteIdAndStatusInOrderByIdDesc(siteId, ACTIVE_WP);
+        List<Long> wpIds = activePlans.stream().map(WorkPlan::getId).toList();
+        List<WorkPlanPerson> deployedPersons = wpIds.isEmpty() ? List.of()
+                : wpPersons.findByWorkPlanIdIn(wpIds);
+        List<Long> deployedPersonIds = deployedPersons.stream()
+                .map(WorkPlanPerson::getPersonId).distinct().toList();
         List<AttendanceSession> todaySessions = wpIds.isEmpty() ? List.of()
                 : attendance.findByWorkPlanIdInAndCheckInAtGreaterThanEqual(wpIds, todayStart).stream()
                     .filter(s -> s.getCheckInAt().toLocalDate().equals(today)).toList();
@@ -208,6 +212,30 @@ public class SafetyBoardService {
                 siteId, todayStart, todayStart.plusDays(1))) {
             bpVerdictByPerson.putIfAbsent(bp.getPersonId(), bp.getVerdict().name());   // 최신순 조회 → 첫 값=최신.
         }
+
+        // 안전 지도 — 투입 인원별 조종 장비 차량번호·역할·소속(공급사)·원청(BP).
+        // work_plan_persons(역할·공급사·장비) + 장비(차량/가동상태) + work_plan(BP) 조인, 장비 매칭 행 우선.
+        Map<Long, Long> bpByWp = activePlans.stream()
+                .filter(wp -> wp.getBpCompanyId() != null)
+                .collect(Collectors.toMap(WorkPlan::getId, WorkPlan::getBpCompanyId, (a, b) -> a));
+        Map<Long, WorkPlanPerson> deployByPerson = new java.util.HashMap<>();
+        for (WorkPlanPerson dp : deployedPersons) {
+            deployByPerson.merge(dp.getPersonId(), dp,
+                    (cur, neu) -> cur.getEquipmentId() != null ? cur : neu);
+        }
+        List<Long> deployEqIds = deployedPersons.stream()
+                .map(WorkPlanPerson::getEquipmentId).filter(java.util.Objects::nonNull).distinct().toList();
+        Map<Long, Equipment> deployEqById = deployEqIds.isEmpty() ? Map.of()
+                : equipments.findAllById(deployEqIds).stream()
+                    .collect(Collectors.toMap(Equipment::getId, Function.identity()));
+        java.util.Set<Long> deployCompanyIds = new java.util.HashSet<>();
+        deployedPersons.forEach(dp -> deployCompanyIds.add(dp.getSupplierCompanyId()));
+        deployCompanyIds.addAll(bpByWp.values());
+        deployCompanyIds.remove(null);
+        Map<Long, String> companyNameById = deployCompanyIds.isEmpty() ? Map.of()
+                : companies.findAllById(deployCompanyIds).stream()
+                    .collect(Collectors.toMap(Company::getId, Company::getName));
+
         List<WatchWorker> watchWorkers = watch.stream()
                 .sorted(Comparator.comparing(WorkerWatchState::getLastSeenAt,
                         Comparator.nullsFirst(Comparator.naturalOrder())))
@@ -215,6 +243,10 @@ public class SafetyBoardService {
                     PersonVitalBaseline pv = bands.get(w.getPersonId());
                     List<Integer> series = seriesByPerson.getOrDefault(w.getPersonId(), List.of());
                     if (series.size() > 90) series = series.subList(series.size() - 90, series.size());  // 경량 cap.
+                    WorkPlanPerson dp = deployByPerson.get(w.getPersonId());
+                    Equipment eq = dp != null && dp.getEquipmentId() != null ? deployEqById.get(dp.getEquipmentId()) : null;
+                    Long supplierId = dp != null ? dp.getSupplierCompanyId() : null;
+                    Long bpId = dp != null ? bpByWp.get(dp.getWorkPlanId()) : null;
                     return new WatchWorker(
                             w.getPersonId(), personName(watchPersons, w.getPersonId()), w.getState(),
                             w.getLastSeenAt(),
@@ -226,7 +258,12 @@ public class SafetyBoardService {
                             pv != null ? pv.getWorkHrLow() : null, pv != null ? pv.getWorkHrHigh() : null,
                             pv != null && pv.isLearned(),
                             healthRisk(watchPersons, w.getPersonId()),
-                            bpVerdictByPerson.get(w.getPersonId()));
+                            bpVerdictByPerson.get(w.getPersonId()),
+                            eq != null ? eq.getVehicleNo() : null,
+                            eq != null ? eq.getAssignmentStatus().name() : null,
+                            dp != null ? dp.getRole() : null,
+                            supplierId != null ? companyNameById.get(supplierId) : null, supplierId,
+                            bpId != null ? companyNameById.get(bpId) : null, bpId);
                 })
                 .toList();
 

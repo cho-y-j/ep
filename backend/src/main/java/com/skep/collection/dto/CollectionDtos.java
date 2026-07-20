@@ -57,7 +57,8 @@ public final class CollectionDtos {
             String name,
             boolean required,
             boolean uploaded,
-            String fileName
+            String fileName,
+            String sampleImageUrl   // V116: 마스킹된 예시 이미지 URL, null = 미등록
     ) {}
 
     /** 공개(무로그인) 페이지용 — 최소 정보만. */

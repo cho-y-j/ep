@@ -201,7 +201,8 @@ public class DocumentCollectionService {
                 fn = d != null ? d.getFileName() : null;
             }
             return new CollectionDtos.PublicItem(it.getDocumentTypeId(),
-                    t != null ? t.getName() : "(삭제됨)", it.isRequired(), it.getUploadedDocumentId() != null, fn);
+                    t != null ? t.getName() : "(삭제됨)", it.isRequired(), it.getUploadedDocumentId() != null, fn,
+                    t != null ? com.skep.document.DocumentTypeService.sampleImageUrl(t) : null);
         }).collect(Collectors.toList());
         return new CollectionDtos.PublicResponse(r.getTitle(), r.getOwnerType(),
                 ownerLabel(r.getOwnerType(), r.getOwnerId()), r.getRecipientName(), r.getStatus(), r.isExpired(), pis);

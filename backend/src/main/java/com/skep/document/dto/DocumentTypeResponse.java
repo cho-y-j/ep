@@ -1,6 +1,7 @@
 package com.skep.document.dto;
 
 import com.skep.document.DocumentType;
+import com.skep.document.DocumentTypeService;
 import com.skep.document.OwnerType;
 
 public record DocumentTypeResponse(
@@ -23,7 +24,8 @@ public record DocumentTypeResponse(
         // 역할/카테고리 매칭 — 서류 등록 시 필수/선택/기타 그룹핑에 사용 (읽기 전용)
         String appliesToPersonRoles,    // PersonRole CSV, null = 모든 역할
         String appliesToCategories,     // EquipmentCategory CSV, null = 모든 카테고리
-        String ocrRegionTemplate        // 영역-크롭 OCR 템플릿 JSON, null = 미사용 (FE 분기 기준)
+        String ocrRegionTemplate,       // 영역-크롭 OCR 템플릿 JSON, null = 미사용 (FE 분기 기준)
+        String sampleImageUrl           // V116: '샘플 보기' 예시 이미지 URL, null = 미등록
 ) {
     public static DocumentTypeResponse from(DocumentType t) {
         return new DocumentTypeResponse(
@@ -34,7 +36,8 @@ public record DocumentTypeResponse(
                 t.isOcrEnabled(), t.getOcrExtractType(), t.getOcrExpiryFieldKey(),
                 t.getVerifyEndpoint(), t.getRequiredFields(),
                 t.getAppliesToPersonRoles(), t.getAppliesToCategories(),
-                t.getOcrRegionTemplate()
+                t.getOcrRegionTemplate(),
+                DocumentTypeService.sampleImageUrl(t)
         );
     }
 }
