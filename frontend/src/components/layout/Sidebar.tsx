@@ -95,6 +95,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         { label: 'BP사 관리', to: '/admin/bp', icon: <IconBriefcase /> },
         { label: '공급사 관리', to: '/admin/suppliers', icon: <IconTruck /> },
         { label: '원청기관', to: '/admin/client-orgs', icon: <IconBuilding /> },
+        { label: '가입 승인', to: '/admin/signup-approvals', icon: <IconUserCheck /> },
+        { label: '상담 요청', to: '/admin/consultations', icon: <IconClipboard /> },
         { label: '사용자 관리', to: '/admin/users', icon: <IconUserCheck /> },
         { label: '서류종류 관리', to: '/admin/document-types', icon: <IconDoc /> },
         { label: '장비종류 서류', to: '/admin/equipment-type-docs', icon: <IconTruck /> },

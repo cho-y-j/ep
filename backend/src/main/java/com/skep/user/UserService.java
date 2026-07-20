@@ -1,8 +1,11 @@
 package com.skep.user;
 
 import com.skep.common.ApiException;
+import com.skep.company.Company;
+import com.skep.company.CompanyRepository;
 import com.skep.security.RefreshTokenRepository;
 import com.skep.user.dto.CreateUserRequest;
+import com.skep.user.dto.PendingUserResponse;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,16 +20,34 @@ public class UserService {
     private final UserRepository users;
     private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder encoder;
+    private final CompanyRepository companies;
+    private final SignupApprovalMailService approvalMail;
 
-    public UserService(UserRepository users, RefreshTokenRepository refreshTokens, PasswordEncoder encoder) {
+    public UserService(UserRepository users, RefreshTokenRepository refreshTokens, PasswordEncoder encoder,
+                       CompanyRepository companies, SignupApprovalMailService approvalMail) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.encoder = encoder;
+        this.companies = companies;
+        this.approvalMail = approvalMail;
     }
 
     @Transactional(readOnly = true)
     public List<User> listAll() {
         return users.findAll();
+    }
+
+    /** ADMIN 승인 대기 목록 — enabled=false, 회사명 포함(최신순). */
+    @Transactional(readOnly = true)
+    public List<PendingUserResponse> listPending() {
+        return users.findByEnabledOrderByCreatedAtDesc(false).stream()
+                .map(u -> PendingUserResponse.from(u, companyName(u.getCompanyId())))
+                .toList();
+    }
+
+    private String companyName(Long companyId) {
+        if (companyId == null) return null;
+        return companies.findById(companyId).map(Company::getName).orElse(null);
     }
 
     @Transactional(readOnly = true)
@@ -65,12 +86,17 @@ public class UserService {
      */
     public User enable(Long id) {
         User u = get(id);
+        boolean wasEnabled = u.isEnabled();
         u.enable();
         if (u.getCompanyId() != null && !u.isCompanyAdmin()) {
             long currentMasters = users.countByCompanyIdAndIsCompanyAdminTrue(u.getCompanyId());
             if (currentMasters == 0) {
                 u.setIsCompanyAdmin(true);
             }
+        }
+        // 방금 승인된(비활성→활성) 경우에만 안내 메일. @Async fire-and-forget — 실패해도 승인 트랜잭션 무해.
+        if (!wasEnabled) {
+            approvalMail.sendApprovalMail(u.getEmail(), u.getName());
         }
         return u;
     }

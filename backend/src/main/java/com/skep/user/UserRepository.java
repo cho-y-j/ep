@@ -9,6 +9,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     boolean existsByEmail(String email);
     long countByEnabled(boolean enabled);
+    List<User> findByEnabledOrderByCreatedAtDesc(boolean enabled);
     List<User> findByCompanyIdOrderByIdAsc(Long companyId);
 
     long countByCompanyIdAndIsCompanyAdminTrue(Long companyId);

@@ -101,6 +101,16 @@ public class AuthService {
                     company.getName() + " — " + saved.getName() + " 님이 가입을 신청했습니다. 승인이 필요합니다.",
                     "SUB_SUPPLIER", company.getId(), null);
         }
+        // 독립(부모 없음 또는 회사 없음) 가입은 위 분기에서 빠진다 → ADMIN 승인 게이트 대상.
+        // ADMIN 시스템 알림 1건. 하위공급사 분기와 상호배타라 중복 발송 없음.
+        if (company == null || company.getParentCompanyId() == null) {
+            String companyLabel = company != null ? company.getName()
+                    : (isBlank(req.companyName()) ? "-" : req.companyName().trim());
+            notifications.sendSystem(NotificationType.USER_SIGNUP,
+                    "새 가입 신청",
+                    companyLabel + " " + saved.getName() + " " + saved.getRole().name(),
+                    "USER", saved.getId(), null);
+        }
         return saved;
     }
 

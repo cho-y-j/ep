@@ -62,4 +62,10 @@ public final class NotificationType {
     public static final String BP_CHECKIN_BLOCK = "BP_CHECKIN_BLOCK";
     /** P5-W4: 과로 경고(연속 야간 3일+ 또는 최근 7일 60h+) → BP·공급사 관리자. */
     public static final String OVERWORK_WARNING = "OVERWORK_WARNING";
+
+    /** V117: 공개 랜딩 상담 요청 접수 → ADMIN. */
+    public static final String CONSULTATION_REQUESTED = "CONSULTATION_REQUESTED";
+
+    /** V117: 독립(부모 없는) 자가가입 → ADMIN 승인 대기. (하위공급사는 SUB_SUPPLIER_SIGNUP 로 부모사에.) */
+    public static final String USER_SIGNUP = "USER_SIGNUP";
 }

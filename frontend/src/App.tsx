@@ -92,6 +92,9 @@ import MonthlyWorkConfirmationPage from './features/workConfirmation/MonthlyWork
 import FieldDeploymentBpInbox from './features/fieldDeployment/BpInboxPage';
 import BpActiveSitesPage from './features/fieldDeployment/BpActiveSitesPage';
 import SiteBoardPage from './features/fieldDeployment/SiteBoardPage';
+import LandingPage from './features/landing/LandingPage';
+import SignupApprovalsPage from './features/admin/SignupApprovalsPage';
+import ConsultationsPage from './features/admin/ConsultationsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './features/auth/AuthContext';
 
@@ -110,8 +113,8 @@ export default function App() {
         {/* P4e 작업자 "내 작업 달력" 모바일웹 — 출근코드 로그인(X-Field-Token), JWT 불필요 공개 라우트 */}
         <Route path="/worker" element={<WorkerCalendarPage />} />
 
-        {/* 루트 / 공통 dashboard 진입 — 역할별 dashboard 로 redirect */}
-        <Route path="/" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
+        {/* 루트 / — 공개 랜딩(비로그인). 로그인 사용자는 LandingPage 내부에서 역할별 dashboard 로 redirect */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
 
         {/* 역할별 dashboard */}
@@ -189,6 +192,22 @@ export default function App() {
         />
 
         {/* 어드민 전용 */}
+        <Route
+          path="/admin/signup-approvals"
+          element={
+            <ProtectedRoute roles={['ADMIN']}>
+              <SignupApprovalsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/consultations"
+          element={
+            <ProtectedRoute roles={['ADMIN']}>
+              <ConsultationsPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/admin/users"
           element={

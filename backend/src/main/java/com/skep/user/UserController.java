@@ -4,6 +4,7 @@ import com.skep.auth.dto.UserResponse;
 import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
 import com.skep.user.dto.CreateUserRequest;
+import com.skep.user.dto.PendingUserResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,6 +26,11 @@ public class UserController {
     @GetMapping
     public List<UserResponse> list() {
         return service.listAll().stream().map(UserResponse::from).toList();
+    }
+
+    @GetMapping("/pending")
+    public List<PendingUserResponse> pending() {
+        return service.listPending();
     }
 
     @PostMapping
