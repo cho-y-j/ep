@@ -118,7 +118,7 @@ export default function OpenBidCreatePage() {
     <AppShell breadcrumb={[{ label: '견적 관리', to: '/quotations' }, { label: '공개입찰 발송' }]}>
       <div className="max-w-3xl mx-auto px-6 py-8 space-y-5">
         <div>
-          <h1 className="text-2xl font-bold">공개입찰 견적 발송</h1>
+          <h1 className="text-lg font-bold">공개입찰 견적 발송</h1>
           <p className="text-sm text-slate-500 mt-1">
             spec 만 적어 게시하면 플랫폼 전체 장비공급사가 자기 장비 + 단가로 제안할 수 있습니다.
             받은 제안들 중 BP 가 선정합니다.

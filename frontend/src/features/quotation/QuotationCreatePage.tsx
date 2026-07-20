@@ -294,7 +294,7 @@ export default function QuotationCreatePage() {
   return (
     <AppShell breadcrumb={[{ label: '견적 요청' }, { label: '새 요청' }]}>
       <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="text-2xl font-bold">새 견적 요청</h1>
+        <h1 className="text-lg font-bold">새 견적 요청</h1>
 
         {/* Step 1 — 공통 (Site-C: 현장은 작업계획서 단계에서 결정) */}
         <section className="card space-y-3">

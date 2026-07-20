@@ -213,7 +213,7 @@ export default function SiteDetailPage() {
               <span>현장 상세</span>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-950">{site.name}</h1>
+              <h1 className="text-lg font-bold text-slate-950">{site.name}</h1>
               <StatusBadge status={site.status} />
             </div>
             <p className="mt-1 text-sm text-slate-500">{site.bp_company_name ?? 'BP사'}가 구성한 현장 참여 업체를 관리합니다.</p>

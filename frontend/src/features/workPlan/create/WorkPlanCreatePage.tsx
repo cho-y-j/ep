@@ -663,7 +663,7 @@ export default function WorkPlanCreatePage() {
           <div className="flex items-center gap-3 min-w-0">
             <div>
               <div className="text-xs text-blue-600">작업 관리 › 작업계획서 › 신규 작성</div>
-              <h1 className="mt-0.5 text-[19px] font-bold text-slate-950">작업계획서 신규 작성</h1>
+              <h1 className="mt-0.5 text-lg font-bold text-slate-950">작업계획서 신규 작성</h1>
             </div>
             <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">DRAFT</span>
             {editor.syncMsg && (

@@ -244,7 +244,7 @@ export default function WorkPlanDetailPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-slate-950">{wp.title}</h1>
+                <h1 className="text-lg font-bold text-slate-950">{wp.title}</h1>
                 <WorkPlanStatusBadge status={wp.status} />
               </div>
               <p className="text-sm text-slate-500">

@@ -175,7 +175,7 @@ export default function QuotationDetailPage() {
       <div className="mx-auto max-w-5xl space-y-6">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-lg font-bold">
               견적 #{data.id}
               <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded ${
                 data.request_type === 'MANPOWER' ? 'bg-amber-100 text-amber-700' : 'bg-brand-100 text-brand-700'

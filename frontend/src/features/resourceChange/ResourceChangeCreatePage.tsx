@@ -92,7 +92,7 @@ export default function ResourceChangeCreatePage() {
     <AppShell breadcrumb={[{ label: '업체변경 신청서', to: '/resource-change-requests' }, { label: '신규 작성' }]}>
       <div className="mx-auto max-w-2xl space-y-4">
         <div className="card space-y-4">
-          <h1 className="text-xl font-bold text-slate-950">업체변경 신청서 작성</h1>
+          <h1 className="text-lg font-bold text-slate-950">업체변경 신청서 작성</h1>
           <p className="text-xs text-slate-500">
             같은 현장의 기검증 자원으로 교체할 때 사용합니다. 저장하면 신규 자원의 투입 사전판정(L3)이 자동으로 함께 기록됩니다.
           </p>

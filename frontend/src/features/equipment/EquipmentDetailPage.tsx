@@ -184,7 +184,7 @@ export default function EquipmentDetailPage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-3 mb-1">
                 <div className="min-w-0">
-                  <h1 className="text-2xl font-bold text-slate-900 break-keep flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg font-bold text-slate-900 break-keep flex items-center gap-2 flex-wrap">
                     {equipmentCategoryLabel(equipment.category)} {title}
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${statusCls}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />

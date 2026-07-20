@@ -126,10 +126,10 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         { label: '투입 장비', to: '/dispatched-equipment', icon: <IconTruck />, section: '투입' },
         { label: '투입 인원', to: '/dispatched-persons', icon: <IconUsers />, section: '투입' },
         { label: '받은 투입 요청', to: '/field-deployments/bp', icon: <IconClipboard />, section: '투입' },
+        { label: '보낸 점검 요청', to: '/resource-checks/bp', icon: <IconShield />, section: '자원' },
         { label: '장비', to: '/equipment', icon: <IconTruck />, section: '자원' },
         { label: '인원', to: '/persons', icon: <IconUsers />, section: '자원' },
         { label: '업체변경 신청서', to: '/resource-change-requests', icon: <IconClipboard />, section: '자원' },
-        { label: '보낸 점검 요청', to: '/resource-checks/bp', icon: <IconShield />, section: '자원' },
       ]},
       { label: '정산', icon: <IconMoney />, items: [
         { label: '작업확인 원장', to: '/daily-work-logs/bp', icon: <IconClipboard /> },
@@ -167,18 +167,18 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         { label: '계약 관리', to: '/contracts', icon: <IconBriefcase /> },
       ]},
       { label: '서류', icon: <IconDoc />, items: [
+        { label: '서류심사', to: '/document-review-send', icon: <IconDoc /> },
         { label: '보완요청', to: '/document-management', icon: <IconDoc />, badge: supplierCounts.supplements || undefined },
+        { label: '서류수집', to: '/document-collections', icon: <IconDoc />, badge: supplierCounts.collections || undefined },
         { label: '자원점검', to: '/resource-checks/supplier', icon: <IconShield />, badge: supplierCounts.checks || undefined },
         { label: '이행지시', to: '/compliance-orders', icon: <IconShield />, badge: supplierCounts.compliance || undefined },
-        { label: '서류수집', to: '/document-collections', icon: <IconDoc />, badge: supplierCounts.collections || undefined },
-        { label: '서류심사', to: '/document-review-send', icon: <IconDoc /> },
       ]},
       { label: '현장 운영', icon: <IconBuilding />, items: [
         ...resourceItems,
         { label: '기투입 등록', to: '/resource-onboardings', icon: <IconClipboard />, section: '자원' },
         { label: '업체변경 신청서', to: '/resource-change-requests', icon: <IconClipboard />, section: '자원' },
-        { label: '자원 파이프라인', to: '/resource-pipeline', icon: <IconClipboard />, section: '투입' },
         { label: '투입 요청', to: '/field-deployments/supplier', icon: <IconClipboard />, section: '투입' },
+        { label: '자원 파이프라인', to: '/resource-pipeline', icon: <IconClipboard />, section: '투입' },
         { label: '작업 일정', to: '/work-plans', icon: <IconClipboard />, section: '투입' },
         { label: '현장 관리', to: '/sites', icon: <IconBuilding />, section: '투입' },
         { label: '일일 확인서', to: '/daily-work-logs', icon: <IconClipboard />, section: '기록' },
@@ -267,7 +267,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
                 const badge = g.to ? (g.badge ?? 0) : g.items!.reduce((s, it) => s + (it.badge ?? 0), 0);
                 const isRouteHere = g.to ? matchActive(g.to) : routeGroupLabel === g.label;
                 const isOpen = !g.to && selectedGroup?.label === g.label;
-                const cls = `relative flex flex-col items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-[10.5px] font-medium leading-[1.15] transition-colors ${
+                const cls = `relative flex w-full flex-col items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-[10.5px] font-medium leading-[1.15] transition-colors ${
                   isRouteHere
                     ? 'bg-brand-50 text-brand-700'
                     : isOpen
@@ -276,16 +276,19 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
                 }`;
                 const inner = (
                   <>
-                    <span className="shrink-0 w-6 h-6 flex items-center justify-center">{g.icon}</span>
+                    {/* 아이콘이 위치 기준(relative) — 배지를 아이콘 우상단에 종속시켜 항목 폭과 무관하게 정렬 일관 */}
+                    <span className="relative shrink-0 w-6 h-6 flex items-center justify-center">
+                      {g.icon}
+                      {badge > 0 && (
+                        <span className={`absolute -top-1.5 -right-2 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full bg-brand-600 text-white text-[9px] font-bold leading-none ${collapsed ? 'md:hidden' : ''}`}>
+                          {badge > 99 ? '99+' : badge}
+                        </span>
+                      )}
+                      {badge > 0 && (
+                        <span className={`absolute -top-1 -right-1 h-2 w-2 rounded-full bg-brand-600 ${collapsed ? 'hidden md:block' : 'hidden'}`} aria-hidden="true" />
+                      )}
+                    </span>
                     <span className={`w-full text-center break-keep ${collapsed ? 'md:hidden' : ''}`}>{g.label}</span>
-                    {badge > 0 && (
-                      <span className={`absolute top-1 right-1 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full bg-brand-600 text-white text-[9px] font-bold ${collapsed ? 'md:hidden' : ''}`}>
-                        {badge}
-                      </span>
-                    )}
-                    {badge > 0 && (
-                      <span className={`absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600 ${collapsed ? 'hidden md:block' : 'hidden'}`} aria-hidden="true" />
-                    )}
                   </>
                 );
                 return g.to ? (

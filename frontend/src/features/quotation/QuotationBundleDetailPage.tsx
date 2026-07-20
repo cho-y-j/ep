@@ -115,7 +115,7 @@ export default function QuotationBundleDetailPage() {
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-lg font-bold">
               {data.site_name ?? `현장 #${data.site_id}`}
               <StatusChip status={data.aggregate_status} className="ml-2 align-middle" />
             </h1>

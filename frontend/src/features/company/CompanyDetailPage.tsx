@@ -151,7 +151,7 @@ export default function CompanyDetailPage() {
       <div className="max-w-5xl mx-auto px-6 py-6">
         <div className="flex items-start justify-between mb-1">
           <div>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-lg font-bold">
               {company.name}
               {tab !== 'info' && (
                 <span className="text-slate-400 font-normal"> · {

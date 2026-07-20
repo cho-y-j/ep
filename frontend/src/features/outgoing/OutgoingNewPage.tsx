@@ -186,7 +186,7 @@ export default function OutgoingNewPage() {
     <AppShell breadcrumb={[{ label: '내 견적', to: '/outgoing-quotations' }, { label: '새 견적 발송' }]}>
       <div className="max-w-2xl mx-auto px-6 py-8 space-y-5">
         <div>
-          <h1 className="text-2xl font-bold">공급사 영업 견적 발송</h1>
+          <h1 className="text-lg font-bold">공급사 영업 견적 발송</h1>
           <p className="text-sm text-slate-500 mt-1">내 보유 자원 + 단가로 BP 회사에 견적서 (PDF) 발송.</p>
         </div>
 

@@ -290,9 +290,9 @@ export default function PersonDetailPage() {
                 {editMode ? (
                   <input value={draft.name} disabled={saving}
                     onChange={(e) => setField('name', e.target.value)}
-                    className="text-3xl font-bold text-slate-900 border border-slate-300 rounded bg-white outline-none focus:border-brand-500 px-2 py-0.5" />
+                    className="text-lg font-bold text-slate-900 border border-slate-300 rounded bg-white outline-none focus:border-brand-500 px-2 py-0.5" />
                 ) : (
-                  <h1 className="text-3xl font-bold text-slate-900 break-keep">{person.name}</h1>
+                  <h1 className="text-lg font-bold text-slate-900 break-keep">{person.name}</h1>
                 )}
                 <span className="inline-flex px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">
                   {EMPLOYMENT_TYPE_LABEL[person.employment_type]}

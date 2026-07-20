@@ -182,7 +182,7 @@ export default function SiteBoardPage() {
             <Link to="/work-plans/active" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900">
               <Icon name="arrow_back" size={14} /> 현장 목록
             </Link>
-            <h1 className="text-3xl font-bold text-slate-950 mt-1">{siteName}</h1>
+            <h1 className="text-lg font-bold text-slate-950 mt-1">{siteName}</h1>
             <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
               {earliestStart && (
                 <span className="inline-flex items-center gap-1.5">
