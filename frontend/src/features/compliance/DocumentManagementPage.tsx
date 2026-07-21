@@ -11,6 +11,7 @@ import type { OwnerType } from '../../types/document';
 import QuickAddResourceDialog from './QuickAddResourceDialog';
 import DocFilePreviewDialog from './DocFilePreviewDialog';
 import OcrUploadDialog from '../document/OcrUploadDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import type { DocumentTypeResponse } from '../../types/document';
 import { formatOwnerSubLabel } from '../../lib/format';
 import { useSubSuppliers } from '../company/useSubSuppliers';
@@ -228,6 +229,8 @@ function MyDocsExpiryView() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [previewDoc, setPreviewDoc] = useState<DocRow | null>(null);
   const [reuploadDoc, setReuploadDoc] = useState<DocRow | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DocRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [allTypes, setAllTypes] = useState<DocumentTypeResponse[]>([]);
   const [verifyableMap, setVerifyableMap] = useState<Map<number, boolean>>(new Map());
   const [reloadKey, setReloadKey] = useState(0);
@@ -273,6 +276,20 @@ function MyDocsExpiryView() {
       setReloadKey((k) => k + 1);
     } finally {
       setGlobalReverifyBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleteBusy(true);
+    try {
+      await api.delete(`/api/documents/${pendingDelete.id}`);
+      setPendingDelete(null);
+      setReloadKey((k) => k + 1);
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? '삭제 실패');
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -599,6 +616,7 @@ function MyDocsExpiryView() {
                 daysFrom={daysFrom}
                 verifyableMap={verifyableMap}
                 onRowClick={(r) => setPreviewDoc(r)}
+                onDelete={(r) => setPendingDelete(r)}
                 onReverified={() => setReloadKey((k) => k + 1)}
               />
             ))}
@@ -629,15 +647,27 @@ function MyDocsExpiryView() {
           onUploaded={() => { setReuploadDoc(null); setReloadKey((k) => k + 1); }}
         />
       )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="서류 삭제"
+        message={pendingDelete ? `${pendingDelete.document_type_name ?? '서류'} (${pendingDelete.file_name ?? ''}) 를 삭제합니다.\n파일도 함께 삭제됩니다.` : ''}
+        confirmLabel="삭제"
+        variant="danger"
+        busy={deleteBusy}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
 
-function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onReverified }: {
+function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onDelete, onReverified }: {
   group: { owner_type: DocRow['owner_type']; owner_id: number; owner_name: string | null; owner_sub_label: string | null; owner_assignment_status: string | null; owner_external: boolean; owner_business_name: string | null; rows: DocRow[] };
   daysFrom: (s: string | null | undefined) => number;
   verifyableMap: Map<number, boolean>;
   onRowClick: (r: DocRow) => void;
+  onDelete: (r: DocRow) => void;
   onReverified: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -746,6 +776,7 @@ function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onRever
               <th className="px-4 py-2 font-semibold">만료일</th>
               <th className="px-4 py-2 font-semibold">상태</th>
               <th className="px-4 py-2 font-semibold">검증</th>
+              <th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -767,6 +798,13 @@ function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onRever
                   <td className="px-4 py-2 text-xs tabular-nums">{r.expiry_date ?? '-'}</td>
                   <td className="px-4 py-2">{chip}</td>
                   <td className="px-4 py-2">{verifyChip}</td>
+                  <td className="px-4 py-2 text-right">
+                    <button type="button"
+                      onClick={(e) => { e.stopPropagation(); onDelete(r); }}
+                      className="px-2 py-0.5 rounded border border-rose-200 text-rose-600 text-[11px] font-semibold hover:bg-rose-50">
+                      삭제
+                    </button>
+                  </td>
                 </tr>
               );
             })}

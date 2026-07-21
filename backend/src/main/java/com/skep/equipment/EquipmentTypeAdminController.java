@@ -94,8 +94,8 @@ public class EquipmentTypeAdminController {
 
     // ── 종류별 서류 체크리스트 (junction) ──
 
-    /** 한 항목 응답 — 전체 활성 EQUIPMENT 서류 + 이 종류에 대한 3상태 + 만료관리 여부. */
-    public record DocChecklistItem(Long documentTypeId, String name, boolean hasExpiry, String requirement) {}
+    /** 한 항목 응답 — 전체 활성 EQUIPMENT 서류 + 이 종류에 대한 3상태 + 만료관리 여부 + 전역 정렬순서. */
+    public record DocChecklistItem(Long documentTypeId, String name, boolean hasExpiry, String requirement, int sortOrder) {}
 
     /** 이 종류에 대해 전체 활성 EQUIPMENT 서류 목록 + requirement 상태(REQUIRED/OPTIONAL/NONE). */
     @GetMapping("/{code}/documents")
@@ -112,7 +112,7 @@ public class EquipmentTypeAdminController {
         return types.stream().map(t -> {
             String requirement = !reqByType.containsKey(t.getId()) ? "NONE"
                     : (reqByType.get(t.getId()) ? "REQUIRED" : "OPTIONAL");
-            return new DocChecklistItem(t.getId(), t.getName(), t.isHasExpiry(), requirement);
+            return new DocChecklistItem(t.getId(), t.getName(), t.isHasExpiry(), requirement, t.getSortOrder());
         }).toList();
     }
 

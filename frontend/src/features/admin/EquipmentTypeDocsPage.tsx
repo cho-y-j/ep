@@ -8,8 +8,8 @@ import { toast } from '../../lib/toast';
 type EquipType = { code: string; name: string; grp: string; sort_order: number; active: boolean };
 
 type Requirement = 'REQUIRED' | 'OPTIONAL' | 'NONE';
-/** /api/admin/equipment-types/{code}/documents — 전체 활성 EQUIPMENT 서류 + 이 종류에 대한 3상태. */
-type DocRow = { document_type_id: number; name: string; has_expiry: boolean; requirement: Requirement };
+/** /api/admin/equipment-types/{code}/documents — 전체 활성 EQUIPMENT 서류 + 이 종류에 대한 3상태 + 전역 정렬순서. */
+type DocRow = { document_type_id: number; name: string; has_expiry: boolean; requirement: Requirement; sort_order: number };
 
 const REQ_LABEL: Record<Requirement, string> = { REQUIRED: '필수', OPTIONAL: '선택', NONE: '해당없음' };
 const REQ_ORDER: Requirement[] = ['REQUIRED', 'OPTIONAL', 'NONE'];
@@ -85,10 +85,12 @@ export default function EquipmentTypeDocsPage() {
     if (!addDoc.name.trim()) { toast.error('서류 이름을 입력하세요'); return; }
     setSaving(true);
     try {
+      // 새 서류는 목록 맨 뒤로 — 기존 최대 sort_order + 10 (0으로 몰려 순서변경이 안 먹는 것 방지).
+      const nextOrder = (rows.length ? Math.max(...rows.map((r) => r.sort_order)) : 0) + 10;
       await api.post('/api/admin/document-types', {
         name: addDoc.name.trim(), applies_to: 'EQUIPMENT',
         has_expiry: addDoc.hasExpiry, requires_verification: false,
-        required: false, blocks_assignment: false,
+        required: false, blocks_assignment: false, sort_order: nextOrder,
       });
       if (selected) {
         const r = await api.get<DocRow[]>(`/api/admin/equipment-types/${selected}/documents`);
@@ -111,6 +113,26 @@ export default function EquipmentTypeDocsPage() {
     } catch (e: any) {
       setRows(prev); // 롤백
       toast.error(e?.response?.data?.message ?? '저장 실패');
+    }
+  }
+
+  /** 위/아래 이동 → 인접 서류와 전역 sort_order 스왑(PATCH 2회) → 체크리스트 새로고침. 순서는 모든 종류 공통. */
+  async function move(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (!selected || j < 0 || j >= rows.length) return;
+    // 두 행 위치 교환 후 10 간격으로 재번호 → 동일 sort_order(새 서류 0끼리 등)여도 확실히 순서가 바뀐다.
+    const reordered = [...rows];
+    [reordered[i], reordered[j]] = [reordered[j], reordered[i]];
+    const patches = reordered
+      .map((row, idx) => ({ row, order: (idx + 1) * 10 }))
+      .filter(({ row, order }) => row.sort_order !== order)
+      .map(({ row, order }) => api.patch(`/api/admin/document-types/${row.document_type_id}`, { sort_order: order }));
+    try {
+      await Promise.all(patches);
+      const r = await api.get<DocRow[]>(`/api/admin/equipment-types/${selected}/documents`);
+      setRows(r.data);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? '순서 변경 실패');
     }
   }
 
@@ -211,7 +233,7 @@ export default function EquipmentTypeDocsPage() {
                 <div className="p-6 text-center text-sm text-slate-400">등록된 장비 서류종류가 없습니다</div>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {rows.map((d) => (
+                  {rows.map((d, i) => (
                     <div key={d.document_type_id} className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-2">
                       <span className="font-medium text-slate-900 flex-1 min-w-[10rem] truncate">
                         {d.name}
@@ -219,6 +241,14 @@ export default function EquipmentTypeDocsPage() {
                           <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 align-middle">만료관리</span>
                         )}
                       </span>
+                      <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden">
+                        <button type="button" disabled={i === 0} onClick={() => move(i, -1)}
+                          title="위로" aria-label="위로"
+                          className="px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed">↑</button>
+                        <button type="button" disabled={i === rows.length - 1} onClick={() => move(i, 1)}
+                          title="아래로" aria-label="아래로"
+                          className="px-2 py-1 text-xs text-slate-600 border-l border-slate-300 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed">↓</button>
+                      </div>
                       <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden">
                         {REQ_ORDER.map((r) => {
                           const on = d.requirement === r;
