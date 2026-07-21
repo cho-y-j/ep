@@ -86,6 +86,10 @@ public class DocumentType {
     @Column(name = "sample_image_key", length = 255)
     private String sampleImageKey;
 
+    /** V119: 서류 수집 '샘플 보기' 설명글 — ADMIN 이 작성한 촬영/제출 안내. 이미지와 독립(사진만/글만/둘다). NULL = 미등록. */
+    @Column(name = "sample_description", columnDefinition = "text")
+    private String sampleDescription;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -139,4 +143,5 @@ public class DocumentType {
     public void setAppliesToPersonRoles(String v) { this.appliesToPersonRoles = v; }
     public void setOcrRegionTemplate(String v) { this.ocrRegionTemplate = v; }
     public void setSampleImageKey(String v) { this.sampleImageKey = v; }
+    public void setSampleDescription(String v) { this.sampleDescription = v; }
 }

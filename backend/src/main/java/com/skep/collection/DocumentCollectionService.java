@@ -336,7 +336,8 @@ public class DocumentCollectionService {
                 return new CollectionDtos.PublicItem(it.getId(), it.getDocumentTypeId(),
                         t != null ? t.getName() : "(삭제됨)", it.isRequired(), it.getUploadedDocumentId() != null,
                         fileNames.get(it.getUploadedDocumentId()),
-                        t != null ? com.skep.document.DocumentTypeService.sampleImageUrl(t) : null);
+                        t != null ? com.skep.document.DocumentTypeService.sampleImageUrl(t) : null,
+                        t != null ? t.getSampleDescription() : null);
             }).toList();
             return new CollectionDtos.PublicTarget(tg.getId(), tg.getOwnerType(), labels.get(tg.getId()),
                     own.size(), uploadedCount(own), requiredRemaining(own), pis);
@@ -376,6 +377,12 @@ public class DocumentCollectionService {
         if ("CANCELLED".equals(r.getStatus())) throw ApiException.badRequest("CANCELLED", "취소된 요청입니다");
         if (r.isExpired()) throw ApiException.badRequest("EXPIRED", "링크가 만료되었습니다");
         return r;
+    }
+
+    /** 공개(무로그인) 모서리 자동검출용 — 토큰 유효성만 검증(만료/취소 포함). */
+    @Transactional(readOnly = true)
+    public void assertTokenValid(String token) {
+        requireToken(token);
     }
 
     /** 대상들이 actor 회사 소유 자원인지 검증 — selfAndChildren·자원 조회 모두 배치 1회. ADMIN 예외. */

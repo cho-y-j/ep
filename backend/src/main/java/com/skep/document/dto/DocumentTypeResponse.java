@@ -25,7 +25,8 @@ public record DocumentTypeResponse(
         String appliesToPersonRoles,    // PersonRole CSV, null = 모든 역할
         String appliesToCategories,     // EquipmentCategory CSV, null = 모든 카테고리
         String ocrRegionTemplate,       // 영역-크롭 OCR 템플릿 JSON, null = 미사용 (FE 분기 기준)
-        String sampleImageUrl           // V116: '샘플 보기' 예시 이미지 URL, null = 미등록
+        String sampleImageUrl,          // V116: '샘플 보기' 예시 이미지 URL, null = 미등록
+        String sampleDescription        // V119: '샘플 보기' 설명글, null = 미등록
 ) {
     public static DocumentTypeResponse from(DocumentType t) {
         return new DocumentTypeResponse(
@@ -37,7 +38,8 @@ public record DocumentTypeResponse(
                 t.getVerifyEndpoint(), t.getRequiredFields(),
                 t.getAppliesToPersonRoles(), t.getAppliesToCategories(),
                 t.getOcrRegionTemplate(),
-                DocumentTypeService.sampleImageUrl(t)
+                DocumentTypeService.sampleImageUrl(t),
+                t.getSampleDescription()
         );
     }
 }

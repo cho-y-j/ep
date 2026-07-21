@@ -53,6 +53,7 @@ export type PublicItem = {
   uploaded: boolean;
   file_name?: string | null;
   sample_image_url?: string | null;
+  sample_description?: string | null;
 };
 
 export type PublicTarget = {

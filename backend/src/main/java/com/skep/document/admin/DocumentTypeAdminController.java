@@ -52,6 +52,7 @@ public class DocumentTypeAdminController {
             String appliesToCategories,    // null 이면 변경 안 함, 빈 문자열이면 매핑 해제
             String appliesToPersonRoles,
             String ocrRegionTemplate,      // null 이면 변경 안 함, 빈 문자열이면 템플릿 해제
+            String sampleDescription,      // V119: null 이면 변경 안 함, 빈 문자열이면 설명 해제
             Boolean active
     ) {}
 
@@ -98,6 +99,8 @@ public class DocumentTypeAdminController {
             t.setAppliesToPersonRoles(body.appliesToPersonRoles().isBlank() ? null : body.appliesToPersonRoles());
         if (body.ocrRegionTemplate() != null)
             t.setOcrRegionTemplate(body.ocrRegionTemplate().isBlank() ? null : body.ocrRegionTemplate());
+        if (body.sampleDescription() != null)
+            t.setSampleDescription(body.sampleDescription().isBlank() ? null : body.sampleDescription());
         if (body.active() != null) {
             if (body.active()) t.activate(); else t.deactivate();
         }

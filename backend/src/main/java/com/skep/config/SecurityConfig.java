@@ -60,6 +60,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/collect/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/collect/*/documents").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/collect/*/submit").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/collect/*/detect-corners").permitAll()
                         // V116: 서류종류 '샘플 보기' 예시 이미지 — 마스킹된 예시(민감정보 아님), 비로그인 공개.
                         .requestMatchers(HttpMethod.GET, "/api/document-types/*/sample").permitAll()
                         // V117: 공개 랜딩 상담 요청 접수 — 비로그인 공개. (조회/처리는 아래 인증 + @PreAuthorize ADMIN.)

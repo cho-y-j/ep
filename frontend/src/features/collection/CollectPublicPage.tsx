@@ -19,7 +19,7 @@ export default function CollectPublicPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [sampleUrl, setSampleUrl] = useState<string | null>(null);
+  const [sample, setSample] = useState<{ url: string | null; desc: string | null } | null>(null);
   const [openTargetId, setOpenTargetId] = useState<number | null>(null);
   /** 이미지 업로드 전 4모서리 보정 대기 상태 (건너뛰기 가능). */
   const [pending, setPending] = useState<Pending | null>(null);
@@ -66,7 +66,8 @@ export default function CollectPublicPage() {
     // 이미지면 먼저 4모서리 보정 — 자동검출은 백그라운드(실패해도 이미지 꼭짓점으로 시작).
     setAutoCorners(undefined);
     setPending({ itemId, file, url: URL.createObjectURL(file) });
-    void detectDocumentCorners(file).then((c) => { if (c) setAutoCorners(c); });
+    // 공개(무로그인) 화면 — 토큰 기반 detect-corners 로 자동검출(인증 엔드포인트는 403).
+    void detectDocumentCorners(file, token).then((c) => { if (c) setAutoCorners(c); });
   }
 
   function closePending() {
@@ -177,7 +178,7 @@ export default function CollectPublicPage() {
                         inputRef={(el) => { inputs.current[it.id] = el; }}
                         onPick={(f) => pickFile(it.id, f)}
                         onClickUpload={() => inputs.current[it.id]?.click()}
-                        onShowSample={setSampleUrl} />
+                        onShowSample={setSample} />
                     ))}
                   </div>
                 )}
@@ -213,15 +214,22 @@ export default function CollectPublicPage() {
         </div>
       )}
 
-      {sampleUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSampleUrl(null)}>
+      {sample && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSample(null)}>
           <div className="max-h-full w-full max-w-lg overflow-auto rounded-xl bg-white p-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-semibold text-slate-700">제출 예시</span>
-              <button type="button" onClick={() => setSampleUrl(null)} className="rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="닫기">✕</button>
+              <button type="button" onClick={() => setSample(null)} className="rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="닫기">✕</button>
             </div>
-            <img src={sampleUrl} alt="제출 예시" className="mx-auto max-h-[70vh] w-auto rounded border border-slate-100" />
-            <p className="mt-2 text-center text-xs text-slate-500">개인정보가 가려진 예시입니다. 이런 형식으로 촬영·스캔해서 올려주세요.</p>
+            {sample.desc && (
+              <p className="mb-2 whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{sample.desc}</p>
+            )}
+            {sample.url && (
+              <>
+                <img src={sample.url} alt="제출 예시" className="mx-auto max-h-[70vh] w-auto rounded border border-slate-100" />
+                <p className="mt-2 text-center text-xs text-slate-500">개인정보가 가려진 예시입니다. 이런 형식으로 촬영·스캔해서 올려주세요.</p>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -236,7 +244,7 @@ function ItemRow({ item, disabled, uploading, inputRef, onPick, onClickUpload, o
   inputRef: (el: HTMLInputElement | null) => void;
   onPick: (file: File) => void;
   onClickUpload: () => void;
-  onShowSample: (url: string) => void;
+  onShowSample: (s: { url: string | null; desc: string | null }) => void;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
@@ -246,8 +254,8 @@ function ItemRow({ item, disabled, uploading, inputRef, onPick, onClickUpload, o
             {item.required ? '필수' : '선택'}
           </span>
           <span className="truncate text-sm font-medium text-slate-800">{item.name}</span>
-          {item.sample_image_url && (
-            <button type="button" onClick={() => onShowSample(item.sample_image_url as string)}
+          {(item.sample_image_url || item.sample_description) && (
+            <button type="button" onClick={() => onShowSample({ url: item.sample_image_url ?? null, desc: item.sample_description ?? null })}
               className="shrink-0 rounded border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 hover:bg-brand-100">
               샘플 보기
             </button>

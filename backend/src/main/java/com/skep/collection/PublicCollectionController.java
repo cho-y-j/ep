@@ -1,6 +1,7 @@
 package com.skep.collection;
 
 import com.skep.collection.dto.CollectionDtos;
+import com.skep.document.CornerDetectionService;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,9 +13,11 @@ import org.springframework.web.multipart.MultipartFile;
 public class PublicCollectionController {
 
     private final DocumentCollectionService service;
+    private final CornerDetectionService cornerDetection;
 
-    public PublicCollectionController(DocumentCollectionService service) {
+    public PublicCollectionController(DocumentCollectionService service, CornerDetectionService cornerDetection) {
         this.service = service;
+        this.cornerDetection = cornerDetection;
     }
 
     @GetMapping("/{token}")
@@ -34,5 +37,13 @@ public class PublicCollectionController {
     public ResponseEntity<Void> submit(@PathVariable String token) {
         service.publicSubmit(token);
         return ResponseEntity.noContent().build();
+    }
+
+    /** 무로그인 모서리 자동검출 — 토큰만 검증 후 인증 화면과 동일한 검출 로직 재사용. 응답 형식 동일. */
+    @PostMapping(value = "/{token}/detect-corners", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Object> detectCorners(@PathVariable String token,
+                                                @RequestParam("file") MultipartFile file) throws Exception {
+        service.assertTokenValid(token);
+        return cornerDetection.detect(file);
     }
 }

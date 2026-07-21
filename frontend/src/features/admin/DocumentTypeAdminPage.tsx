@@ -21,6 +21,7 @@ type DocType = {
   applies_to_categories: string | null;
   ocr_region_template: string | null;
   sample_image_key: string | null;
+  sample_description: string | null;
 };
 
 const APPLIES_LABEL: Record<DocType['applies_to'], string> = {
@@ -93,6 +94,23 @@ function SampleControl({ typeId, sampleKey, busy, onUpload, onDelete }: {
   );
 }
 
+/** 서류종류별 샘플 설명글 — 사진과 독립(글만/사진만/둘다). 포커스 아웃 시 변경분만 저장. */
+function SampleDescription({ value, onSave }: {
+  value: string | null; onSave: (text: string) => void;
+}) {
+  const [text, setText] = useState(value ?? '');
+  useEffect(() => { setText(value ?? ''); }, [value]);
+  return (
+    <label className="w-full block">
+      <span className="text-xs text-slate-500">샘플 설명글</span>
+      <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)}
+        onBlur={() => { const t = text.trim(); if (t !== (value ?? '')) onSave(t); }}
+        placeholder="예: 앞면 전체가 나오게 밝은 곳에서 촬영해 주세요 (사진 없이 글만 등록도 가능)"
+        className="input mt-0.5 w-full text-xs resize-y" />
+    </label>
+  );
+}
+
 export default function DocumentTypeAdminPage() {
   const navigate = useNavigate();
   const [types, setTypes] = useState<DocType[]>([]);
@@ -132,6 +150,7 @@ export default function DocumentTypeAdminPage() {
     if ('active' in body) out.active = body.active;
     if ('applies_to_person_roles' in body) out.applies_to_person_roles = (body.applies_to_person_roles as string) || null;
     if ('applies_to_categories' in body) out.applies_to_categories = (body.applies_to_categories as string) || null;
+    if ('sample_description' in body) out.sample_description = (body.sample_description as string) || null;
     return out as Partial<DocType>;
   }
 
@@ -282,6 +301,8 @@ export default function DocumentTypeAdminPage() {
                                onChange={(e) => patch(t.id, { active: e.target.checked })} />
                         활성
                       </label>
+                      <SampleDescription value={t.sample_description}
+                        onSave={(text) => patch(t.id, { sample_description: text })} />
                     </div>
                   ))}
                 </div>
