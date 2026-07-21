@@ -9,12 +9,14 @@ type Location = { from?: string };
 const LS_EMAIL = 'oneon.login.email';
 const LS_PW = 'oneon.login.pw';
 
-const TEST_ACCOUNTS = import.meta.env.DEV ? [
-  { label: 'ADMIN', email: 'admin@skep.local', password: 'test1234', color: 'bg-slate-900 hover:bg-slate-800' },
-  { label: 'BP', email: 'bp1@example.com', password: 'test1234', color: 'bg-brand-600 hover:bg-brand-700' },
-  { label: '장비공급사', email: 'equipment1@example.com', password: 'test1234', color: 'bg-emerald-600 hover:bg-emerald-700' },
-  { label: '인력공급사', email: 'manpower1@example.com', password: 'test1234', color: 'bg-amber-600 hover:bg-amber-700' },
-] : [];
+// 빠른 로그인 — 초기 테스트 편의용(정식 오픈 전 제거 권장). 온보딩 5계정.
+const TEST_ACCOUNTS = [
+  { label: '수퍼어드민', email: 'admin@one.on1.com', password: 'admin2505!', color: 'bg-slate-900 hover:bg-slate-800' },
+  { label: 'BP사', email: 'bp@pcon.com', password: 'admin1234', color: 'bg-brand-600 hover:bg-brand-700' },
+  { label: '장비사업자', email: 'pcon1@pcon.com', password: 'admin1234', color: 'bg-emerald-600 hover:bg-emerald-700' },
+  { label: '인력사업자', email: 'pcon2@pcon.com', password: 'admin1234', color: 'bg-amber-600 hover:bg-amber-700' },
+  { label: '시행사', email: 'ep@pcon.com', password: 'admin1234', color: 'bg-violet-600 hover:bg-violet-700' },
+];
 
 function EyeIcon({ off }: { off?: boolean }) {
   const base = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
@@ -157,9 +159,9 @@ export default function LoginPage() {
           </Link>
         </p>
 
-        {import.meta.env.DEV && (
+        {TEST_ACCOUNTS.length > 0 && (
           <div className="pt-4 border-t border-dashed border-slate-300">
-            <p className="text-xs text-slate-400 mb-2">테스트 빠른 로그인 (시연용)</p>
+            <p className="text-xs text-slate-400 mb-2">빠른 로그인 (테스트용)</p>
             <div className="grid grid-cols-2 gap-2">
               {TEST_ACCOUNTS.map((acc) => (
                 <button
