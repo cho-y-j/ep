@@ -74,4 +74,10 @@ public final class CollectionDtos {
 
     /** PDF 합쳐 이메일 발송 — 받는 주소(미지정 시 요청에 저장된 recipient_email). */
     public record SendPdfRequest(String email, String subject) {}
+
+    /** 대상 자원의 유형(장비종류/인력역할)에 설정된 서류 — 수집요청 폼 자동 체크용. sort_order 오름차순. */
+    public record SuggestResponse(
+            List<Long> requiredTypeIds,
+            List<Long> optionalTypeIds
+    ) {}
 }

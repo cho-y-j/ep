@@ -7,13 +7,12 @@ import type { DocumentTypeResponse, OwnerType } from '../../types/document';
 import type { EquipmentResponse } from '../../types/equipment';
 import { EQUIPMENT_CATEGORY_LABEL } from '../../types/equipment';
 import type { PersonResponse } from '../../types/person';
-
-const REQUIRED_DEFAULTS = ['비파괴검사 보고서(MT/UT)', '안전점검표', '갑부', '차량서류'];
+import { fetchSuggestedSel, type Sel } from './suggest';
 
 type Item = { document_type_id: number; document_type_name: string; required: boolean; uploaded: boolean; };
 type CollectionResponse = {
   id: number; token: string; status: string; title?: string | null; owner_type: OwnerType;
-  owner_name?: string | null; recipient_name?: string | null; recipient_email?: string | null;
+  owner_name?: string | null; recipient_name?: string | null;
   recipient_phone?: string | null; public_url: string; items: Item[];
 };
 
@@ -33,9 +32,8 @@ export default function DocumentCollectionPage() {
   const [showNew, setShowNew] = useState(false);
   const [ownerType, setOwnerType] = useState<OwnerType>('EQUIPMENT');
   const [ownerId, setOwnerId] = useState<number | ''>('');
-  const [sel, setSel] = useState<Record<number, 'none' | 'required' | 'optional'>>({});
+  const [sel, setSel] = useState<Sel>({});
   const [recipientName, setRecipientName] = useState('');
-  const [recipientEmail, setRecipientEmail] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
   const [title, setTitle] = useState('');
 
@@ -64,14 +62,13 @@ export default function DocumentCollectionPage() {
   }
   useEffect(() => { void reload(); }, []);
 
-  // ownerType 바뀌면 대상/선택 초기화 (필수 기본 체크)
+  // 대상을 고르면 그 자원의 유형(장비종류/인력역할)에 설정된 필수·선택 서류를 자동 체크.
   useEffect(() => {
-    setOwnerId('');
-    const next: Record<number, 'none' | 'required' | 'optional'> = {};
-    types.forEach((t) => { next[t.id] = REQUIRED_DEFAULTS.includes(t.name) ? 'required' : 'none'; });
-    setSel(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerType, typesEq, typesPe]);
+    if (!ownerId) { setSel({}); return; }
+    let alive = true;
+    void fetchSuggestedSel(ownerType, ownerId).then((s) => { if (alive) setSel(s); });
+    return () => { alive = false; };
+  }, [ownerType, ownerId]);
 
   const selectedCount = useMemo(() => Object.values(sel).filter((v) => v !== 'none').length, [sel]);
 
@@ -98,10 +95,9 @@ export default function DocumentCollectionPage() {
         required_type_ids: requiredTypeIds, optional_type_ids: optionalTypeIds,
         title: title.trim() || null,
         recipient_name: recipientName.trim() || null,
-        recipient_email: recipientEmail.trim() || null,
         recipient_phone: recipientPhone.trim() || null,
       });
-      setShowNew(false); setTitle(''); setRecipientName(''); setRecipientEmail(''); setRecipientPhone('');
+      setShowNew(false); setTitle(''); setRecipientName(''); setRecipientPhone('');
       await reload();
     } catch (err) {
       setError(err instanceof AxiosError ? (err.response?.data?.message ?? '생성 실패') : '생성 실패');
@@ -121,24 +117,13 @@ export default function DocumentCollectionPage() {
       setError(err instanceof AxiosError ? (err.response?.data?.message ?? '문자 발송 실패') : '문자 발송 실패');
     } finally { setBusy(false); }
   }
-  async function sendPdf(req: CollectionResponse) {
-    const to = window.prompt('PDF를 보낼 이메일', req.recipient_email ?? '');
-    if (!to || !to.trim()) return;
-    setBusy(true); setError(null);
-    try {
-      await api.post(`/api/document-collections/${req.id}/send`, { email: to.trim() });
-      alert('PDF를 합쳐 이메일로 발송했습니다.'); await reload();
-    } catch (err) {
-      setError(err instanceof AxiosError ? (err.response?.data?.message ?? '발송 실패') : '발송 실패');
-    } finally { setBusy(false); }
-  }
 
   return (
     <AppShell breadcrumb={[{ label: '서류 수집 요청' }]}>
       <div className="space-y-5">
         <PageHeader
           title="서류 수집 요청"
-          subtitle="차량주인·인원에게 공개 링크를 보내 서류를 받고, 모이면 PDF로 합쳐 이메일로 보냅니다."
+          subtitle="차량주인·인원에게 공개 링크(복사·문자)를 보내 서류를 받습니다. 대상을 고르면 그 종류에 설정된 서류가 자동 선택됩니다."
           actions={
             <button onClick={() => setShowNew((v) => !v)} className="btn-primary">{showNew ? '닫기' : '+ 새 수집 요청'}</button>
           }
@@ -154,7 +139,7 @@ export default function DocumentCollectionPage() {
                 <span className="text-sm font-medium text-slate-700">대상 종류</span>
                 <div className="mt-1 inline-flex overflow-hidden rounded-lg border border-slate-300">
                   {(['EQUIPMENT', 'PERSON'] as const).map((t) => (
-                    <button key={t} type="button" onClick={() => setOwnerType(t)}
+                    <button key={t} type="button" onClick={() => { setOwnerType(t); setOwnerId(''); }}
                       className={`px-4 py-2 text-sm font-semibold ${ownerType === t ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                       {t === 'EQUIPMENT' ? '장비(차량)' : '인원'}
                     </button>
@@ -200,10 +185,9 @@ export default function DocumentCollectionPage() {
               <div className="grid grid-cols-2 gap-2">
                 <input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="이름 (선택)" className="input" />
                 <input value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)} placeholder="010-1234-5678 (하이픈 무관, 선택)" className="input" />
-                <input value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} placeholder="이메일 — PDF 발송용 (선택)" className="input" />
                 <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목 (선택)" className="input" />
               </div>
-              <p className="text-xs text-slate-400">연락처·이메일을 비우면 만든 <strong>링크를 복사해 직접</strong> 보내면 됩니다. 연락처를 넣으면 <strong>문자</strong>로, 이메일을 넣으면 <strong>PDF 메일</strong>로 보낼 수 있습니다.</p>
+              <p className="text-xs text-slate-400">연락처를 비우면 만든 <strong>링크를 복사해 직접</strong> 보내면 됩니다. 연락처를 넣으면 <strong>문자</strong>로 보낼 수 있습니다.</p>
             </div>
             <button onClick={create} disabled={busy || !ownerId || selectedCount === 0} className="btn-primary w-full disabled:opacity-50">
               {busy ? '처리 중…' : `링크 생성 (${selectedCount}종 선택) — 받는사람 안 넣어도 됨`}
@@ -243,10 +227,6 @@ export default function DocumentCollectionPage() {
                       <button onClick={() => sendSms(req)} disabled={busy || !req.recipient_phone}
                         className="shrink-0 rounded-md border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-40">문자</button>
                     </div>
-                    <button onClick={() => sendPdf(req)} disabled={busy || up === 0}
-                      className="w-full rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
-                      받은 서류 PDF로 합쳐 이메일 발송
-                    </button>
                   </div>
                 );
               })}

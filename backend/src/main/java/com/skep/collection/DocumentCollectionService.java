@@ -9,8 +9,10 @@ import com.skep.document.DocumentType;
 import com.skep.document.DocumentTypeRepository;
 import com.skep.document.OwnerType;
 import com.skep.equipment.Equipment;
+import com.skep.equipment.EquipmentDocRequirementService;
 import com.skep.equipment.EquipmentRepository;
 import com.skep.person.Person;
+import com.skep.person.PersonDocRequirementService;
 import com.skep.person.PersonRepository;
 import com.skep.security.AuthenticatedUser;
 import com.skep.storage.FileStorage;
@@ -23,6 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -41,6 +44,8 @@ public class DocumentCollectionService {
     private final CollectionMailService mail;
     private final EquipmentRepository equipmentRepo;
     private final PersonRepository personRepo;
+    private final EquipmentDocRequirementService equipmentDocReq;
+    private final PersonDocRequirementService personDocReq;
     private final com.skep.company.CompanyService companyService;
     private final com.skep.alimtalk.AlimTalkService alimTalk;
 
@@ -51,6 +56,7 @@ public class DocumentCollectionService {
                                      DocumentTypeRepository typeRepo, DocumentRepository docRepo, DocumentService documentService,
                                      FileStorage storage, PdfMergeService pdfMerge, CollectionMailService mail,
                                      EquipmentRepository equipmentRepo, PersonRepository personRepo,
+                                     EquipmentDocRequirementService equipmentDocReq, PersonDocRequirementService personDocReq,
                                      com.skep.company.CompanyService companyService,
                                      com.skep.alimtalk.AlimTalkService alimTalk) {
         this.reqRepo = reqRepo;
@@ -63,6 +69,8 @@ public class DocumentCollectionService {
         this.mail = mail;
         this.equipmentRepo = equipmentRepo;
         this.personRepo = personRepo;
+        this.equipmentDocReq = equipmentDocReq;
+        this.personDocReq = personDocReq;
         this.companyService = companyService;
         this.alimTalk = alimTalk;
     }
@@ -97,6 +105,36 @@ public class DocumentCollectionService {
         saveItems(r.getId(), req.ownerType(), required, true);
         saveItems(r.getId(), req.ownerType(), optional, false);
         return toResponse(r);
+    }
+
+    /**
+     * 대상 자원의 유형에 설정된 서류를 필수/선택으로 나눠 반환 — 수집요청 폼 자동 체크용.
+     * 장비=장비종류(category)별 설정, 인원=역할(roles)별 설정(다중역할이면 합집합·필수 OR).
+     * 유형에 설정이 없는 서류는 어느 목록에도 넣지 않는다(= 폼에서 '제외').
+     */
+    @Transactional(readOnly = true)
+    public CollectionDtos.SuggestResponse suggest(OwnerType ownerType, Long ownerId, AuthenticatedUser actor) {
+        if (actor.role() == Role.WORKER) throw ApiException.forbidden("FORBIDDEN", "권한이 없습니다");
+        ensureOwnsResource(ownerType, ownerId, actor);
+        Map<Long, Boolean> requiredByTypeId;
+        if (ownerType == OwnerType.EQUIPMENT) {
+            Equipment e = equipmentRepo.findById(ownerId)
+                    .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "장비를 찾을 수 없습니다"));
+            requiredByTypeId = equipmentDocReq.requiredByDocTypeId(e.getCategory());
+        } else {
+            Person p = personRepo.findById(ownerId)
+                    .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "인원을 찾을 수 없습니다"));
+            requiredByTypeId = personDocReq.requiredByDocTypeId(p.getRoles());
+        }
+        List<Long> required = new ArrayList<>();
+        List<Long> optional = new ArrayList<>();
+        // 활성 서류를 sort_order 순으로 순회 → 반환 id 순서가 곧 관리자가 정한 순서.
+        for (DocumentType t : typeRepo.findByAppliesToAndActiveOrderBySortOrderAscIdAsc(ownerType, true)) {
+            Boolean req = requiredByTypeId.get(t.getId());
+            if (req == null) continue;
+            (req ? required : optional).add(t.getId());
+        }
+        return new CollectionDtos.SuggestResponse(required, optional);
     }
 
     private void saveItems(Long requestId, OwnerType ownerType, List<Long> typeIds, boolean required) {

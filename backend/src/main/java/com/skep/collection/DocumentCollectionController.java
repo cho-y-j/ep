@@ -35,6 +35,13 @@ public class DocumentCollectionController {
         return service.list(actor);
     }
 
+    /** 폼 자동 체크용 — 대상 자원의 유형에 설정된 필수/선택 서류종류 id (sort_order 순). */
+    @GetMapping("/suggest")
+    public CollectionDtos.SuggestResponse suggest(@RequestParam OwnerType ownerType, @RequestParam Long ownerId,
+                                                  @CurrentUser AuthenticatedUser actor) {
+        return service.suggest(ownerType, ownerId, actor);
+    }
+
     @GetMapping("/{id}")
     public CollectionDtos.Response get(@PathVariable Long id, @CurrentUser AuthenticatedUser actor) {
         return service.get(id, actor);

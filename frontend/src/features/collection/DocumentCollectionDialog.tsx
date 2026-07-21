@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import type { DocumentTypeResponse, OwnerType } from '../../types/document';
-
-/** 필수 기본 선택 서류 이름 (비파괴/안전점검/갑부/차량서류). 나머지는 선택. */
-const REQUIRED_DEFAULTS = ['비파괴검사 보고서(MT/UT)', '안전점검표', '갑부', '차량서류'];
+import { fetchSuggestedSel, type Sel } from './suggest';
 
 type Item = {
   document_type_id: number;
@@ -40,28 +38,23 @@ export default function DocumentCollectionDialog({ ownerType, ownerId, ownerLabe
   const [busy, setBusy] = useState(false);
 
   // 선택 상태: typeId → 'none' | 'required' | 'optional'
-  const [sel, setSel] = useState<Record<number, 'none' | 'required' | 'optional'>>({});
+  const [sel, setSel] = useState<Sel>({});
   const [recipientName, setRecipientName] = useState('');
-  const [recipientEmail, setRecipientEmail] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
   const [title, setTitle] = useState('');
 
   async function reload() {
     setLoading(true);
     try {
-      const [t, r] = await Promise.all([
+      const [t, r, s] = await Promise.all([
         api.get<DocumentTypeResponse[]>('/api/document-types', { params: { appliesTo: ownerType } }),
         api.get<CollectionResponse[]>('/api/document-collections', { params: { ownerType, ownerId } }),
+        fetchSuggestedSel(ownerType, ownerId),
       ]);
       setTypes(t.data);
       setRequests(r.data);
-      // 첫 로드 시 필수 기본 선택
-      setSel((prev) => {
-        if (Object.keys(prev).length > 0) return prev;
-        const next: Record<number, 'none' | 'required' | 'optional'> = {};
-        t.data.forEach((ty) => { next[ty.id] = REQUIRED_DEFAULTS.includes(ty.name) ? 'required' : 'none'; });
-        return next;
-      });
+      // 첫 로드 시 이 자원의 유형에 설정된 필수·선택 서류 자동 체크 (이후엔 사용자 토글 보존)
+      setSel((prev) => (Object.keys(prev).length > 0 ? prev : s));
       setError(null);
     } catch {
       setError('불러오기 실패');
@@ -84,10 +77,9 @@ export default function DocumentCollectionDialog({ ownerType, ownerId, ownerLabe
         required_type_ids: requiredTypeIds, optional_type_ids: optionalTypeIds,
         title: title.trim() || null,
         recipient_name: recipientName.trim() || null,
-        recipient_email: recipientEmail.trim() || null,
         recipient_phone: recipientPhone.trim() || null,
       });
-      setTitle(''); setRecipientName(''); setRecipientEmail(''); setRecipientPhone('');
+      setTitle(''); setRecipientName(''); setRecipientPhone('');
       await reload();
     } catch (err) {
       setError(err instanceof AxiosError ? (err.response?.data?.message ?? '생성 실패') : '생성 실패');
@@ -97,19 +89,6 @@ export default function DocumentCollectionDialog({ ownerType, ownerId, ownerLabe
   async function copyLink(url: string) {
     try { await navigator.clipboard.writeText(url); alert('링크를 복사했습니다.'); }
     catch { window.prompt('아래 링크를 복사하세요', url); }
-  }
-
-  async function sendPdf(req: CollectionResponse) {
-    const to = window.prompt('PDF를 보낼 이메일', req.recipient_email ?? '');
-    if (!to || !to.trim()) return;
-    setBusy(true); setError(null);
-    try {
-      await api.post(`/api/document-collections/${req.id}/send`, { email: to.trim() });
-      alert('PDF를 합쳐 이메일로 발송했습니다.');
-      await reload();
-    } catch (err) {
-      setError(err instanceof AxiosError ? (err.response?.data?.message ?? '발송 실패') : '발송 실패');
-    } finally { setBusy(false); }
   }
 
   async function sendLinkSms(req: CollectionResponse) {
@@ -161,10 +140,9 @@ export default function DocumentCollectionDialog({ ownerType, ownerId, ownerLabe
               <div className="grid grid-cols-2 gap-2">
                 <input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="이름 (선택)" className="input" />
                 <input value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)} placeholder="010-1234-5678 (하이픈 무관, 선택)" className="input" />
-                <input value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} placeholder="이메일 — PDF 발송용 (선택)" className="input" />
                 <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목 (선택)" className="input" />
               </div>
-              <p className="text-xs text-slate-400">연락처·이메일을 비우면 <strong>링크를 복사해 직접</strong> 보내면 됩니다. 연락처 → <strong>문자</strong>, 이메일 → <strong>PDF 메일</strong>.</p>
+              <p className="text-xs text-slate-400">연락처를 비우면 <strong>링크를 복사해 직접</strong> 보내면 됩니다. 연락처를 넣으면 <strong>문자</strong>로 바로 발송됩니다.</p>
             </div>
             <button onClick={create} disabled={busy || selectedCount === 0} className="btn-primary w-full disabled:opacity-50">
               {busy ? '처리 중…' : `링크 생성 (${selectedCount}종 선택) — 받는사람 안 넣어도 됨`}
@@ -193,10 +171,6 @@ export default function DocumentCollectionDialog({ ownerType, ownerId, ownerLabe
                         className="shrink-0 rounded-md border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-40"
                         title={req.recipient_phone ? '' : '받는사람 연락처가 없습니다'}>문자 발송</button>
                     </div>
-                    <button onClick={() => sendPdf(req)} disabled={busy || up === 0}
-                      className="w-full rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
-                      받은 서류 PDF로 합쳐 이메일 발송
-                    </button>
                   </div>
                 );
               })}

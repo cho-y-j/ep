@@ -42,6 +42,7 @@ type NavGroup = {
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Props) {
   const { user } = useAuth();
   const role = user?.role;
+  const isMaster = !!user?.is_company_admin;
   const location = useLocation();
 
   const unread = useUnreadCount();
@@ -141,6 +142,10 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
         { label: '혈압 체크인', to: '/bp-checkins', icon: <IconShield /> },
       ]},
+      { label: '회사 관리', icon: <IconBuilding />, items: [
+        { label: '내 회사', to: '/my-company', icon: <IconBuilding /> },
+        ...(isMaster ? [{ label: '직원 관리', to: '/company/users', icon: <IconUsers /> }] : []),
+      ]},
     ];
   } else if (role === 'EQUIPMENT_SUPPLIER' || role === 'MANPOWER_SUPPLIER') {
     const isEquip = role === 'EQUIPMENT_SUPPLIER';
@@ -190,6 +195,11 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       { label: '안전', icon: <IconShield />, items: [
         { label: '안전점검', to: '/safety-inspections', icon: <IconShield /> },
         { label: '혈압 체크인', to: '/bp-checkins', icon: <IconShield /> },
+      ]},
+      { label: '회사 관리', icon: <IconBuilding />, items: [
+        { label: '내 회사', to: '/my-company', icon: <IconBuilding /> },
+        ...(isMaster ? [{ label: '직원 관리', to: '/company/users', icon: <IconUsers /> }] : []),
+        ...(isEquip && isMaster ? [{ label: '협력업체 관리', to: '/sub-suppliers', icon: <IconTruck /> }] : []),
       ]},
     ];
   } else if (role === 'CLIENT') {

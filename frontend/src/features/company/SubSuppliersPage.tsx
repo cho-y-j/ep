@@ -122,16 +122,16 @@ export default function SubSuppliersPage() {
   ];
 
   return (
-    <AppShell breadcrumb={[{ label: '하위공급사 관리' }]}>
+    <AppShell breadcrumb={[{ label: '협력업체 관리' }]}>
       <div className="space-y-4">
         <PageHeader
-          title="하위공급사 관리"
-          subtitle="우리 회사가 관리하는 하위 공급사(장비/인력)를 등록·조회합니다. 하위 공급사의 장비·인원은 우리 목록에 함께 표시되고, 배차 시 우리 명의로 발송됩니다."
+          title="협력업체 관리"
+          subtitle="우리 회사가 관리하는 협력업체(장비/인력)를 등록·조회합니다. 협력업체의 장비·인원은 우리 목록에 함께 표시되고, 배차 시 우리 명의로 발송됩니다."
           actions={
             <div className="flex items-center gap-2">
               <Link to="/onboarding/sub-suppliers" className="btn-ghost">온보딩 안내</Link>
               <button type="button" onClick={() => setAddOpen(true)} className="btn-primary">
-                + 하위공급사 등록
+                + 협력업체 등록
               </button>
             </div>
           }

@@ -35,7 +35,7 @@ function utilSections(role: string, isMaster: boolean): UtilSection[] {
   const company: UtilItem[] = [];
   if (isBp || isSupplier) company.push({ label: '내 회사', to: '/my-company', icon: ICON.building });
   if ((isBp || isSupplier) && isMaster) company.push({ label: '직원 관리', to: '/company/users', icon: ICON.users });
-  if (isEquip && isMaster) company.push({ label: '하위공급사 관리', to: '/sub-suppliers', icon: ICON.network });
+  if (isEquip && isMaster) company.push({ label: '협력업체 관리', to: '/sub-suppliers', icon: ICON.network });
 
   const tools: UtilItem[] = [];
   if (role === 'ADMIN' || isBp) {
