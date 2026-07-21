@@ -25,9 +25,9 @@ public class DocumentCollectionController {
         return service.create(req, actor);
     }
 
-    /** 목록 — ownerType+ownerId 주면 해당 자원 것만, 없으면 내 회사 전체. */
+    /** 목록 — ownerType+ownerId 주면 해당 자원이 대상인 것만, 없으면 내 회사 전체. 카운트만(items 없음). */
     @GetMapping
-    public List<CollectionDtos.Response> list(
+    public List<CollectionDtos.SummaryResponse> list(
             @RequestParam(required = false) OwnerType ownerType,
             @RequestParam(required = false) Long ownerId,
             @CurrentUser AuthenticatedUser actor) {
@@ -40,6 +40,13 @@ public class DocumentCollectionController {
     public CollectionDtos.SuggestResponse suggest(@RequestParam OwnerType ownerType, @RequestParam Long ownerId,
                                                   @CurrentUser AuthenticatedUser actor) {
         return service.suggest(ownerType, ownerId, actor);
+    }
+
+    /** 폼 자동 체크용(다중 대상) — 대상 목록을 한 번에. */
+    @PostMapping("/suggest-batch")
+    public CollectionDtos.SuggestBatchResponse suggestBatch(@RequestBody CollectionDtos.SuggestBatchRequest req,
+                                                            @CurrentUser AuthenticatedUser actor) {
+        return service.suggestBatch(req, actor);
     }
 
     @GetMapping("/{id}")

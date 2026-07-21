@@ -24,9 +24,9 @@ public class PublicCollectionController {
 
     @PostMapping(value = "/{token}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Void> upload(@PathVariable String token,
-                                       @RequestParam("documentTypeId") Long documentTypeId,
+                                       @RequestParam("itemId") Long itemId,
                                        @RequestParam("file") MultipartFile file) {
-        service.publicUpload(token, documentTypeId, file);
+        service.publicUpload(token, itemId, file);
         return ResponseEntity.noContent().build();
     }
 

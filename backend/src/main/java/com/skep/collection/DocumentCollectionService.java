@@ -14,6 +14,7 @@ import com.skep.equipment.EquipmentRepository;
 import com.skep.person.Person;
 import com.skep.person.PersonDocRequirementService;
 import com.skep.person.PersonRepository;
+import com.skep.person.PersonRole;
 import com.skep.security.AuthenticatedUser;
 import com.skep.storage.FileStorage;
 import com.skep.user.Role;
@@ -24,17 +25,28 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/** 서류 수집 링크 — 생성/조회/공개 업로드/PDF 합쳐 이메일 발송. */
+/**
+ * 서류 수집 링크 — 생성/조회/공개 업로드/PDF 합쳐 이메일 발송.
+ * V118: request(1) → target(N, 장비+인력 혼합) → item(M). 요청 1건 = 토큰/링크 1개.
+ * 수집된 서류는 병합하지 않고 항목별 개별 Document 로 등록(만료·교체·재검증이 서류 단위).
+ */
 @Service
 @Transactional
 public class DocumentCollectionService {
 
     private final DocumentCollectionRequestRepository reqRepo;
+    private final DocumentCollectionTargetRepository targetRepo;
     private final DocumentCollectionItemRepository itemRepo;
     private final DocumentTypeRepository typeRepo;
     private final DocumentRepository docRepo;
@@ -52,7 +64,8 @@ public class DocumentCollectionService {
     @Value("${SKEP_PUBLIC_BASE_URL:http://localhost:8082}")
     private String publicBaseUrl;
 
-    public DocumentCollectionService(DocumentCollectionRequestRepository reqRepo, DocumentCollectionItemRepository itemRepo,
+    public DocumentCollectionService(DocumentCollectionRequestRepository reqRepo, DocumentCollectionTargetRepository targetRepo,
+                                     DocumentCollectionItemRepository itemRepo,
                                      DocumentTypeRepository typeRepo, DocumentRepository docRepo, DocumentService documentService,
                                      FileStorage storage, PdfMergeService pdfMerge, CollectionMailService mail,
                                      EquipmentRepository equipmentRepo, PersonRepository personRepo,
@@ -60,6 +73,7 @@ public class DocumentCollectionService {
                                      com.skep.company.CompanyService companyService,
                                      com.skep.alimtalk.AlimTalkService alimTalk) {
         this.reqRepo = reqRepo;
+        this.targetRepo = targetRepo;
         this.itemRepo = itemRepo;
         this.typeRepo = typeRepo;
         this.docRepo = docRepo;
@@ -75,24 +89,36 @@ public class DocumentCollectionService {
         this.alimTalk = alimTalk;
     }
 
+    /** 대상 참조(장비/인원) — 생성/추천 요청 검증 공용 키. */
+    private record OwnerRef(OwnerType type, Long id) {}
+
     // ── 작성자(인증) ────────────────────────────────────────
 
     public CollectionDtos.Response create(CollectionDtos.CreateRequest req, AuthenticatedUser actor) {
         if (actor.role() == Role.WORKER) throw ApiException.forbidden("FORBIDDEN", "권한이 없습니다");
-        if (req.ownerType() == null || req.ownerId() == null) {
-            throw ApiException.badRequest("OWNER_REQUIRED", "대상(장비/인원)을 지정하세요");
+        List<CollectionDtos.CreateTarget> targets = req.targets() == null ? List.of() : req.targets();
+        if (targets.isEmpty()) throw ApiException.badRequest("TARGETS_REQUIRED", "대상(장비/인원)을 1개 이상 지정하세요");
+
+        List<OwnerRef> refs = new ArrayList<>();
+        Set<OwnerRef> seen = new HashSet<>();
+        for (CollectionDtos.CreateTarget t : targets) {
+            if (t.ownerType() == null || t.ownerId() == null) {
+                throw ApiException.badRequest("OWNER_REQUIRED", "대상(장비/인원)을 지정하세요");
+            }
+            OwnerRef ref = new OwnerRef(t.ownerType(), t.ownerId());
+            if (!seen.add(ref)) {
+                throw ApiException.badRequest("DUPLICATE_TARGET", ownerLabel(ref) + " 가 중복 지정되었습니다");
+            }
+            if (nullToEmpty(t.requiredTypeIds()).isEmpty() && nullToEmpty(t.optionalTypeIds()).isEmpty()) {
+                throw ApiException.badRequest("NO_TYPES", ownerLabel(ref) + " 의 수집할 서류를 1개 이상 선택하세요");
+            }
+            refs.add(ref);
         }
-        ensureOwnsResource(req.ownerType(), req.ownerId(), actor);
-        List<Long> required = req.requiredTypeIds() == null ? List.of() : req.requiredTypeIds();
-        List<Long> optional = req.optionalTypeIds() == null ? List.of() : req.optionalTypeIds();
-        if (required.isEmpty() && optional.isEmpty()) {
-            throw ApiException.badRequest("NO_TYPES", "수집할 서류를 1개 이상 선택하세요");
-        }
+        ensureOwnsResources(refs, actor);
+
         DocumentCollectionRequest r = DocumentCollectionRequest.builder()
                 .token(genToken())
                 .tokenExpiresAt(LocalDateTime.now().plusDays(14))
-                .ownerType(req.ownerType())
-                .ownerId(req.ownerId())
                 .supplierCompanyId(actor.companyId())
                 .createdBy(actor.id())
                 .title(req.title())
@@ -101,9 +127,22 @@ public class DocumentCollectionService {
                 .recipientEmail(req.recipientEmail())
                 .build();
         reqRepo.save(r);
-        // 필수 → 선택 순으로, 각 타입의 sort_order 로 정렬 보존.
-        saveItems(r.getId(), req.ownerType(), required, true);
-        saveItems(r.getId(), req.ownerType(), optional, false);
+
+        // 선택된 서류타입을 한 번에 로드 (대상 N개 × 타입 M개 findById N+1 방지).
+        List<Long> typeIds = targets.stream()
+                .flatMap(t -> java.util.stream.Stream.concat(nullToEmpty(t.requiredTypeIds()).stream(), nullToEmpty(t.optionalTypeIds()).stream()))
+                .distinct().toList();
+        Map<Long, DocumentType> typeById = new HashMap<>();
+        for (DocumentType t : typeRepo.findAllById(typeIds)) typeById.put(t.getId(), t);
+
+        // 배열 순서 = sort_order. 대상마다 필수 → 선택 순, 각 타입의 sort_order 로 정렬 보존.
+        for (int i = 0; i < targets.size(); i++) {
+            CollectionDtos.CreateTarget t = targets.get(i);
+            DocumentCollectionTarget tg = targetRepo.save(DocumentCollectionTarget.builder()
+                    .requestId(r.getId()).ownerType(t.ownerType()).ownerId(t.ownerId()).sortOrder(i).build());
+            saveItems(typeById, tg, nullToEmpty(t.requiredTypeIds()), true);
+            saveItems(typeById, tg, nullToEmpty(t.optionalTypeIds()), false);
+        }
         return toResponse(r);
     }
 
@@ -115,7 +154,7 @@ public class DocumentCollectionService {
     @Transactional(readOnly = true)
     public CollectionDtos.SuggestResponse suggest(OwnerType ownerType, Long ownerId, AuthenticatedUser actor) {
         if (actor.role() == Role.WORKER) throw ApiException.forbidden("FORBIDDEN", "권한이 없습니다");
-        ensureOwnsResource(ownerType, ownerId, actor);
+        ensureOwnsResources(List.of(new OwnerRef(ownerType, ownerId)), actor);
         Map<Long, Boolean> requiredByTypeId;
         if (ownerType == OwnerType.EQUIPMENT) {
             Equipment e = equipmentRepo.findById(ownerId)
@@ -126,10 +165,57 @@ public class DocumentCollectionService {
                     .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "인원을 찾을 수 없습니다"));
             requiredByTypeId = personDocReq.requiredByDocTypeId(p.getRoles());
         }
+        return split(requiredByTypeId, typeRepo.findByAppliesToAndActiveOrderBySortOrderAscIdAsc(ownerType, true));
+    }
+
+    /** suggest 의 다중 대상판 — document_types 는 owner 유형당 1회, 권한 검사도 1회로 묶는다. */
+    @Transactional(readOnly = true)
+    public CollectionDtos.SuggestBatchResponse suggestBatch(CollectionDtos.SuggestBatchRequest req, AuthenticatedUser actor) {
+        if (actor.role() == Role.WORKER) throw ApiException.forbidden("FORBIDDEN", "권한이 없습니다");
+        List<CollectionDtos.SuggestTarget> targets = req == null || req.targets() == null ? List.of() : req.targets();
+        if (targets.isEmpty()) throw ApiException.badRequest("TARGETS_REQUIRED", "대상(장비/인원)을 1개 이상 지정하세요");
+        List<OwnerRef> refs = new ArrayList<>();
+        for (CollectionDtos.SuggestTarget t : targets) {
+            if (t.ownerType() == null || t.ownerId() == null) {
+                throw ApiException.badRequest("OWNER_REQUIRED", "대상(장비/인원)을 지정하세요");
+            }
+            refs.add(new OwnerRef(t.ownerType(), t.ownerId()));
+        }
+        ensureOwnsResources(refs, actor);
+
+        Map<OwnerType, List<DocumentType>> activeTypes = new EnumMap<>(OwnerType.class);
+        for (OwnerType ot : refs.stream().map(OwnerRef::type).distinct().toList()) {
+            activeTypes.put(ot, typeRepo.findByAppliesToAndActiveOrderBySortOrderAscIdAsc(ot, true));
+        }
+        Map<Long, Equipment> equipment = equipmentById(refs);
+        Map<Long, Person> persons = personById(refs);
+        // 같은 종류/역할이 반복돼도 요구사항 조회는 1회씩.
+        Map<String, Map<Long, Boolean>> byCategory = new HashMap<>();
+        Map<Set<PersonRole>, Map<Long, Boolean>> byRoles = new HashMap<>();
+
+        List<CollectionDtos.SuggestBatchResult> results = new ArrayList<>();
+        for (OwnerRef ref : refs) {
+            Map<Long, Boolean> requiredByTypeId;
+            if (ref.type() == OwnerType.EQUIPMENT) {
+                Equipment e = equipment.get(ref.id());
+                if (e == null) throw ApiException.notFound("NOT_FOUND", "장비를 찾을 수 없습니다: #" + ref.id());
+                requiredByTypeId = byCategory.computeIfAbsent(e.getCategory(), equipmentDocReq::requiredByDocTypeId);
+            } else {
+                Person p = persons.get(ref.id());
+                if (p == null) throw ApiException.notFound("NOT_FOUND", "인원을 찾을 수 없습니다: #" + ref.id());
+                requiredByTypeId = byRoles.computeIfAbsent(p.getRoles(), personDocReq::requiredByDocTypeId);
+            }
+            CollectionDtos.SuggestResponse s = split(requiredByTypeId, activeTypes.get(ref.type()));
+            results.add(new CollectionDtos.SuggestBatchResult(ref.type(), ref.id(), s.requiredTypeIds(), s.optionalTypeIds()));
+        }
+        return new CollectionDtos.SuggestBatchResponse(results);
+    }
+
+    /** 유형 설정(typeId→required)을 활성 서류 sort_order 순으로 필수/선택 분리. 설정 없는 서류는 제외. */
+    private static CollectionDtos.SuggestResponse split(Map<Long, Boolean> requiredByTypeId, List<DocumentType> activeTypes) {
         List<Long> required = new ArrayList<>();
         List<Long> optional = new ArrayList<>();
-        // 활성 서류를 sort_order 순으로 순회 → 반환 id 순서가 곧 관리자가 정한 순서.
-        for (DocumentType t : typeRepo.findByAppliesToAndActiveOrderBySortOrderAscIdAsc(ownerType, true)) {
+        for (DocumentType t : activeTypes) {
             Boolean req = requiredByTypeId.get(t.getId());
             if (req == null) continue;
             (req ? required : optional).add(t.getId());
@@ -137,31 +223,37 @@ public class DocumentCollectionService {
         return new CollectionDtos.SuggestResponse(required, optional);
     }
 
-    private void saveItems(Long requestId, OwnerType ownerType, List<Long> typeIds, boolean required) {
+    private void saveItems(Map<Long, DocumentType> typeById, DocumentCollectionTarget target, List<Long> typeIds, boolean required) {
         for (Long typeId : typeIds) {
-            DocumentType t = typeRepo.findById(typeId).orElse(null);
+            DocumentType t = typeById.get(typeId);
             if (t == null) continue;
-            if (t.getAppliesTo() != ownerType) {
-                throw ApiException.badRequest("TYPE_OWNER_MISMATCH", t.getName() + " 는 " + ownerType + " 서류가 아닙니다");
+            if (t.getAppliesTo() != target.getOwnerType()) {
+                throw ApiException.badRequest("TYPE_OWNER_MISMATCH", t.getName() + " 는 " + target.getOwnerType() + " 서류가 아닙니다");
             }
             itemRepo.save(DocumentCollectionItem.builder()
-                    .requestId(requestId).documentTypeId(typeId)
+                    .requestId(target.getRequestId()).targetId(target.getId()).documentTypeId(typeId)
                     .required(required).sortOrder(t.getSortOrder()).build());
         }
     }
 
     @Transactional(readOnly = true)
-    public List<CollectionDtos.Response> list(AuthenticatedUser actor) {
+    public List<CollectionDtos.SummaryResponse> list(AuthenticatedUser actor) {
         List<DocumentCollectionRequest> rows = actor.role() == Role.ADMIN
                 ? reqRepo.findAll().stream().sorted((a, b) -> Long.compare(b.getId(), a.getId())).toList()
                 : reqRepo.findBySupplierCompanyIdOrderByIdDesc(actor.companyId());
-        return rows.stream().map(this::toResponse).toList();
+        return toSummaries(rows);
     }
 
+    /** 특정 자원이 대상으로 포함된 요청 목록 — V118 부터 target 기준 조회. */
     @Transactional(readOnly = true)
-    public List<CollectionDtos.Response> listByOwner(OwnerType ownerType, Long ownerId, AuthenticatedUser actor) {
-        return reqRepo.findByOwnerTypeAndOwnerIdOrderByIdDesc(ownerType, ownerId).stream()
-                .filter(r -> canRead(actor, r)).map(this::toResponse).toList();
+    public List<CollectionDtos.SummaryResponse> listByOwner(OwnerType ownerType, Long ownerId, AuthenticatedUser actor) {
+        List<Long> reqIds = targetRepo.findByOwnerTypeAndOwnerId(ownerType, ownerId).stream()
+                .map(DocumentCollectionTarget::getRequestId).distinct().toList();
+        if (reqIds.isEmpty()) return List.of();
+        List<DocumentCollectionRequest> rows = reqRepo.findAllById(reqIds).stream()
+                .filter(r -> canRead(actor, r))
+                .sorted((a, b) -> Long.compare(b.getId(), a.getId())).toList();
+        return toSummaries(rows);
     }
 
     @Transactional(readOnly = true)
@@ -199,7 +291,7 @@ public class DocumentCollectionService {
         if (parts.isEmpty()) throw ApiException.badRequest("NO_DOCS", "합칠 서류가 없습니다");
 
         byte[] pdf = pdfMerge.merge(parts);
-        String ownerLabel = ownerLabel(r.getOwnerType(), r.getOwnerId());
+        String ownerLabel = ownerSummary(targetRepo.findByRequestIdOrderBySortOrderAscIdAsc(r.getId()));
         String subject = req != null && req.subject() != null && !req.subject().isBlank()
                 ? req.subject().trim()
                 : "[서류 취합] " + (r.getTitle() != null && !r.getTitle().isBlank() ? r.getTitle() : ownerLabel);
@@ -230,29 +322,41 @@ public class DocumentCollectionService {
     @Transactional(readOnly = true)
     public CollectionDtos.PublicResponse publicGet(String token) {
         DocumentCollectionRequest r = requireToken(token);
+        List<DocumentCollectionTarget> targets = targetRepo.findByRequestIdOrderBySortOrderAscIdAsc(r.getId());
         List<DocumentCollectionItem> items = itemRepo.findByRequestIdOrderBySortOrderAscIdAsc(r.getId());
-        List<CollectionDtos.PublicItem> pis = items.stream().map(it -> {
-            DocumentType t = typeRepo.findById(it.getDocumentTypeId()).orElse(null);
-            String fn = null;
-            if (it.getUploadedDocumentId() != null) {
-                Document d = docRepo.findById(it.getUploadedDocumentId()).orElse(null);
-                fn = d != null ? d.getFileName() : null;
-            }
-            return new CollectionDtos.PublicItem(it.getDocumentTypeId(),
-                    t != null ? t.getName() : "(삭제됨)", it.isRequired(), it.getUploadedDocumentId() != null, fn,
-                    t != null ? com.skep.document.DocumentTypeService.sampleImageUrl(t) : null);
-        }).collect(Collectors.toList());
-        return new CollectionDtos.PublicResponse(r.getTitle(), r.getOwnerType(),
-                ownerLabel(r.getOwnerType(), r.getOwnerId()), r.getRecipientName(), r.getStatus(), r.isExpired(), pis);
+        Map<Long, DocumentType> types = typesOf(items);
+        Map<Long, String> fileNames = fileNamesOf(items);
+        Map<Long, String> labels = labelsByTargetId(targets);
+        Map<Long, List<DocumentCollectionItem>> byTarget = groupByTarget(items);
+
+        List<CollectionDtos.PublicTarget> pts = targets.stream().map(tg -> {
+            List<DocumentCollectionItem> own = byTarget.getOrDefault(tg.getId(), List.of());
+            List<CollectionDtos.PublicItem> pis = own.stream().map(it -> {
+                DocumentType t = types.get(it.getDocumentTypeId());
+                return new CollectionDtos.PublicItem(it.getId(), it.getDocumentTypeId(),
+                        t != null ? t.getName() : "(삭제됨)", it.isRequired(), it.getUploadedDocumentId() != null,
+                        fileNames.get(it.getUploadedDocumentId()),
+                        t != null ? com.skep.document.DocumentTypeService.sampleImageUrl(t) : null);
+            }).toList();
+            return new CollectionDtos.PublicTarget(tg.getId(), tg.getOwnerType(), labels.get(tg.getId()),
+                    own.size(), uploadedCount(own), requiredRemaining(own), pis);
+        }).toList();
+
+        return new CollectionDtos.PublicResponse(r.getTitle(), r.getRecipientName(), r.getStatus(), r.isExpired(),
+                items.size(), uploadedCount(items), requiredRemaining(items), pts);
     }
 
-    public void publicUpload(String token, Long documentTypeId, MultipartFile file) {
+    /** 항목(item) 단위 업로드 — 대상별로 같은 서류종류가 여러 건일 수 있어 documentTypeId 로는 특정 불가. */
+    public void publicUpload(String token, Long itemId, MultipartFile file) {
         DocumentCollectionRequest r = requireToken(token);
         if (r.isExpired()) throw ApiException.badRequest("EXPIRED", "링크가 만료되었습니다");
-        DocumentCollectionItem item = itemRepo.findByRequestIdOrderBySortOrderAscIdAsc(r.getId()).stream()
-                .filter(it -> it.getDocumentTypeId().equals(documentTypeId)).findFirst()
+        DocumentCollectionItem item = itemRepo.findById(itemId)
+                .filter(it -> it.getRequestId().equals(r.getId()))
                 .orElseThrow(() -> ApiException.badRequest("ITEM_NOT_IN_REQUEST", "요청에 없는 서류입니다"));
-        Document doc = documentService.uploadViaCollection(r.getOwnerType(), r.getOwnerId(), documentTypeId, null, file);
+        DocumentCollectionTarget target = targetRepo.findById(item.getTargetId())
+                .orElseThrow(() -> ApiException.badRequest("ITEM_NOT_IN_REQUEST", "요청에 없는 서류입니다"));
+        Document doc = documentService.uploadViaCollection(target.getOwnerType(), target.getOwnerId(),
+                item.getDocumentTypeId(), null, file);
         item.attachDocument(doc.getId());
     }
 
@@ -264,6 +368,8 @@ public class DocumentCollectionService {
 
     // ── helpers ──────────────────────────────────────────────
 
+    private static <T> List<T> nullToEmpty(List<T> v) { return v == null ? List.of() : v; }
+
     private DocumentCollectionRequest requireToken(String token) {
         DocumentCollectionRequest r = reqRepo.findByToken(token)
                 .orElseThrow(() -> ApiException.notFound("INVALID_TOKEN", "유효하지 않은 링크입니다"));
@@ -272,22 +378,40 @@ public class DocumentCollectionService {
         return r;
     }
 
-    /** create 대상(장비/인원)이 actor 회사 소유 자원인지 검증. ADMIN 예외. */
-    private void ensureOwnsResource(OwnerType ownerType, Long ownerId, AuthenticatedUser actor) {
+    /** 대상들이 actor 회사 소유 자원인지 검증 — selfAndChildren·자원 조회 모두 배치 1회. ADMIN 예외. */
+    private void ensureOwnsResources(List<OwnerRef> refs, AuthenticatedUser actor) {
+        for (OwnerRef ref : refs) {
+            if (ref.type() != OwnerType.EQUIPMENT && ref.type() != OwnerType.PERSON) {
+                throw ApiException.badRequest("BAD_OWNER_TYPE", "지원하지 않는 대상 유형입니다: " + ref.type());
+            }
+        }
         if (actor.role() == Role.ADMIN) return;
-        Long supplierId;
-        if (ownerType == OwnerType.EQUIPMENT) {
-            supplierId = equipmentRepo.findById(ownerId).map(Equipment::getSupplierId).orElse(null);
-        } else if (ownerType == OwnerType.PERSON) {
-            supplierId = personRepo.findById(ownerId).map(Person::getSupplierId).orElse(null);
-        } else {
-            throw ApiException.badRequest("BAD_OWNER_TYPE", "지원하지 않는 대상 유형입니다");
-        }
         // V77: 본인 + 직속 자식(부모→자식 단방향) 자원까지 허용. 생성 명의(supplierCompanyId)는 부모 유지.
-        if (supplierId == null || actor.companyId() == null
-                || !companyService.selfAndChildren(actor.companyId()).contains(supplierId)) {
-            throw ApiException.forbidden("FORBIDDEN", "본인/하위 공급사 자원만 서류수집을 생성할 수 있습니다");
+        List<Long> allowed = companyService.selfAndChildren(actor.companyId());
+        Map<Long, Equipment> equipment = equipmentById(refs);
+        Map<Long, Person> persons = personById(refs);
+        for (OwnerRef ref : refs) {
+            Long supplierId = ref.type() == OwnerType.EQUIPMENT
+                    ? java.util.Optional.ofNullable(equipment.get(ref.id())).map(Equipment::getSupplierId).orElse(null)
+                    : java.util.Optional.ofNullable(persons.get(ref.id())).map(Person::getSupplierId).orElse(null);
+            if (supplierId == null || actor.companyId() == null || !allowed.contains(supplierId)) {
+                throw ApiException.forbidden("FORBIDDEN", ownerLabel(ref) + " 는 본인/하위 공급사 자원이 아닙니다");
+            }
         }
+    }
+
+    private Map<Long, Equipment> equipmentById(List<OwnerRef> refs) {
+        List<Long> ids = refs.stream().filter(x -> x.type() == OwnerType.EQUIPMENT).map(OwnerRef::id).distinct().toList();
+        Map<Long, Equipment> m = new HashMap<>();
+        for (Equipment e : equipmentRepo.findAllById(ids)) m.put(e.getId(), e);
+        return m;
+    }
+
+    private Map<Long, Person> personById(List<OwnerRef> refs) {
+        List<Long> ids = refs.stream().filter(x -> x.type() == OwnerType.PERSON).map(OwnerRef::id).distinct().toList();
+        Map<Long, Person> m = new HashMap<>();
+        for (Person p : personRepo.findAllById(ids)) m.put(p.getId(), p);
+        return m;
     }
 
     /** 쓰기(취소/발송/링크전송) 권한 — 본인 회사 고정. V77 자식 확장 금지. */
@@ -311,16 +435,79 @@ public class DocumentCollectionService {
         throw ApiException.conflict("TOKEN_EXHAUSTED", "토큰 생성에 반복 실패했습니다");
     }
 
-    private String ownerLabel(OwnerType ownerType, Long ownerId) {
-        if (ownerType == OwnerType.EQUIPMENT) {
-            return equipmentRepo.findById(ownerId)
-                    .map(e -> e.getVehicleNo() != null ? e.getVehicleNo() : (e.getModel() != null ? e.getModel() : "장비 #" + ownerId))
-                    .orElse("장비 #" + ownerId);
+    /** 단건 라벨 — 검증 실패 메시지용(정상 경로는 labelsByTargetId 배치 조회). */
+    private String ownerLabel(OwnerRef ref) {
+        if (ref.type() == OwnerType.EQUIPMENT) {
+            return equipmentRepo.findById(ref.id()).map(DocumentCollectionService::equipmentLabel).orElse("장비 #" + ref.id());
         }
-        if (ownerType == OwnerType.PERSON) {
-            return personRepo.findById(ownerId).map(Person::getName).orElse("인원 #" + ownerId);
+        if (ref.type() == OwnerType.PERSON) {
+            return personRepo.findById(ref.id()).map(Person::getName).orElse("인원 #" + ref.id());
         }
-        return ownerType + " #" + ownerId;
+        return ref.type() + " #" + ref.id();
+    }
+
+    private static String equipmentLabel(Equipment e) {
+        if (e.getVehicleNo() != null) return e.getVehicleNo();
+        return e.getModel() != null ? e.getModel() : "장비 #" + e.getId();
+    }
+
+    /** targetId → 표시명. 장비/인원 배치 조회로 목록·상세 N+1 제거. */
+    private Map<Long, String> labelsByTargetId(List<DocumentCollectionTarget> targets) {
+        List<OwnerRef> refs = targets.stream().map(t -> new OwnerRef(t.getOwnerType(), t.getOwnerId())).toList();
+        Map<Long, Equipment> equipment = equipmentById(refs);
+        Map<Long, Person> persons = personById(refs);
+        Map<Long, String> out = new HashMap<>();
+        for (DocumentCollectionTarget t : targets) {
+            String label;
+            if (t.getOwnerType() == OwnerType.EQUIPMENT) {
+                Equipment e = equipment.get(t.getOwnerId());
+                label = e != null ? equipmentLabel(e) : "장비 #" + t.getOwnerId();
+            } else {
+                Person p = persons.get(t.getOwnerId());
+                label = p != null ? p.getName() : "인원 #" + t.getOwnerId();
+            }
+            out.put(t.getId(), label);
+        }
+        return out;
+    }
+
+    /** "12가3456 외 4건" — 목록/메일 제목용 대상 요약. */
+    private String ownerSummary(List<DocumentCollectionTarget> targets) {
+        return ownerSummary(targets, labelsByTargetId(targets));
+    }
+
+    private static String ownerSummary(List<DocumentCollectionTarget> targets, Map<Long, String> labels) {
+        if (targets.isEmpty()) return "(대상 없음)";
+        String first = labels.get(targets.get(0).getId());
+        return targets.size() == 1 ? first : first + " 외 " + (targets.size() - 1) + "건";
+    }
+
+    private Map<Long, DocumentType> typesOf(List<DocumentCollectionItem> items) {
+        List<Long> ids = items.stream().map(DocumentCollectionItem::getDocumentTypeId).distinct().toList();
+        Map<Long, DocumentType> m = new HashMap<>();
+        for (DocumentType t : typeRepo.findAllById(ids)) m.put(t.getId(), t);
+        return m;
+    }
+
+    private Map<Long, String> fileNamesOf(List<DocumentCollectionItem> items) {
+        List<Long> ids = items.stream().map(DocumentCollectionItem::getUploadedDocumentId)
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, String> m = new HashMap<>();
+        for (Document d : docRepo.findAllById(ids)) m.put(d.getId(), d.getFileName());
+        return m;
+    }
+
+    /** sort_order 정렬된 items 를 target 별로 분배 — 그룹 내 순서 보존. */
+    private static Map<Long, List<DocumentCollectionItem>> groupByTarget(List<DocumentCollectionItem> items) {
+        return items.stream().collect(Collectors.groupingBy(DocumentCollectionItem::getTargetId));
+    }
+
+    private static int uploadedCount(List<DocumentCollectionItem> items) {
+        return (int) items.stream().filter(i -> i.getUploadedDocumentId() != null).count();
+    }
+
+    private static int requiredRemaining(List<DocumentCollectionItem> items) {
+        return (int) items.stream().filter(i -> i.isRequired() && i.getUploadedDocumentId() == null).count();
     }
 
     private byte[] readBytes(String key) {
@@ -337,22 +524,59 @@ public class DocumentCollectionService {
     }
 
     private CollectionDtos.Response toResponse(DocumentCollectionRequest r) {
+        List<DocumentCollectionTarget> targets = targetRepo.findByRequestIdOrderBySortOrderAscIdAsc(r.getId());
         List<DocumentCollectionItem> items = itemRepo.findByRequestIdOrderBySortOrderAscIdAsc(r.getId());
-        List<CollectionDtos.ItemResponse> irs = items.stream().map(it -> {
-            DocumentType t = typeRepo.findById(it.getDocumentTypeId()).orElse(null);
-            String fn = null;
-            if (it.getUploadedDocumentId() != null) {
-                Document d = docRepo.findById(it.getUploadedDocumentId()).orElse(null);
-                fn = d != null ? d.getFileName() : null;
-            }
-            return new CollectionDtos.ItemResponse(it.getDocumentTypeId(),
-                    t != null ? t.getName() : "(삭제됨)", it.isRequired(), it.getSortOrder(),
-                    it.getUploadedDocumentId() != null, it.getUploadedDocumentId(), fn);
+        Map<Long, DocumentType> types = typesOf(items);
+        Map<Long, String> fileNames = fileNamesOf(items);
+        Map<Long, String> labels = labelsByTargetId(targets);
+        Map<Long, List<DocumentCollectionItem>> byTarget = groupByTarget(items);
+
+        List<CollectionDtos.TargetResponse> trs = targets.stream().map(tg -> {
+            List<DocumentCollectionItem> own = byTarget.getOrDefault(tg.getId(), List.of());
+            List<CollectionDtos.ItemResponse> irs = own.stream().map(it -> {
+                DocumentType t = types.get(it.getDocumentTypeId());
+                return new CollectionDtos.ItemResponse(it.getId(), it.getDocumentTypeId(),
+                        t != null ? t.getName() : "(삭제됨)", it.isRequired(), it.getSortOrder(),
+                        it.getUploadedDocumentId() != null, it.getUploadedDocumentId(),
+                        fileNames.get(it.getUploadedDocumentId()));
+            }).toList();
+            return new CollectionDtos.TargetResponse(tg.getId(), tg.getOwnerType(), tg.getOwnerId(),
+                    labels.get(tg.getId()), tg.getSortOrder(),
+                    own.size(), uploadedCount(own), requiredRemaining(own), irs);
         }).toList();
-        String publicUrl = publicBaseUrl + "/collect/" + r.getToken();
-        return new CollectionDtos.Response(r.getId(), r.getToken(), r.getOwnerType(), r.getOwnerId(),
-                ownerLabel(r.getOwnerType(), r.getOwnerId()), r.getTitle(),
+
+        return new CollectionDtos.Response(r.getId(), r.getToken(), r.getTitle(),
+                ownerSummary(targets, labels),
                 r.getRecipientName(), r.getRecipientPhone(), r.getRecipientEmail(),
-                r.getStatus(), r.getCreatedAt(), r.getSubmittedAt(), r.getSentAt(), publicUrl, irs);
+                r.getStatus(), r.getCreatedAt(), r.getSubmittedAt(), r.getSentAt(),
+                publicBaseUrl + "/collect/" + r.getToken(),
+                targets.size(), items.size(), uploadedCount(items), trs);
+    }
+
+    /** 목록용 — 요청 N건의 target/item 을 각각 1쿼리로 모아 카운트만 집계. */
+    private List<CollectionDtos.SummaryResponse> toSummaries(List<DocumentCollectionRequest> rows) {
+        if (rows.isEmpty()) return List.of();
+        List<Long> ids = rows.stream().map(DocumentCollectionRequest::getId).toList();
+        List<DocumentCollectionTarget> targets = targetRepo.findByRequestIdIn(ids).stream()
+                .sorted(Comparator.comparingInt(DocumentCollectionTarget::getSortOrder)
+                        .thenComparing(DocumentCollectionTarget::getId))
+                .toList();
+        List<DocumentCollectionItem> items = itemRepo.findByRequestIdInOrderBySortOrderAscIdAsc(ids);
+        Map<Long, String> labels = labelsByTargetId(targets);
+        Map<Long, List<DocumentCollectionTarget>> tByReq = targets.stream()
+                .collect(Collectors.groupingBy(DocumentCollectionTarget::getRequestId));
+        Map<Long, List<DocumentCollectionItem>> iByReq = items.stream()
+                .collect(Collectors.groupingBy(DocumentCollectionItem::getRequestId));
+
+        return rows.stream().map(r -> {
+            List<DocumentCollectionTarget> ts = tByReq.getOrDefault(r.getId(), List.of());
+            List<DocumentCollectionItem> is = iByReq.getOrDefault(r.getId(), List.of());
+            return new CollectionDtos.SummaryResponse(r.getId(), r.getToken(), r.getTitle(),
+                    ownerSummary(ts, labels),
+                    r.getRecipientName(), r.getRecipientPhone(), r.getRecipientEmail(),
+                    r.getStatus(), r.getCreatedAt(), r.getSubmittedAt(), r.getSentAt(),
+                    publicBaseUrl + "/collect/" + r.getToken(),
+                    ts.size(), is.size(), uploadedCount(is));
+        }).toList();
     }
 }

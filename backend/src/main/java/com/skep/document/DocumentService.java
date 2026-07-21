@@ -310,9 +310,8 @@ public class DocumentService {
         if (type.getAppliesTo() != ownerType) {
             throw ApiException.badRequest("DOCUMENT_TYPE_OWNER_MISMATCH", type.getName() + " 는 " + ownerType + " 서류가 아닙니다");
         }
-        if (type.isHasExpiry() && expiryDate == null) {
-            throw ApiException.badRequest("EXPIRY_REQUIRED", type.getName() + " 는 만료일 입력 필수입니다");
-        }
+        // 만료일 검증은 하지 않는다 — 수집 링크의 담당자(무로그인)는 만료일을 모르고 올린다.
+        // 정책: 만료일은 업로드 후 우리 직원이 서류관리에서 채운다. (일반 업로드 경로 upload() 의 검증은 그대로 유지)
         String ct = file.getContentType() != null ? file.getContentType().toLowerCase() : "";
         if (!ALLOWED_CONTENT_TYPES.contains(ct)) {
             throw ApiException.badRequest("UNSUPPORTED_FILE_TYPE", "지원하지 않는 파일 형식입니다 (PDF / 이미지 / Word / Excel 만 가능)");

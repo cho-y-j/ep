@@ -1,6 +1,5 @@
 package com.skep.collection;
 
-import com.skep.document.OwnerType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -25,13 +24,6 @@ public class DocumentCollectionRequest {
 
     @Column(name = "token_expires_at", nullable = false)
     private LocalDateTime tokenExpiresAt;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "owner_type", nullable = false, length = 16)
-    private OwnerType ownerType;
-
-    @Column(name = "owner_id", nullable = false)
-    private Long ownerId;
 
     @Column(name = "supplier_company_id")
     private Long supplierCompanyId;
@@ -65,13 +57,11 @@ public class DocumentCollectionRequest {
     private LocalDateTime sentAt;
 
     @Builder
-    private DocumentCollectionRequest(String token, LocalDateTime tokenExpiresAt, OwnerType ownerType, Long ownerId,
+    private DocumentCollectionRequest(String token, LocalDateTime tokenExpiresAt,
                                       Long supplierCompanyId, Long createdBy, String title,
                                       String recipientName, String recipientPhone, String recipientEmail) {
         this.token = token;
         this.tokenExpiresAt = tokenExpiresAt;
-        this.ownerType = ownerType;
-        this.ownerId = ownerId;
         this.supplierCompanyId = supplierCompanyId;
         this.createdBy = createdBy;
         this.title = title;

@@ -159,8 +159,35 @@ public class EquipmentController {
                 .toList();
     }
 
+    /**
+     * V118: 장비 여러 대의 기본 조종원을 한 번에 — 서류수집 대상 다중선택용.
+     * 장비 1대에 교대조 N명이 붙으므로 전원을 반환한다(priority 순, 없으면 operator_person_id 폴백).
+     */
+    @PostMapping("/default-operators")
+    public DefaultOperatorsBatchResponse defaultOperatorsBatch(@RequestBody DefaultOperatorsBatchRequest req,
+                                                               @CurrentUser AuthenticatedUser actor) {
+        var byEquipment = service.defaultOperatorsByEquipmentIds(req.equipmentIds(), actor);
+        var nameMap = persons.findAllById(byEquipment.values().stream().flatMap(List::stream).distinct().toList())
+                .stream().collect(Collectors.toMap(p -> p.getId(), p -> p.getName()));
+        var results = byEquipment.entrySet().stream()
+                .map(en -> new DefaultOperatorsBatchResult(en.getKey(), en.getValue().stream()
+                        .map(pid -> new BatchOperator(pid, nameMap.get(pid))).toList()))
+                .toList();
+        return new DefaultOperatorsBatchResponse(results);
+    }
+
     public record SetDefaultOperatorsRequest(
             @com.fasterxml.jackson.annotation.JsonProperty("person_ids") List<Long> personIds) {}
 
     public record DefaultOperatorItem(Long id, Long personId, String personName, Integer priority) {}
+
+    public record DefaultOperatorsBatchRequest(
+            @com.fasterxml.jackson.annotation.JsonProperty("equipment_ids") List<Long> equipmentIds) {}
+
+    /** 이름까지 함께 — 프론트가 대상 칩/카드 라벨을 그리려고 인원 API 를 또 부르지 않게. */
+    public record BatchOperator(Long personId, String personName) {}
+
+    public record DefaultOperatorsBatchResult(Long equipmentId, List<BatchOperator> operators) {}
+
+    public record DefaultOperatorsBatchResponse(List<DefaultOperatorsBatchResult> results) {}
 }

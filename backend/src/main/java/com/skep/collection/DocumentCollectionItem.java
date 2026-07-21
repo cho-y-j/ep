@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/** 서류 수집 요청에 포함된 서류 1종 (필수/선택 + 업로드된 문서 연결). */
+/** 수집 요청의 대상 1건에 포함된 서류 1종 (필수/선택 + 업로드된 문서 연결). */
 @Entity
 @Table(name = "document_collection_item")
 @Getter
@@ -19,8 +19,12 @@ public class DocumentCollectionItem {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** V118: target 소속이지만 요청 단위 조회 편의로 유지. */
     @Column(name = "request_id", nullable = false)
     private Long requestId;
+
+    @Column(name = "target_id", nullable = false)
+    private Long targetId;
 
     @Column(name = "document_type_id", nullable = false)
     private Long documentTypeId;
@@ -38,8 +42,9 @@ public class DocumentCollectionItem {
     private LocalDateTime createdAt;
 
     @Builder
-    private DocumentCollectionItem(Long requestId, Long documentTypeId, boolean required, int sortOrder) {
+    private DocumentCollectionItem(Long requestId, Long targetId, Long documentTypeId, boolean required, int sortOrder) {
         this.requestId = requestId;
+        this.targetId = targetId;
         this.documentTypeId = documentTypeId;
         this.required = required;
         this.sortOrder = sortOrder;

@@ -3,36 +3,30 @@ import { AxiosError } from 'axios';
 import AppShell from '../../components/layout/AppShell';
 import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
-import type { DocumentTypeResponse, OwnerType } from '../../types/document';
-import type { EquipmentResponse } from '../../types/equipment';
-import { EQUIPMENT_CATEGORY_LABEL } from '../../types/equipment';
-import type { PersonResponse } from '../../types/person';
-import { fetchSuggestedSel, type Sel } from './suggest';
+import type { CollectionSummary } from '../../types/collection';
+import type { DocumentTypeResponse } from '../../types/document';
+import TargetDocEditor from './TargetDocEditor';
+import TargetPicker from './TargetPicker';
+import { fetchSuggestedSelBatch, type Sel } from './suggest';
+import { targetKey, type PickedTarget } from './target';
 
-type Item = { document_type_id: number; document_type_name: string; required: boolean; uploaded: boolean; };
-type CollectionResponse = {
-  id: number; token: string; status: string; title?: string | null; owner_type: OwnerType;
-  owner_name?: string | null; recipient_name?: string | null;
-  recipient_phone?: string | null; public_url: string; items: Item[];
-};
-
-const equipLabel = (e: EquipmentResponse) => e.vehicle_no || e.model || EQUIPMENT_CATEGORY_LABEL[e.category] || `장비 #${e.id}`;
+const pickIds = (s: Sel, mode: 'required' | 'optional') =>
+  Object.entries(s).filter(([, v]) => v === mode).map(([k]) => Number(k));
 
 export default function DocumentCollectionPage() {
-  const [requests, setRequests] = useState<CollectionResponse[]>([]);
-  const [equipment, setEquipment] = useState<EquipmentResponse[]>([]);
-  const [persons, setPersons] = useState<PersonResponse[]>([]);
+  const [requests, setRequests] = useState<CollectionSummary[]>([]);
   const [typesEq, setTypesEq] = useState<DocumentTypeResponse[]>([]);
   const [typesPe, setTypesPe] = useState<DocumentTypeResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // 새 요청 폼
+  // 새 요청 폼 — 대상 고르기 → 대상별 서류 확인 2단계.
   const [showNew, setShowNew] = useState(false);
-  const [ownerType, setOwnerType] = useState<OwnerType>('EQUIPMENT');
-  const [ownerId, setOwnerId] = useState<number | ''>('');
-  const [sel, setSel] = useState<Sel>({});
+  const [step, setStep] = useState<'pick' | 'docs'>('pick');
+  const [targets, setTargets] = useState<PickedTarget[]>([]);
+  const [sel, setSel] = useState<Record<string, Sel>>({});
+  const [suggested, setSuggested] = useState<Record<string, Sel>>({});
   const [recipientName, setRecipientName] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
   const [title, setTitle] = useState('');
@@ -41,20 +35,15 @@ export default function DocumentCollectionPage() {
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  const types = ownerType === 'EQUIPMENT' ? typesEq : typesPe;
-
   async function reload() {
     setLoading(true);
     try {
-      const [r, eq, pe, te, tp] = await Promise.all([
-        api.get<CollectionResponse[]>('/api/document-collections'),
-        api.get<EquipmentResponse[]>('/api/equipment'),
-        api.get<{ content: PersonResponse[] }>('/api/persons', { params: { size: 500 } }),
+      const [r, te, tp] = await Promise.all([
+        api.get<CollectionSummary[]>('/api/document-collections'),
         api.get<DocumentTypeResponse[]>('/api/document-types', { params: { appliesTo: 'EQUIPMENT' } }),
         api.get<DocumentTypeResponse[]>('/api/document-types', { params: { appliesTo: 'PERSON' } }),
       ]);
-      setRequests(r.data); setEquipment(eq.data); setPersons(pe.data.content);
-      setTypesEq(te.data); setTypesPe(tp.data);
+      setRequests(r.data); setTypesEq(te.data); setTypesPe(tp.data);
       setError(null);
     } catch {
       setError('불러오기 실패');
@@ -62,15 +51,36 @@ export default function DocumentCollectionPage() {
   }
   useEffect(() => { void reload(); }, []);
 
-  // 대상을 고르면 그 자원의 유형(장비종류/인력역할)에 설정된 필수·선택 서류를 자동 체크.
-  useEffect(() => {
-    if (!ownerId) { setSel({}); return; }
-    let alive = true;
-    void fetchSuggestedSel(ownerType, ownerId).then((s) => { if (alive) setSel(s); });
-    return () => { alive = false; };
-  }, [ownerType, ownerId]);
+  /** 선택 확정 — 아직 제안을 못 받은 대상만 모아 suggest-batch 1회. 이미 손댄 대상의 편집은 보존. */
+  async function confirmTargets() {
+    const missing = targets.filter((t) => suggested[targetKey(t)] === undefined);
+    setBusy(true); setError(null);
+    try {
+      if (missing.length > 0) {
+        const got = await fetchSuggestedSelBatch(missing);
+        setSuggested((s) => ({ ...s, ...got }));
+        setSel((s) => ({ ...got, ...s }));
+      }
+      setStep('docs');
+    } catch (err) {
+      setError(err instanceof AxiosError ? (err.response?.data?.message ?? '서류 자동 선택 실패') : '서류 자동 선택 실패');
+    } finally { setBusy(false); }
+  }
 
-  const selectedCount = useMemo(() => Object.values(sel).filter((v) => v !== 'none').length, [sel]);
+  const emptyCount = useMemo(
+    () => targets.filter((t) => {
+      const s = sel[targetKey(t)] ?? {};
+      return pickIds(s, 'required').length + pickIds(s, 'optional').length === 0;
+    }).length,
+    [targets, sel],
+  );
+  const itemTotal = useMemo(
+    () => targets.reduce((n, t) => {
+      const s = sel[targetKey(t)] ?? {};
+      return n + pickIds(s, 'required').length + pickIds(s, 'optional').length;
+    }, 0),
+    [targets, sel],
+  );
 
   const statusOptions = useMemo(
     () => [...new Set(requests.map((r) => r.status))].map((v) => ({ value: v, label: v })),
@@ -79,25 +89,34 @@ export default function DocumentCollectionPage() {
   const qLower = q.trim().toLowerCase();
   const shownRequests = requests.filter((r) => {
     if (statusFilter && r.status !== statusFilter) return false;
-    if (qLower && !`${r.owner_name ?? ''} ${r.title ?? ''} ${r.recipient_name ?? ''}`.toLowerCase().includes(qLower)) return false;
+    if (qLower && !`${r.owner_summary ?? ''} ${r.title ?? ''} ${r.recipient_name ?? ''}`.toLowerCase().includes(qLower)) return false;
     return true;
   });
 
+  function resetForm() {
+    setShowNew(false); setStep('pick'); setTargets([]); setSel({}); setSuggested({});
+    setTitle(''); setRecipientName(''); setRecipientPhone('');
+  }
+
   async function create() {
-    if (!ownerId) { setError('대상(장비/인원)을 선택하세요'); return; }
-    const requiredTypeIds = Object.entries(sel).filter(([, v]) => v === 'required').map(([k]) => Number(k));
-    const optionalTypeIds = Object.entries(sel).filter(([, v]) => v === 'optional').map(([k]) => Number(k));
-    if (requiredTypeIds.length + optionalTypeIds.length === 0) { setError('서류를 1개 이상 선택하세요'); return; }
+    if (targets.length === 0) { setError('대상(장비/인원)을 1개 이상 선택하세요'); return; }
+    if (emptyCount > 0) { setError('수집할 서류가 0건인 대상이 있습니다'); return; }
     setBusy(true); setError(null);
     try {
       await api.post('/api/document-collections', {
-        owner_type: ownerType, owner_id: ownerId,
-        required_type_ids: requiredTypeIds, optional_type_ids: optionalTypeIds,
         title: title.trim() || null,
         recipient_name: recipientName.trim() || null,
         recipient_phone: recipientPhone.trim() || null,
+        // 배열 순서 = sort_order (공개 화면에 이 순서로 노출된다)
+        targets: targets.map((t) => {
+          const s = sel[targetKey(t)] ?? {};
+          return {
+            owner_type: t.owner_type, owner_id: t.owner_id,
+            required_type_ids: pickIds(s, 'required'), optional_type_ids: pickIds(s, 'optional'),
+          };
+        }),
       });
-      setShowNew(false); setTitle(''); setRecipientName(''); setRecipientPhone('');
+      resetForm();
       await reload();
     } catch (err) {
       setError(err instanceof AxiosError ? (err.response?.data?.message ?? '생성 실패') : '생성 실패');
@@ -108,7 +127,7 @@ export default function DocumentCollectionPage() {
     try { await navigator.clipboard.writeText(url); alert('링크를 복사했습니다.'); }
     catch { window.prompt('아래 링크를 복사하세요', url); }
   }
-  async function sendSms(req: CollectionResponse) {
+  async function sendSms(req: CollectionSummary) {
     setBusy(true); setError(null);
     try {
       const r = await api.post<{ status?: string }>(`/api/document-collections/${req.id}/send-link`);
@@ -123,9 +142,11 @@ export default function DocumentCollectionPage() {
       <div className="space-y-5">
         <PageHeader
           title="서류 수집 요청"
-          subtitle="차량주인·인원에게 공개 링크(복사·문자)를 보내 서류를 받습니다. 대상을 고르면 그 종류에 설정된 서류가 자동 선택됩니다."
+          subtitle="장비·인력을 한 번에 골라 링크 1개로 서류를 받습니다. 장비를 고르면 그 장비의 조종원(교대조 전원)도 함께 담기고, 대상마다 종류에 맞는 서류가 자동 선택됩니다."
           actions={
-            <button onClick={() => setShowNew((v) => !v)} className="btn-primary">{showNew ? '닫기' : '+ 새 수집 요청'}</button>
+            <button onClick={() => (showNew ? resetForm() : setShowNew(true))} className="btn-primary">
+              {showNew ? '닫기' : '+ 새 수집 요청'}
+            </button>
           }
         />
 
@@ -133,65 +154,44 @@ export default function DocumentCollectionPage() {
 
         {showNew && (
           <div className="card space-y-4 p-5">
-            <h2 className="text-sm font-bold text-slate-800">새 요청</h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">대상 종류</span>
-                <div className="mt-1 inline-flex overflow-hidden rounded-lg border border-slate-300">
-                  {(['EQUIPMENT', 'PERSON'] as const).map((t) => (
-                    <button key={t} type="button" onClick={() => { setOwnerType(t); setOwnerId(''); }}
-                      className={`px-4 py-2 text-sm font-semibold ${ownerType === t ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
-                      {t === 'EQUIPMENT' ? '장비(차량)' : '인원'}
-                    </button>
-                  ))}
+            {step === 'pick' ? (
+              <>
+                <h2 className="text-sm font-bold text-slate-800">1단계 — 대상 고르기</h2>
+                <TargetPicker value={targets} onChange={setTargets} />
+                <button onClick={confirmTargets} disabled={busy || targets.length === 0}
+                  className="btn-primary w-full disabled:opacity-50">
+                  {busy ? '처리 중…' : `다음: 대상별 서류 확인 (${targets.length}건)`}
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-slate-800">2단계 — 대상별 수집 서류</h2>
+                  <button onClick={() => setStep('pick')} className="text-xs font-semibold text-brand-700 hover:underline">
+                    ← 대상 다시 고르기
+                  </button>
                 </div>
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">대상 선택</span>
-                <select value={ownerId} onChange={(e) => setOwnerId(e.target.value ? Number(e.target.value) : '')} className="input mt-1 bg-white">
-                  <option value="">— 선택 —</option>
-                  {ownerType === 'EQUIPMENT'
-                    ? equipment.map((e) => <option key={e.id} value={e.id}>{equipLabel(e)}{e.is_external ? ' (외부)' : ''}</option>)
-                    : persons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </label>
-            </div>
+                <TargetDocEditor
+                  targets={targets} sel={sel} suggested={suggested}
+                  onChange={(key, next) => setSel((s) => ({ ...s, [key]: next }))}
+                  typesByOwner={{ EQUIPMENT: typesEq, PERSON: typesPe }}
+                />
 
-            <div>
-              <span className="text-sm font-medium text-slate-700">수집할 서류</span>
-              <div className="mt-1 divide-y divide-slate-100 rounded-lg border border-slate-200">
-                {types.length === 0 ? <p className="p-3 text-xs text-slate-400">서류 종류가 없습니다.</p> :
-                  types.map((ty) => (
-                    <div key={ty.id} className="flex items-center justify-between px-3 py-2">
-                      <span className="text-sm text-slate-700">{ty.name}</span>
-                      <div className="inline-flex overflow-hidden rounded-md border border-slate-300 text-xs">
-                        {(['none', 'required', 'optional'] as const).map((v) => (
-                          <button key={v} type="button" onClick={() => setSel((s) => ({ ...s, [ty.id]: v }))}
-                            className={`px-2.5 py-1 font-semibold border-r border-slate-200 last:border-r-0 ${
-                              (sel[ty.id] ?? 'none') === v
-                                ? v === 'required' ? 'bg-rose-600 text-white' : v === 'optional' ? 'bg-amber-500 text-white' : 'bg-slate-500 text-white'
-                                : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
-                            {v === 'none' ? '제외' : v === 'required' ? '필수' : '선택'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-sm font-medium text-slate-700">받는사람 <span className="text-xs font-normal text-slate-400">— 전부 선택 (비워도 됩니다)</span></div>
-              <div className="grid grid-cols-2 gap-2">
-                <input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="이름 (선택)" className="input" />
-                <input value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)} placeholder="010-1234-5678 (하이픈 무관, 선택)" className="input" />
-                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목 (선택)" className="input" />
-              </div>
-              <p className="text-xs text-slate-400">연락처를 비우면 만든 <strong>링크를 복사해 직접</strong> 보내면 됩니다. 연락처를 넣으면 <strong>문자</strong>로 보낼 수 있습니다.</p>
-            </div>
-            <button onClick={create} disabled={busy || !ownerId || selectedCount === 0} className="btn-primary w-full disabled:opacity-50">
-              {busy ? '처리 중…' : `링크 생성 (${selectedCount}종 선택) — 받는사람 안 넣어도 됨`}
-            </button>
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-slate-700">받는사람 <span className="text-xs font-normal text-slate-400">— 전부 선택 (비워도 됩니다)</span></div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="이름 (선택)" className="input" />
+                    <input value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)} placeholder="010-1234-5678 (하이픈 무관, 선택)" className="input" />
+                    <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목 (선택)" className="input" />
+                  </div>
+                  <p className="text-xs text-slate-400">연락처를 비우면 만든 <strong>링크를 복사해 직접</strong> 보내면 됩니다. 연락처를 넣으면 <strong>문자</strong>로 보낼 수 있습니다.</p>
+                </div>
+                <button onClick={create} disabled={busy || targets.length === 0 || emptyCount > 0}
+                  className="btn-primary w-full disabled:opacity-50">
+                  {busy ? '처리 중…' : `링크 생성 — 대상 ${targets.length}건 · 서류 ${itemTotal}건`}
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -208,28 +208,27 @@ export default function DocumentCollectionPage() {
             </FilterBar>
             {shownRequests.length === 0 ? <div className="card p-8 text-center text-sm text-slate-400">조건에 맞는 요청이 없습니다.</div> :
             <div className="space-y-2">
-              {shownRequests.map((req) => {
-                const up = req.items.filter((i) => i.uploaded).length;
-                return (
-                  <div key={req.id} className="card space-y-2 p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-800">
-                        {req.owner_name ?? '대상'}{req.title ? ` · ${req.title}` : ''}
-                        <span className={`ml-2 rounded px-1.5 py-0.5 text-[11px] font-semibold ${
-                          req.status === 'SENT' ? 'bg-emerald-100 text-emerald-700' : req.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-700' : req.status === 'CANCELLED' ? 'bg-slate-100 text-slate-400' : 'bg-amber-100 text-amber-700'}`}>
-                          {req.status}</span>
-                      </span>
-                      <span className="text-xs text-slate-500">{up}/{req.items.length} 업로드</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input readOnly value={req.public_url} className="input flex-1 text-xs" />
-                      <button onClick={() => copyLink(req.public_url)} className="shrink-0 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold hover:bg-slate-50">복사</button>
-                      <button onClick={() => sendSms(req)} disabled={busy || !req.recipient_phone}
-                        className="shrink-0 rounded-md border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-40">문자</button>
-                    </div>
+              {shownRequests.map((req) => (
+                <div key={req.id} className="card space-y-2 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-800">
+                      {req.owner_summary}{req.title ? ` · ${req.title}` : ''}
+                      <span className={`ml-2 rounded px-1.5 py-0.5 text-[11px] font-semibold ${
+                        req.status === 'SENT' ? 'bg-emerald-100 text-emerald-700' : req.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-700' : req.status === 'CANCELLED' ? 'bg-slate-100 text-slate-400' : 'bg-amber-100 text-amber-700'}`}>
+                        {req.status}</span>
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      대상 {req.target_count}건 · {req.uploaded_count}/{req.item_count} 업로드
+                    </span>
                   </div>
-                );
-              })}
+                  <div className="flex items-center gap-2">
+                    <input readOnly value={req.public_url} className="input flex-1 text-xs" />
+                    <button onClick={() => copyLink(req.public_url)} className="shrink-0 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold hover:bg-slate-50">복사</button>
+                    <button onClick={() => sendSms(req)} disabled={busy || !req.recipient_phone}
+                      className="shrink-0 rounded-md border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-40">문자</button>
+                  </div>
+                </div>
+              ))}
             </div>}
           </>}
       </div>

@@ -77,6 +77,32 @@ public class EquipmentService {
         return defaultOperators.findByEquipmentIdOrderByPriorityAsc(e.getId());
     }
 
+    /**
+     * 장비 여러 대의 기본 조종원을 한 번에 — 서류수집 대상 다중선택(장비 1대 : 조종원 N명, 교대조) 용.
+     * 반환은 equipmentId → personId 리스트(priority 오름차순). 기본 조종원이 없는 장비는
+     * 단일 연결(operator_person_id)로 폴백하고, 그것도 없으면 결과에서 빠진다.
+     * 권한은 장비당이 아니라 '서로 다른 공급사' 당 1회만 검사해 50대 선택에서도 쿼리가 폭증하지 않게 한다.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, List<Long>> defaultOperatorsByEquipmentIds(List<Long> equipmentIds, AuthenticatedUser actor) {
+        if (equipmentIds == null || equipmentIds.isEmpty()) return Map.of();
+        List<Equipment> found = repo.findAllById(equipmentIds);
+        for (Long supplierId : found.stream().map(Equipment::getSupplierId).distinct().toList()) {
+            ensureCanAccess(actor, supplierId);
+        }
+        Map<Long, List<Long>> out = new HashMap<>();
+        for (EquipmentDefaultOperator o : defaultOperators
+                .findByEquipmentIdInOrderByEquipmentIdAscPriorityAsc(found.stream().map(Equipment::getId).toList())) {
+            out.computeIfAbsent(o.getEquipmentId(), k -> new java.util.ArrayList<>()).add(o.getPersonId());
+        }
+        for (Equipment e : found) {
+            if (!out.containsKey(e.getId()) && e.getOperatorPersonId() != null) {
+                out.put(e.getId(), List.of(e.getOperatorPersonId()));
+            }
+        }
+        return out;
+    }
+
     public List<EquipmentDefaultOperator> setDefaultOperators(Long equipmentId, List<Long> personIds, AuthenticatedUser actor) {
         Equipment e = repo.findById(equipmentId).orElseThrow(() ->
                 ApiException.notFound("EQUIPMENT_NOT_FOUND", "장비 " + equipmentId + " 없음"));
