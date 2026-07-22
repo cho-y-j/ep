@@ -71,7 +71,7 @@ function SampleControl({ typeId, sampleKey, busy, onUpload, onDelete }: {
   // sampleKey 는 업로드마다 새 UUID → 쿼리에 넣어 교체 시 캐시 무효화.
   const src = sampleKey ? `/api/document-types/${typeId}/sample?v=${encodeURIComponent(sampleKey)}` : null;
   return (
-    <div className="ml-auto flex items-center gap-1.5">
+    <div className="flex shrink-0 items-center gap-1.5">
       <input ref={ref} type="file" accept="image/*" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }} />
       {src ? (
@@ -289,11 +289,8 @@ export default function DocumentTypeAdminPage() {
                                  onChange={(csv) => patch(t.id, { applies_to_categories: csv })} />
                         </div>
                       )}
-                      <SampleControl typeId={t.id} sampleKey={t.sample_image_key}
-                        busy={sampleBusyId === t.id}
-                        onUpload={(f) => uploadSample(t.id, f)} onDelete={() => deleteSample(t.id)} />
                       <button type="button" onClick={() => navigate(`/admin/document-types/${t.id}/regions`)}
-                        className="text-xs px-2.5 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50">
+                        className="ml-auto text-xs px-2.5 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50">
                         영역 편집
                       </button>
                       <label className="flex items-center gap-1.5 text-xs text-slate-500">
@@ -301,8 +298,17 @@ export default function DocumentTypeAdminPage() {
                                onChange={(e) => patch(t.id, { active: e.target.checked })} />
                         활성
                       </label>
-                      <SampleDescription value={t.sample_description}
-                        onSave={(text) => patch(t.id, { sample_description: text })} />
+                      {/* 협력업체(담당자)에게 '샘플 보기'로 보여줄 예시 — 이미지·설명 자유 조합 */}
+                      <div className="mt-1 flex w-full flex-col gap-2 border-t border-slate-100 pt-2 sm:flex-row sm:items-start">
+                        <span className="shrink-0 pt-1 text-xs font-semibold text-slate-500">예시(샘플)</span>
+                        <SampleControl typeId={t.id} sampleKey={t.sample_image_key}
+                          busy={sampleBusyId === t.id}
+                          onUpload={(f) => uploadSample(t.id, f)} onDelete={() => deleteSample(t.id)} />
+                        <div className="flex-1">
+                          <SampleDescription value={t.sample_description}
+                            onSave={(text) => patch(t.id, { sample_description: text })} />
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
