@@ -41,6 +41,8 @@ export default function CollectPublicPage() {
   const [pdfMasking, setPdfMasking] = useState<PdfMasking | null>(null);
   /** 항목별 스테이징 — 처리(보정/마스킹/PDF)까지 끝난 장들을 담아두고, [업로드]로 한 번에 전송. */
   const [staged, setStaged] = useState<Record<number, Staged[]>>({});
+  /** 항목별 만료일 입력(선택) — 비워도 업로드 가능(관리자가 나중에 채움). */
+  const [expiry, setExpiry] = useState<Record<number, string>>({});
 
   useEffect(() => {
     if (!token) return;
@@ -107,6 +109,8 @@ export default function CollectPublicPage() {
     try {
       const fd = new FormData();
       fd.append('itemId', String(itemId));
+      const ed = expiry[itemId];
+      if (ed) fd.append('expiryDate', ed); // 선택 — 비우면 미전송(null 저장)
       for (const f of files) fd.append('file', f);
       await api.post(`/api/collect/${token}/documents`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       markUploaded(itemId, files.length === 1 ? files[0].name : `${files[0].name} 외 ${files.length - 1}건`);
@@ -135,12 +139,15 @@ export default function CollectPublicPage() {
       const next = { ...s }; delete next[itemId]; return next;
     });
   }
-  /** [업로드] — 담아둔 장 전체를 한 번에 병합 전송. 성공하면 스테이징을 비운다. */
+  /** [업로드] — 담아둔 장 전체를 한 번에 병합 전송. 성공하면 스테이징·만료일 입력을 비운다. */
   async function uploadStaged(itemId: number) {
     const cur = staged[itemId] ?? [];
     if (cur.length === 0) return;
     const ok = await upload(itemId, cur.map((x) => x.file));
-    if (ok) clearStaged(itemId);
+    if (ok) {
+      clearStaged(itemId);
+      setExpiry((s) => { const next = { ...s }; delete next[itemId]; return next; });
+    }
   }
 
   /** 4모서리 확정 → 원근보정(warp) 후, 바로 올리지 않고 가리기(마스킹) 단계를 연다. */
@@ -307,6 +314,8 @@ export default function CollectPublicPage() {
                       t.items.map((it) => (
                         <ItemRow key={it.id} item={it} disabled={disabled} uploading={uploadingId === it.id}
                           staged={staged[it.id] ?? []}
+                          expiry={expiry[it.id] ?? ''}
+                          onExpiryChange={(v) => setExpiry((s) => ({ ...s, [it.id]: v }))}
                           onPick={(f) => pickFile(it.id, f)}
                           onPickFiles={(fs) => pickFiles(it.id, fs)}
                           onRemoveStaged={(url) => removeStaged(it.id, url)}
@@ -409,11 +418,13 @@ export default function CollectPublicPage() {
   );
 }
 
-function ItemRow({ item, disabled, uploading, staged, onPick, onPickFiles, onRemoveStaged, onUpload, onShowSample }: {
+function ItemRow({ item, disabled, uploading, staged, expiry, onExpiryChange, onPick, onPickFiles, onRemoveStaged, onUpload, onShowSample }: {
   item: PublicItem;
   disabled: boolean;
   uploading: boolean;
   staged: Staged[];                      // 담아둔 장(썸네일)
+  expiry: string;                        // 만료일 입력값(선택, yyyy-MM-dd)
+  onExpiryChange: (v: string) => void;   // 만료일 입력 변경
   onPick: (file: File) => void;          // 촬영/단일 이미지 → 정렬 후 스테이징
   onPickFiles: (files: File[]) => void;  // 앨범·파일 다중 → 스테이징
   onRemoveStaged: (url: string) => void; // 담아둔 장 1개 삭제
@@ -456,6 +467,16 @@ function ItemRow({ item, disabled, uploading, staged, onPick, onPickFiles, onRem
             </div>
           ))}
         </div>
+      )}
+
+      {/* 만료일 입력(선택) — 만료일 있는 서류만. 비워도 업로드된다(담당자가 나중에 정리). */}
+      {count > 0 && item.has_expiry && (
+        <label className="mt-2 flex items-center gap-2">
+          <span className="shrink-0 text-xs text-slate-500">만료일 <span className="text-slate-400">(모르면 비워두세요)</span></span>
+          <input type="date" value={expiry} onChange={(e) => onExpiryChange(e.target.value)}
+            disabled={disabled || uploading}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs disabled:opacity-50" />
+        </label>
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">

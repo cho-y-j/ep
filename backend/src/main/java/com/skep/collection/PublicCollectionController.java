@@ -28,10 +28,22 @@ public class PublicCollectionController {
     @PostMapping(value = "/{token}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Void> upload(@PathVariable String token,
                                        @RequestParam("itemId") Long itemId,
+                                       // 협력사 만료일 입력(선택) — 미입력/형식오류는 null 저장(fail-open, 관리자가 채움).
+                                       @RequestParam(value = "expiryDate", required = false) String expiryDate,
                                        // 파일 1개면 그대로, 2개 이상이면 올린 순서대로 1개 PDF로 병합 후 저장.
                                        @RequestParam("file") MultipartFile[] files) {
-        service.publicUpload(token, itemId, files);
+        service.publicUpload(token, itemId, files, parseDate(expiryDate));
         return ResponseEntity.noContent().build();
+    }
+
+    /** ISO(yyyy-MM-dd) 파싱. 실패 시 null — 무로그인 업로드를 절대 막지 않는다. */
+    private static java.time.LocalDate parseDate(String s) {
+        if (s == null || s.isBlank()) return null;
+        try {
+            return java.time.LocalDate.parse(s);
+        } catch (java.time.format.DateTimeParseException e) {
+            return null;
+        }
     }
 
     /** 등록형 무로그인 등록 — 차량번호/이름 입력 순간 자원(장비/인력) 신규 생성 후 슬롯 연결. body {value}. */

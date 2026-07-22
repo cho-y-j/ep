@@ -68,6 +68,8 @@ public class DocumentCollectionService {
     private final com.skep.equipment.EquipmentService equipmentService;
     private final com.skep.person.PersonService personService;
     private final com.skep.equipment.EquipmentTypeService equipmentTypes;
+    /** 무로그인 업로드 직후 자동 진위확인/만료일 백필 이벤트 발행용. */
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     @Value("${SKEP_PUBLIC_BASE_URL:http://localhost:8082}")
     private String publicBaseUrl;
@@ -84,7 +86,8 @@ public class DocumentCollectionService {
                                      com.skep.alimtalk.AlimTalkService alimTalk,
                                      com.skep.equipment.EquipmentService equipmentService,
                                      com.skep.person.PersonService personService,
-                                     com.skep.equipment.EquipmentTypeService equipmentTypes) {
+                                     com.skep.equipment.EquipmentTypeService equipmentTypes,
+                                     org.springframework.context.ApplicationEventPublisher events) {
         this.reqRepo = reqRepo;
         this.targetRepo = targetRepo;
         this.itemRepo = itemRepo;
@@ -105,6 +108,7 @@ public class DocumentCollectionService {
         this.equipmentService = equipmentService;
         this.personService = personService;
         this.equipmentTypes = equipmentTypes;
+        this.events = events;
     }
 
     /** 대상 참조(장비/인원) — 생성/추천 요청 검증 공용 키. */
@@ -459,7 +463,8 @@ public class DocumentCollectionService {
                         fileNames.get(it.getUploadedDocumentId()),
                         t != null ? com.skep.document.DocumentTypeService.sampleImageUrl(t) : null,
                         t != null && com.skep.document.DocumentTypeService.sampleIsPdf(t),
-                        t != null ? t.getSampleDescription() : null);
+                        t != null ? t.getSampleDescription() : null,
+                        t != null && t.isHasExpiry());
             }).toList();
             boolean registered = tg.getOwnerId() != null;
             String label = labels.get(tg.getId());
@@ -475,8 +480,9 @@ public class DocumentCollectionService {
     }
 
     /** 항목(item) 단위 업로드 — 대상별로 같은 서류종류가 여러 건일 수 있어 documentTypeId 로는 특정 불가.
-     *  파일 1개면 그대로, 2개 이상이면 올린 순서대로 1개 PDF로 병합해 저장(현장에서 여러 장 촬영 대응). */
-    public void publicUpload(String token, Long itemId, MultipartFile[] files) {
+     *  파일 1개면 그대로, 2개 이상이면 올린 순서대로 1개 PDF로 병합해 저장(현장에서 여러 장 촬영 대응).
+     *  expiryDate = 협력사 입력 만료일(선택, null 허용 — 관리자가 나중에 채움). */
+    public void publicUpload(String token, Long itemId, MultipartFile[] files, java.time.LocalDate expiryDate) {
         DocumentCollectionRequest r = requireToken(token);
         if (r.isExpired()) throw ApiException.badRequest("EXPIRED", "링크가 만료되었습니다");
         DocumentCollectionItem item = itemRepo.findById(itemId)
@@ -488,11 +494,21 @@ public class DocumentCollectionService {
             throw ApiException.badRequest("OWNER_NOT_REGISTERED",
                     target.getOwnerType() == OwnerType.EQUIPMENT ? "먼저 차량번호를 입력해 등록하세요" : "먼저 이름을 입력해 등록하세요");
         }
+        // 남용 방지: 자동 진위확인/만료일 백필 트리거는 item당 첫 업로드 1회만 (재업로드는 관리자 수동 재검증).
+        boolean firstUpload = item.getUploadedDocumentId() == null;
         MultipartFile file = uploadMerger.mergeToSingle(files);
         Document doc = documentService.uploadViaCollection(target.getOwnerType(), target.getOwnerId(),
-                item.getDocumentTypeId(), null, file);
+                item.getDocumentTypeId(), expiryDate, file);
         item.attachDocument(doc.getId());
+        // AFTER_COMMIT 비동기 자동 검증/만료일 백필 — 실패·지연이 업로드 응답에 영향 없음(fail-open).
+        if (firstUpload) {
+            events.publishEvent(new com.skep.verify.DocumentUploadedEvent(doc.getId(), COLLECTION_ACTOR));
+        }
     }
+
+    /** 무로그인 수집 업로드의 자동검증 트리거용 시스템 액터 — audit 에는 user_id=null 로 남는다. */
+    private static final AuthenticatedUser COLLECTION_ACTOR =
+            new AuthenticatedUser(null, null, "수집링크 자동검증", Role.ADMIN, null, false);
 
     /**
      * 등록형 무로그인 등록 — 공개 링크에서 차량번호/이름 입력 순간 자원(장비/인력)을 신규 생성하고 슬롯에 연결.

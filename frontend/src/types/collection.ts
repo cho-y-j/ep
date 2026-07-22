@@ -58,6 +58,8 @@ export type PublicItem = {
   /** 샘플이 PDF면 true — 뷰어 img/iframe 분기용. */
   sample_pdf?: boolean;
   sample_description?: string | null;
+  /** 만료일 있는 서류 — 만료일 입력(선택) 노출용. */
+  has_expiry?: boolean;
 };
 
 export type PublicTarget = {

@@ -203,7 +203,7 @@ function ownerCardTitle(r: ResourceCompliance): string {
   return `${r.owner_name}${sl ? ` · ${sl}` : ''}`;
 }
 
-type StatusFilter = 'all' | 'verified' | 'review' | 'soon' | 'expired' | 'valid';
+type StatusFilter = 'all' | 'verified' | 'review' | 'soon' | 'expired' | 'valid' | 'noExpiry';
 
 function MyDocsExpiryView() {
   const { company } = useAuth();
@@ -233,6 +233,8 @@ function MyDocsExpiryView() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [allTypes, setAllTypes] = useState<DocumentTypeResponse[]>([]);
   const [verifyableMap, setVerifyableMap] = useState<Map<number, boolean>>(new Map());
+  // 만료일 있는 서류종류 — "만료일 없음" 필터가 만료 개념 없는 서류를 잡음으로 띄우지 않게.
+  const [hasExpiryMap, setHasExpiryMap] = useState<Map<number, boolean>>(new Map());
   const [reloadKey, setReloadKey] = useState(0);
   const [globalReverifyBusy, setGlobalReverifyBusy] = useState(false);
   const canAddEquipment = company?.type === 'EQUIPMENT';
@@ -257,8 +259,10 @@ function MyDocsExpiryView() {
       const all = [...p.data, ...e.data, ...c.data];
       setAllTypes(all);
       const m = new Map<number, boolean>();
-      all.forEach((t) => m.set(t.id, !!t.verify_endpoint));
+      const em = new Map<number, boolean>();
+      all.forEach((t) => { m.set(t.id, !!t.verify_endpoint); em.set(t.id, !!t.has_expiry); });
       setVerifyableMap(m);
+      setHasExpiryMap(em);
     }).catch(() => {});
   }, []);
 
@@ -368,6 +372,8 @@ function MyDocsExpiryView() {
       if (filter === 'valid' && !(!r.expiry_date || d > 60)) return false;
       if (filter === 'verified' && !(verified && !expired)) return false;
       if (filter === 'review' && !needsReview) return false;
+      // 만료일 없음 — 만료일이 있어야 하는 서류(has_expiry)인데 비어 있는 건 (수집 업로드 후 관리자 마무리 대상).
+      if (filter === 'noExpiry' && !(!r.expiry_date && hasExpiryMap.get(r.document_type_id) === true)) return false;
     }
     if (qLower) {
       const hay = `${r.owner_name ?? ''} ${r.document_type_name ?? ''}`.toLowerCase();
@@ -558,6 +564,7 @@ function MyDocsExpiryView() {
           <option value="soon">만료임박</option>
           <option value="expired">만료</option>
           <option value="valid">정상</option>
+          <option value="noExpiry">만료일 없음</option>
         </select>
         {(ownerFilter === 'all' || ownerFilter === 'EQUIPMENT') && equipCategories.length > 0 && (
           <select value={equipType} onChange={(e) => setEquipType(e.target.value)}
@@ -791,7 +798,9 @@ function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onDelet
                 ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-600 text-white">✓ 검증</span>
                 : r.verification_status === 'REJECTED'
                   ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-600 text-white">✗ 반려</span>
-                  : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-slate-200 text-slate-700">대기</span>;
+                  : r.verification_status === 'OCR_REVIEW_REQUIRED'
+                    ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800">! 검토</span>
+                    : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-slate-200 text-slate-700">대기</span>;
               return (
                 <tr key={r.id} className="hover:bg-blue-50/40 cursor-pointer" onClick={() => onRowClick(r)}>
                   <td className="px-4 py-2 text-slate-700">{r.document_type_name ?? '#' + r.document_type_id}</td>

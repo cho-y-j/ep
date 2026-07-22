@@ -136,6 +136,16 @@ public class VerificationService {
         extractedFields.putAll(manualFields);
         if (userInputs != null) extractedFields.putAll(userInputs);
 
+        // 만료일 자동 추출(우선순위 ①): OCR/보충 필드에 만료일이 있고 expiry_date 가 비어 있을 때만 세팅.
+        // 협력사 입력·관리자 수기 등 이미 있는 값은 절대 덮지 않는다. 진위 API 응답에는 만료일 필드가 없다(main-api 확인).
+        if (doc.getExpiryDate() == null && type.isHasExpiry()) {
+            java.time.LocalDate ocrExpiry = OcrExpiryBackfillService.parseDate(firstNonBlank(
+                    extractedFields.get("manualExpiryDate"),
+                    extractedFields.get("expiry_date"),
+                    extractedFields.get("expiryDate")));
+            if (ocrExpiry != null) doc.updateExpiry(ocrExpiry);
+        }
+
         // 2) 정부 API 호출
         JsonNode result;
         switch (type.getVerifyEndpoint()) {

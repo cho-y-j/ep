@@ -135,8 +135,9 @@ public class OcrExpiryBackfillService {
         return OcrExpiryParser.parse(type.getOcrExtractType(), fullText).orElse(null);
     }
 
-    /** ISO(yyyy-MM-dd) 우선, 점/슬래시 구분자면 하이픈으로 정규화 후 재시도. 실패 시 null. */
-    private static LocalDate parseDate(String s) {
+    /** ISO(yyyy-MM-dd) 우선, 점/슬래시 구분자면 하이픈으로 정규화 후 재시도. 실패 시 null.
+     *  VerificationService 의 verify/OCR 만료일 수확에서도 재사용(패키지 공유). */
+    static LocalDate parseDate(String s) {
         try {
             return LocalDate.parse(s.trim());
         } catch (Exception ignored) {
