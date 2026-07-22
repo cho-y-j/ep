@@ -28,8 +28,9 @@ public class PublicCollectionController {
     @PostMapping(value = "/{token}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Void> upload(@PathVariable String token,
                                        @RequestParam("itemId") Long itemId,
-                                       @RequestParam("file") MultipartFile file) {
-        service.publicUpload(token, itemId, file);
+                                       // 파일 1개면 그대로, 2개 이상이면 올린 순서대로 1개 PDF로 병합 후 저장.
+                                       @RequestParam("file") MultipartFile[] files) {
+        service.publicUpload(token, itemId, files);
         return ResponseEntity.noContent().build();
     }
 

@@ -29,11 +29,12 @@ export default function ResourceCheckSupplierInbox() {
   };
   useEffect(() => { void load(); }, []);
 
-  const onUpload = async (req: ResourceCheckResponse, file: File) => {
+  const onUpload = async (req: ResourceCheckResponse, files: File[]) => {
     setBusy(req.id);
     try {
+      // 파일 1개면 그대로, 2개 이상이면 올린 순서대로 서버가 1개 PDF로 병합.
       const fd = new FormData();
-      fd.append('file', file);
+      for (const f of files) fd.append('file', f);
       await api.post(`/api/resource-checks/${req.id}/submit-file`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
@@ -105,10 +106,10 @@ export default function ResourceCheckSupplierInbox() {
                 {(r.status === 'REQUESTED' || r.status === 'REJECTED') && (
                   <label className={`px-3 py-1.5 text-xs rounded border border-blue-500 text-blue-700 hover:bg-blue-50 cursor-pointer ${busy === r.id ? 'opacity-50 pointer-events-none' : ''}`}>
                     {busy === r.id ? '업로드 중…' : '서류 첨부 회신'}
-                    <input type="file" accept="image/*,application/pdf" className="hidden"
+                    <input type="file" accept="image/*,application/pdf" multiple className="hidden"
                            onChange={(e) => {
-                             const f = e.target.files?.[0];
-                             if (f) void onUpload(r, f);
+                             const fs = Array.from(e.target.files ?? []);
+                             if (fs.length) void onUpload(r, fs);
                              e.target.value = '';
                            }} />
                   </label>

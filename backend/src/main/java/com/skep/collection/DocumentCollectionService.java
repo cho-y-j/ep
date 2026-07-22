@@ -53,6 +53,7 @@ public class DocumentCollectionService {
     private final DocumentService documentService;
     private final FileStorage storage;
     private final PdfMergeService pdfMerge;
+    private final DocumentUploadMerger uploadMerger;
     private final CollectionMailService mail;
     private final EquipmentRepository equipmentRepo;
     private final PersonRepository personRepo;
@@ -70,7 +71,8 @@ public class DocumentCollectionService {
     public DocumentCollectionService(DocumentCollectionRequestRepository reqRepo, DocumentCollectionTargetRepository targetRepo,
                                      DocumentCollectionItemRepository itemRepo,
                                      DocumentTypeRepository typeRepo, DocumentRepository docRepo, DocumentService documentService,
-                                     FileStorage storage, PdfMergeService pdfMerge, CollectionMailService mail,
+                                     FileStorage storage, PdfMergeService pdfMerge, DocumentUploadMerger uploadMerger,
+                                     CollectionMailService mail,
                                      EquipmentRepository equipmentRepo, PersonRepository personRepo,
                                      EquipmentDocRequirementService equipmentDocReq, PersonDocRequirementService personDocReq,
                                      com.skep.company.CompanyService companyService,
@@ -86,6 +88,7 @@ public class DocumentCollectionService {
         this.documentService = documentService;
         this.storage = storage;
         this.pdfMerge = pdfMerge;
+        this.uploadMerger = uploadMerger;
         this.mail = mail;
         this.equipmentRepo = equipmentRepo;
         this.personRepo = personRepo;
@@ -449,6 +452,7 @@ public class DocumentCollectionService {
                         t != null ? t.getName() : "(삭제됨)", it.isRequired(), it.getUploadedDocumentId() != null,
                         fileNames.get(it.getUploadedDocumentId()),
                         t != null ? com.skep.document.DocumentTypeService.sampleImageUrl(t) : null,
+                        t != null && com.skep.document.DocumentTypeService.sampleIsPdf(t),
                         t != null ? t.getSampleDescription() : null);
             }).toList();
             boolean registered = tg.getOwnerId() != null;
@@ -464,8 +468,9 @@ public class DocumentCollectionService {
                 items.size(), uploadedCount(items), requiredRemaining(items), pts);
     }
 
-    /** 항목(item) 단위 업로드 — 대상별로 같은 서류종류가 여러 건일 수 있어 documentTypeId 로는 특정 불가. */
-    public void publicUpload(String token, Long itemId, MultipartFile file) {
+    /** 항목(item) 단위 업로드 — 대상별로 같은 서류종류가 여러 건일 수 있어 documentTypeId 로는 특정 불가.
+     *  파일 1개면 그대로, 2개 이상이면 올린 순서대로 1개 PDF로 병합해 저장(현장에서 여러 장 촬영 대응). */
+    public void publicUpload(String token, Long itemId, MultipartFile[] files) {
         DocumentCollectionRequest r = requireToken(token);
         if (r.isExpired()) throw ApiException.badRequest("EXPIRED", "링크가 만료되었습니다");
         DocumentCollectionItem item = itemRepo.findById(itemId)
@@ -477,6 +482,7 @@ public class DocumentCollectionService {
             throw ApiException.badRequest("OWNER_NOT_REGISTERED",
                     target.getOwnerType() == OwnerType.EQUIPMENT ? "먼저 차량번호를 입력해 등록하세요" : "먼저 이름을 입력해 등록하세요");
         }
+        MultipartFile file = uploadMerger.mergeToSingle(files);
         Document doc = documentService.uploadViaCollection(target.getOwnerType(), target.getOwnerId(),
                 item.getDocumentTypeId(), null, file);
         item.attachDocument(doc.getId());

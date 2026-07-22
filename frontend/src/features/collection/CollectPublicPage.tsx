@@ -22,12 +22,11 @@ export default function CollectPublicPage() {
   // 등록형(신규 자원) — 미등록 슬롯의 차량번호/이름 입력값과 진행 상태.
   const [registerValue, setRegisterValue] = useState<Record<number, string>>({});
   const [registeringId, setRegisteringId] = useState<number | null>(null);
-  const [sample, setSample] = useState<{ url: string | null; desc: string | null } | null>(null);
+  const [sample, setSample] = useState<{ url: string | null; desc: string | null; pdf?: boolean } | null>(null);
   const [openTargetId, setOpenTargetId] = useState<number | null>(null);
   /** 이미지 업로드 전 4모서리 보정 대기 상태 (건너뛰기 가능). */
   const [pending, setPending] = useState<Pending | null>(null);
   const [autoCorners, setAutoCorners] = useState<[number, number][] | undefined>(undefined);
-  const inputs = useRef<Record<number, HTMLInputElement | null>>({});
 
   useEffect(() => {
     if (!token) return;
@@ -64,8 +63,9 @@ export default function CollectPublicPage() {
     });
   }
 
+  /** 촬영 / 단일 이미지 — 4모서리 보정 후 1장 업로드. PDF 1개는 바로 업로드. */
   function pickFile(itemId: number, file: File) {
-    if (!file.type.startsWith('image/')) { void upload(itemId, file); return; }
+    if (!file.type.startsWith('image/')) { void upload(itemId, [file]); return; }
     // 이미지면 먼저 4모서리 보정 — 자동검출은 백그라운드(실패해도 이미지 꼭짓점으로 시작).
     setAutoCorners(undefined);
     setPending({ itemId, file, url: URL.createObjectURL(file) });
@@ -73,20 +73,28 @@ export default function CollectPublicPage() {
     void detectDocumentCorners(file, token).then((c) => { if (c) setAutoCorners(c); });
   }
 
+  /** 앨범/파일 다중 선택 — 1장이면 정렬 단계를 거치고, 2장 이상이면 올린 순서대로 병합(1개 PDF). */
+  function pickFiles(itemId: number, files: File[]) {
+    if (files.length === 0) return;
+    if (files.length === 1) { pickFile(itemId, files[0]); return; }
+    void upload(itemId, files);
+  }
+
   function closePending() {
     setPending((p) => { if (p) URL.revokeObjectURL(p.url); return null; });
     setAutoCorners(undefined);
   }
 
-  async function upload(itemId: number, file: File) {
-    if (!token) return;
+  /** 파일 1개면 그대로, 2개 이상이면 올린 순서대로 서버가 1개 PDF로 병합해 저장. */
+  async function upload(itemId: number, files: File[]) {
+    if (!token || files.length === 0) return;
     setUploadingId(itemId); setError(null);
     try {
       const fd = new FormData();
       fd.append('itemId', String(itemId));
-      fd.append('file', file);
+      for (const f of files) fd.append('file', f);
       await api.post(`/api/collect/${token}/documents`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      markUploaded(itemId, file.name);
+      markUploaded(itemId, files.length === 1 ? files[0].name : `${files[0].name} 외 ${files.length - 1}건`);
     } catch (err) {
       setError(err instanceof AxiosError ? (err.response?.data?.message ?? '업로드 실패') : '업로드 실패');
     } finally { setUploadingId(null); }
@@ -98,7 +106,7 @@ export default function CollectPublicPage() {
     closePending();
     setUploadingId(itemId);
     const aligned = await warpImageByCorners(file, corners).catch(() => file);
-    await upload(itemId, aligned);
+    await upload(itemId, [aligned]);
   }
 
   async function submit() {
@@ -202,9 +210,8 @@ export default function CollectPublicPage() {
                     ) : (
                       t.items.map((it) => (
                         <ItemRow key={it.id} item={it} disabled={disabled} uploading={uploadingId === it.id}
-                          inputRef={(el) => { inputs.current[it.id] = el; }}
                           onPick={(f) => pickFile(it.id, f)}
-                          onClickUpload={() => inputs.current[it.id]?.click()}
+                          onPickFiles={(fs) => pickFiles(it.id, fs)}
                           onShowSample={setSample} />
                       ))
                     )}
@@ -219,7 +226,7 @@ export default function CollectPublicPage() {
           className="mt-6 w-full rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50">
           {submitting ? '제출 중…' : requiredLeft === 0 ? '제출 완료' : `제출 (필수 ${requiredLeft}건 남음)`}
         </button>
-        <p className="mt-2 text-center text-xs text-slate-400">PDF / 사진(JPG·PNG) 파일을 올릴 수 있습니다.</p>
+        <p className="mt-2 text-center text-xs text-slate-400">촬영하거나 사진·PDF 파일을 올릴 수 있어요. 여러 장을 고르면 1개로 합쳐집니다.</p>
       </div>
 
       {/* 업로드 전 4모서리 보정 — 건너뛰면 원본 그대로 올라간다. */}
@@ -227,7 +234,7 @@ export default function CollectPublicPage() {
         <div className="fixed inset-0 z-50 flex flex-col bg-black/70">
           <div className="flex items-center justify-between gap-3 bg-white px-4 py-3">
             <span className="text-sm font-bold text-slate-800">서류 영역 맞추기</span>
-            <button type="button" onClick={() => { const p = pending; closePending(); void upload(p.itemId, p.file); }}
+            <button type="button" onClick={() => { const p = pending; closePending(); void upload(p.itemId, [p.file]); }}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
               건너뛰고 바로 올리기
             </button>
@@ -253,10 +260,17 @@ export default function CollectPublicPage() {
               <p className="mb-2 whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{sample.desc}</p>
             )}
             {sample.url && (
-              <>
-                <img src={sample.url} alt="제출 예시" className="mx-auto max-h-[70vh] w-auto rounded border border-slate-100" />
-                <p className="mt-2 text-center text-xs text-slate-500">개인정보가 가려진 예시입니다. 이런 형식으로 촬영·스캔해서 올려주세요.</p>
-              </>
+              sample.pdf ? (
+                <>
+                  <iframe src={sample.url} title="제출 예시" className="mx-auto h-[70vh] w-full rounded border border-slate-100" />
+                  <p className="mt-2 text-center text-xs text-slate-500">개인정보가 가려진 예시입니다. 이런 형식으로 제출해 주세요.</p>
+                </>
+              ) : (
+                <>
+                  <img src={sample.url} alt="제출 예시" className="mx-auto max-h-[70vh] w-auto rounded border border-slate-100" />
+                  <p className="mt-2 text-center text-xs text-slate-500">개인정보가 가려진 예시입니다. 이런 형식으로 촬영·스캔해서 올려주세요.</p>
+                </>
+              )
             )}
           </div>
         </div>
@@ -265,15 +279,17 @@ export default function CollectPublicPage() {
   );
 }
 
-function ItemRow({ item, disabled, uploading, inputRef, onPick, onClickUpload, onShowSample }: {
+function ItemRow({ item, disabled, uploading, onPick, onPickFiles, onShowSample }: {
   item: PublicItem;
   disabled: boolean;
   uploading: boolean;
-  inputRef: (el: HTMLInputElement | null) => void;
-  onPick: (file: File) => void;
-  onClickUpload: () => void;
-  onShowSample: (s: { url: string | null; desc: string | null }) => void;
+  onPick: (file: File) => void;          // 촬영/단일 이미지 → 정렬 후 업로드
+  onPickFiles: (files: File[]) => void;  // 앨범·파일 다중 → 병합 업로드
+  onShowSample: (s: { url: string | null; desc: string | null; pdf?: boolean }) => void;
 }) {
+  // 촬영과 앨범/파일을 별도 input 으로 분리 — capture 는 촬영 input 에만 둬 앨범·파일·복수 선택을 막지 않는다.
+  const cameraRef = useRef<HTMLInputElement | null>(null);
+  const filesRef = useRef<HTMLInputElement | null>(null);
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
       <div className="min-w-0">
@@ -283,7 +299,7 @@ function ItemRow({ item, disabled, uploading, inputRef, onPick, onClickUpload, o
           </span>
           <span className="truncate text-sm font-medium text-slate-800">{item.name}</span>
           {(item.sample_image_url || item.sample_description) && (
-            <button type="button" onClick={() => onShowSample({ url: item.sample_image_url ?? null, desc: item.sample_description ?? null })}
+            <button type="button" onClick={() => onShowSample({ url: item.sample_image_url ?? null, desc: item.sample_description ?? null, pdf: item.sample_pdf })}
               className="shrink-0 rounded border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 hover:bg-brand-100">
               샘플 보기
             </button>
@@ -291,13 +307,21 @@ function ItemRow({ item, disabled, uploading, inputRef, onPick, onClickUpload, o
         </div>
         {item.uploaded && <div className="mt-0.5 truncate text-xs text-emerald-600">✓ 업로드됨{item.file_name ? ` · ${item.file_name}` : ''}</div>}
       </div>
-      <div className="shrink-0">
-        <input ref={inputRef} type="file" accept="application/pdf,image/*" className="hidden"
+      <div className="flex shrink-0 items-center gap-1.5">
+        {/* 촬영 — 후면 카메라 바로. 여러 장은 촬영→다시 촬영 반복으로 누적(서버가 병합). */}
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = ''; }} />
-        <button type="button" disabled={disabled || uploading} onClick={onClickUpload}
-          className={`rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+        {/* 앨범·파일 — 여러 장/PDF 가능(capture 없음 → 앨범·파일 선택 유지). */}
+        <input ref={filesRef} type="file" accept="image/*,application/pdf" multiple className="hidden"
+          onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) onPickFiles(fs); e.target.value = ''; }} />
+        <button type="button" disabled={disabled || uploading} onClick={() => cameraRef.current?.click()}
+          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          📷 촬영
+        </button>
+        <button type="button" disabled={disabled || uploading} onClick={() => filesRef.current?.click()}
+          className={`rounded-md px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50 ${
             item.uploaded ? 'border border-slate-300 text-slate-700 hover:bg-slate-50' : 'bg-brand-600 text-white hover:bg-brand-700'}`}>
-          {uploading ? '올리는 중…' : item.uploaded ? '다시 올리기' : '파일 올리기'}
+          {uploading ? '올리는 중…' : item.uploaded ? '다시 올리기' : '사진·파일'}
         </button>
       </div>
     </div>

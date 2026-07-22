@@ -45,11 +45,12 @@ public class DocumentTypeController {
 
     // ── V116: '샘플 보기' 예시 이미지 (마스킹된 예시 1장) ──
 
-    /** ADMIN: 마스킹된 예시 이미지 업로드(교체). */
+    /** ADMIN: 마스킹된 예시 업로드(교체). 이미지 1장이면 이미지로, PDF 1개면 PDF로,
+     *  2개 이상이면 올린 순서대로 1개 PDF로 병합해 저장. */
     @PostMapping(value = "/{id}/sample", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
-    public DocumentTypeResponse uploadSample(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
-        return DocumentTypeResponse.from(service.uploadSample(id, file));
+    public DocumentTypeResponse uploadSample(@PathVariable Long id, @RequestParam("file") MultipartFile[] files) {
+        return DocumentTypeResponse.from(service.uploadSample(id, files));
     }
 
     /** ADMIN: 샘플 이미지 삭제. */

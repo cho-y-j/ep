@@ -36,12 +36,13 @@ public class ResourceCheckController {
         return service.submit(id, req, actor);
     }
 
-    /** 공급사 회신 — 파일 직접 업로드. 자원 서류로 저장 후 점검에 연결. */
+    /** 공급사 회신 — 파일 직접 업로드. 자원 서류로 저장 후 점검에 연결.
+     *  파일 1개면 그대로, 2개 이상이면 올린 순서대로 1개 PDF로 병합 후 저장. */
     @PostMapping(value = "/{id}/submit-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResourceCheckResponse submitWithFile(@PathVariable Long id,
-                                                  @RequestParam("file") MultipartFile file,
+                                                  @RequestParam("file") MultipartFile[] files,
                                                   @CurrentUser AuthenticatedUser actor) {
-        return service.submitWithFile(id, file, actor);
+        return service.submitWithFile(id, files, actor);
     }
 
     /** BP 승인. */

@@ -14,7 +14,7 @@ export default function DocumentUploadForm({ ownerType, ownerId, onUploaded, onC
   const [types, setTypes] = useState<DocumentTypeResponse[]>([]);
   const [typeId, setTypeId] = useState<number | ''>('');
   const [expiryDate, setExpiryDate] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +36,7 @@ export default function DocumentUploadForm({ ownerType, ownerId, onUploaded, onC
       setError('서류 종류를 선택하세요');
       return;
     }
-    if (!file) {
+    if (files.length === 0) {
       setError('파일을 선택하세요');
       return;
     }
@@ -47,8 +47,9 @@ export default function DocumentUploadForm({ ownerType, ownerId, onUploaded, onC
 
     setBusy(true);
     try {
+      // 파일 1개면 그대로, 2개 이상이면 올린 순서대로 서버가 1개 PDF로 병합.
       const formData = new FormData();
-      formData.append('file', file);
+      for (const f of files) formData.append('file', f);
       const params: Record<string, string> = {
         ownerType,
         ownerId: String(ownerId),
@@ -105,12 +106,12 @@ export default function DocumentUploadForm({ ownerType, ownerId, onUploaded, onC
       )}
 
       <label className="block">
-        <span className="text-xs font-medium text-slate-600">파일</span>
+        <span className="text-xs font-medium text-slate-600">파일 <span className="text-slate-400">(여러 장 선택 시 1개 PDF로 합쳐집니다)</span></span>
         <input
           type="file"
           accept="image/*,application/pdf"
-          capture="environment"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          multiple
+          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
           required
           className="block w-full mt-1 text-sm text-slate-700 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-brand-600 file:text-white file:cursor-pointer hover:file:bg-brand-700"
         />

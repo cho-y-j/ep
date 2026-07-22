@@ -62,22 +62,28 @@ function Chips({ value, options, labels, onChange }: {
   );
 }
 
-/** 서류종류별 마스킹된 예시 이미지 1장 — 업로드/미리보기/교체/삭제. */
+/** 서류종류별 마스킹된 예시 — 업로드/미리보기/교체/삭제. 이미지 1장 또는 PDF, 여러 장이면 1개 PDF로 병합. */
 function SampleControl({ typeId, sampleKey, busy, onUpload, onDelete }: {
   typeId: number; sampleKey: string | null; busy: boolean;
-  onUpload: (file: File) => void; onDelete: () => void;
+  onUpload: (files: File[]) => void; onDelete: () => void;
 }) {
   const ref = useRef<HTMLInputElement | null>(null);
   // sampleKey 는 업로드마다 새 UUID → 쿼리에 넣어 교체 시 캐시 무효화.
   const src = sampleKey ? `/api/document-types/${typeId}/sample?v=${encodeURIComponent(sampleKey)}` : null;
+  // 저장 키 확장자로 PDF 분기 — PDF는 썸네일 대신 'PDF' 배지(클릭 시 새 탭).
+  const isPdf = !!sampleKey && sampleKey.toLowerCase().endsWith('.pdf');
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      <input ref={ref} type="file" accept="image/*" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }} />
+      <input ref={ref} type="file" accept="image/*,application/pdf" multiple className="hidden"
+        onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) onUpload(fs); e.target.value = ''; }} />
       {src ? (
         <>
-          <a href={src} target="_blank" rel="noreferrer" title="샘플 이미지 크게 보기">
-            <img src={src} alt="샘플" className="h-8 w-11 rounded border border-slate-200 object-cover" />
+          <a href={src} target="_blank" rel="noreferrer" title="샘플 크게 보기">
+            {isPdf ? (
+              <span className="flex h-8 w-11 items-center justify-center rounded border border-slate-200 bg-slate-50 text-[10px] font-bold text-rose-600">PDF</span>
+            ) : (
+              <img src={src} alt="샘플" className="h-8 w-11 rounded border border-slate-200 object-cover" />
+            )}
           </a>
           <button type="button" disabled={busy} onClick={() => ref.current?.click()}
             className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50">교체</button>
@@ -154,14 +160,14 @@ export default function DocumentTypeAdminPage() {
     return out as Partial<DocType>;
   }
 
-  /** 마스킹된 예시 이미지 업로드(교체). */
-  async function uploadSample(id: number, file: File) {
+  /** 마스킹된 예시 업로드(교체). 여러 장이면 백엔드가 올린 순서대로 1개 PDF로 병합. */
+  async function uploadSample(id: number, files: File[]) {
     setSampleBusyId(id);
     try {
       const fd = new FormData();
-      fd.append('file', file);
+      for (const f of files) fd.append('file', f);
       await api.post(`/api/document-types/${id}/sample`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success('샘플 이미지를 등록했습니다');
+      toast.success(files.length > 1 ? `샘플 ${files.length}장을 1개 PDF로 등록했습니다` : '샘플을 등록했습니다');
       await load();
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? '샘플 등록 실패');
@@ -303,7 +309,7 @@ export default function DocumentTypeAdminPage() {
                         <span className="shrink-0 pt-1 text-xs font-semibold text-slate-500">예시(샘플)</span>
                         <SampleControl typeId={t.id} sampleKey={t.sample_image_key}
                           busy={sampleBusyId === t.id}
-                          onUpload={(f) => uploadSample(t.id, f)} onDelete={() => deleteSample(t.id)} />
+                          onUpload={(files) => uploadSample(t.id, files)} onDelete={() => deleteSample(t.id)} />
                         <div className="flex-1">
                           <SampleDescription value={t.sample_description}
                             onSave={(text) => patch(t.id, { sample_description: text })} />

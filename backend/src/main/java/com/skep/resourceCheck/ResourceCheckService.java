@@ -45,6 +45,7 @@ public class ResourceCheckService {
     private final CompanyRepository companies;
     private final NotificationService notifications;
     private final DocumentService documentService;
+    private final com.skep.collection.DocumentUploadMerger uploadMerger;
     private final DocumentTypeRepository documentTypes;
     private final DocumentRepository docRepo;
     private final AlimTalkService alimTalk;
@@ -118,9 +119,10 @@ public class ResourceCheckService {
         return toResponse(entity);
     }
 
-    /** 공급사 회신 — 파일 직접 업로드. document_type 은 check_type 으로 매핑. */
+    /** 공급사 회신 — 파일 직접 업로드. document_type 은 check_type 으로 매핑.
+     *  파일 1개면 그대로, 2개 이상이면 올린 순서대로 1개 PDF로 병합 후 저장. */
     @Transactional
-    public ResourceCheckResponse submitWithFile(Long id, MultipartFile file, AuthenticatedUser actor) {
+    public ResourceCheckResponse submitWithFile(Long id, MultipartFile[] files, AuthenticatedUser actor) {
         if (actor.role() != Role.EQUIPMENT_SUPPLIER
                 && actor.role() != Role.MANPOWER_SUPPLIER
                 && actor.role() != Role.ADMIN) {
@@ -137,6 +139,7 @@ public class ResourceCheckService {
                     "현재 상태에서는 회신 불가: " + entity.getStatus());
         }
         Long documentTypeId = resolveDocumentTypeId(entity.getCheckType(), entity.getOwnerType());
+        MultipartFile file = uploadMerger.mergeToSingle(files);
         var doc = documentService.upload(entity.getOwnerType(), entity.getOwnerId(),
                 documentTypeId, null, file, actor);
         entity.submit(doc.id());

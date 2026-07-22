@@ -22,9 +22,11 @@ import java.util.List;
 public class DocumentController {
 
     private final DocumentService service;
+    private final com.skep.collection.DocumentUploadMerger uploadMerger;
 
-    public DocumentController(DocumentService service) {
+    public DocumentController(DocumentService service, com.skep.collection.DocumentUploadMerger uploadMerger) {
         this.service = service;
+        this.uploadMerger = uploadMerger;
     }
 
     @GetMapping
@@ -85,12 +87,14 @@ public class DocumentController {
             @RequestParam Long ownerId,
             @RequestParam Long documentTypeId,
             @RequestParam(required = false) String expiryDate,
-            @RequestParam("file") MultipartFile file,
+            // 파일 1개면 그대로, 2개 이상이면 올린 순서대로 1개 PDF로 병합 후 저장.
+            @RequestParam("file") MultipartFile[] files,
             // S-9-G.2: 사용자 보충 / OCR 미리보기에서 검토한 필드. extracted_data 에 manual_* 키로 저장.
             // 예: manualBizNo, manualOwnerName, manualBusinessName, manualStartDate, manualAddress
             @RequestParam(required = false) java.util.Map<String, String> allParams,
             @CurrentUser AuthenticatedUser actor
     ) {
+        MultipartFile file = uploadMerger.mergeToSingle(files);
         LocalDate expiry = parseDate(expiryDate);
         java.util.Map<String, String> manualFields = new java.util.HashMap<>();
         String corners = allParams != null ? allParams.get("corners") : null; // 4모서리 정렬 크롭 저장용

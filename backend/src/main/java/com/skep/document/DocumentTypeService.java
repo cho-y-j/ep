@@ -16,10 +16,13 @@ public class DocumentTypeService {
 
     private final DocumentTypeRepository repo;
     private final FileStorage storage;
+    private final com.skep.collection.DocumentUploadMerger uploadMerger;
 
-    public DocumentTypeService(DocumentTypeRepository repo, FileStorage storage) {
+    public DocumentTypeService(DocumentTypeRepository repo, FileStorage storage,
+                               com.skep.collection.DocumentUploadMerger uploadMerger) {
         this.repo = repo;
         this.storage = storage;
+        this.uploadMerger = uploadMerger;
     }
 
     @Transactional(readOnly = true)
@@ -65,15 +68,17 @@ public class DocumentTypeService {
 
     // ── V116: '샘플 보기' 예시 이미지 (마스킹은 ADMIN 이 수동, 시스템은 저장·표시만) ──
 
-    /** ADMIN: 서류종류에 마스킹된 예시 이미지 1장 업로드(교체). 기존 파일이 있으면 삭제 후 교체. */
-    public DocumentType uploadSample(Long id, MultipartFile file) {
+    /**
+     * ADMIN: 서류종류에 마스킹된 예시 업로드(교체). 기존 파일이 있으면 삭제 후 교체.
+     * 이미지 1장 → 이미지로, PDF 1개 → PDF로, 2개 이상 → 올린 순서대로 1개 PDF로 병합.
+     */
+    public DocumentType uploadSample(Long id, MultipartFile[] files) {
         DocumentType t = get(id);
-        if (file == null || file.isEmpty()) {
-            throw ApiException.badRequest("EMPTY_FILE", "이미지 파일을 첨부하세요");
-        }
-        String ext = imageExt(file.getContentType());
+        // 2개 이상이면 병합(PDF), 1개면 그대로. 어댑터가 빈 입력 시 400.
+        MultipartFile file = uploadMerger.mergeToSingle(files);
+        String ext = sampleExt(file.getContentType());
         if (ext == null) {
-            throw ApiException.badRequest("UNSUPPORTED_IMAGE_TYPE", "이미지(PNG/JPG/WEBP/GIF)만 등록할 수 있습니다");
+            throw ApiException.badRequest("UNSUPPORTED_SAMPLE_TYPE", "이미지(PNG/JPG/WEBP/GIF) 또는 PDF만 등록할 수 있습니다");
         }
         byte[] bytes;
         try {
@@ -110,19 +115,26 @@ public class DocumentTypeService {
         return new SampleImage(storage.load(key), contentTypeForKey(key));
     }
 
-    /** 서류종류 응답에 넣을 샘플 이미지 URL. 미등록이면 null. */
+    /** 서류종류 응답에 넣을 샘플 URL. 미등록이면 null. */
     public static String sampleImageUrl(DocumentType t) {
         return t.getSampleImageKey() != null && !t.getSampleImageKey().isBlank()
                 ? "/api/document-types/" + t.getId() + "/sample" : null;
     }
 
-    /** 허용 이미지 content-type → 저장 확장자. 허용 외 형식은 null. */
-    private static String imageExt(String ct) {
+    /** 샘플이 PDF인지 — 저장 키 확장자로 판별(뷰어 img/iframe 분기용). 미등록이면 false. */
+    public static boolean sampleIsPdf(DocumentType t) {
+        String k = t.getSampleImageKey();
+        return k != null && k.toLowerCase().endsWith(".pdf");
+    }
+
+    /** 허용 샘플 content-type → 저장 확장자. 이미지 + PDF 허용, 그 외는 null. */
+    private static String sampleExt(String ct) {
         return switch (ct == null ? "" : ct.toLowerCase()) {
             case "image/png" -> "png";
             case "image/jpeg", "image/jpg" -> "jpg";
             case "image/webp" -> "webp";
             case "image/gif" -> "gif";
+            case "application/pdf" -> "pdf";
             default -> null;
         };
     }
@@ -133,6 +145,7 @@ public class DocumentTypeService {
         if (k.endsWith(".png")) return "image/png";
         if (k.endsWith(".webp")) return "image/webp";
         if (k.endsWith(".gif")) return "image/gif";
+        if (k.endsWith(".pdf")) return "application/pdf";
         return "image/jpeg";
     }
 
