@@ -57,11 +57,12 @@ export default function TargetPicker({ value, onChange }: {
     if (typePass && category && !typePass(category)) setCategory('');
   }, [handledTypes, showAllTypes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 협력업체 목록 — /api/companies 는 ADMIN 전용이라 공급사도 볼 수 있는 /suppliers 사용.
+  // 협력업체 목록 = 내가 등록한 하위공급사(/children)만. 탭(장비/인력) 유형에 맞게 필터.
   useEffect(() => {
     let alive = true;
-    api.get<CompanyResponse[]>('/api/companies/suppliers', { params: { type: tab === 'EQUIPMENT' ? 'EQUIPMENT' : 'MANPOWER' } })
-      .then((r) => { if (alive) setCompanies(r.data); })
+    const want = tab === 'EQUIPMENT' ? 'EQUIPMENT' : 'MANPOWER';
+    api.get<CompanyResponse[]>('/api/companies/children')
+      .then((r) => { if (alive) setCompanies((r.data ?? []).filter((c) => c.type === want)); })
       .catch(() => { if (alive) setCompanies([]); });
     return () => { alive = false; };
   }, [tab]);

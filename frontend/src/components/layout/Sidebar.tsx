@@ -200,6 +200,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         { label: '내 회사', to: '/my-company', icon: <IconBuilding /> },
         ...(isMaster ? [{ label: '직원 관리', to: '/company/users', icon: <IconUsers /> }] : []),
         ...(isEquip && isMaster ? [{ label: '협력업체 관리', to: '/sub-suppliers', icon: <IconTruck /> }] : []),
+        ...(isEquip && isMaster ? [{ label: '취급 장비종류', to: '/settings/equipment-types', icon: <IconTruck /> }] : []),
       ]},
     ];
   } else if (role === 'CLIENT') {
