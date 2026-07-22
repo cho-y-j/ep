@@ -4,10 +4,16 @@ import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import type { PublicCollection, PublicItem, PublicTarget } from '../../types/collection';
 import DocumentCornerAligner from '../document/DocumentCornerAligner';
+import DocumentMaskEditor from '../document/DocumentMaskEditor';
 import { detectDocumentCorners } from '../document/detectCorners';
 import { warpImageByCorners } from '../document/warpImage';
+import { pdfToPageImages } from '../document/pdfToPages';
 
 type Pending = { itemId: number; file: File; url: string };
+/** 모서리 보정본 위에 가릴 곳(검정 박스)을 덮는 대기 상태 — 건너뛰면 보정본 그대로 올라간다. */
+type Masking = { itemId: number; file: File; url: string };
+/** PDF 를 페이지 이미지로 렌더해 페이지별로 가리는 대기 상태 — 다 가리면 이미지들을 올려 서버가 1 PDF 로 재병합. */
+type PdfMasking = { itemId: number; file: File; pages: { url: string; file: File }[]; index: number; results: File[]; maskedAny: boolean };
 
 const uploadedOf = (t: PublicTarget) => t.items.filter((i) => i.uploaded).length;
 const requiredLeftOf = (t: PublicTarget) => t.items.filter((i) => i.required && !i.uploaded).length;
@@ -27,6 +33,10 @@ export default function CollectPublicPage() {
   /** 이미지 업로드 전 4모서리 보정 대기 상태 (건너뛰기 가능). */
   const [pending, setPending] = useState<Pending | null>(null);
   const [autoCorners, setAutoCorners] = useState<[number, number][] | undefined>(undefined);
+  /** 보정 완료 후 가리기(마스킹) 대기 상태. */
+  const [masking, setMasking] = useState<Masking | null>(null);
+  /** PDF 페이지별 가리기 대기 상태. */
+  const [pdfMasking, setPdfMasking] = useState<PdfMasking | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -65,6 +75,7 @@ export default function CollectPublicPage() {
 
   /** 촬영 / 단일 이미지 — 4모서리 보정 후 1장 업로드. PDF 1개는 바로 업로드. */
   function pickFile(itemId: number, file: File) {
+    if (file.type === 'application/pdf') { void startPdfMasking(itemId, file); return; }
     if (!file.type.startsWith('image/')) { void upload(itemId, [file]); return; }
     // 이미지면 먼저 4모서리 보정 — 자동검출은 백그라운드(실패해도 이미지 꼭짓점으로 시작).
     setAutoCorners(undefined);
@@ -100,13 +111,66 @@ export default function CollectPublicPage() {
     } finally { setUploadingId(null); }
   }
 
+  /** 4모서리 확정 → 원근보정(warp) 후, 바로 올리지 않고 가리기(마스킹) 단계를 연다. */
   async function uploadAligned(corners: [number, number][]) {
     if (!pending) return;
     const { itemId, file } = pending;
     closePending();
-    setUploadingId(itemId);
     const aligned = await warpImageByCorners(file, corners).catch(() => file);
-    await upload(itemId, [aligned]);
+    setMasking({ itemId, file: aligned, url: URL.createObjectURL(aligned) });
+  }
+
+  function closeMasking() {
+    setMasking((m) => { if (m) URL.revokeObjectURL(m.url); return null; });
+  }
+
+  /** 가리기 "적용" — 검정 박스가 구워진 File 을 올린다(자동 마스킹 위에 수동 박스 중첩). */
+  async function uploadMasked(maskedFile: File) {
+    if (!masking) return;
+    const { itemId } = masking;
+    closeMasking();
+    await upload(itemId, [maskedFile]);
+  }
+
+  /** 가리기 "건너뛰기" — 보정본 그대로 올린다. */
+  function skipMasking() {
+    if (!masking) return;
+    const { itemId, file } = masking;
+    closeMasking();
+    void upload(itemId, [file]);
+  }
+
+  /** PDF → 페이지 이미지로 렌더 후 페이지별 가리기 시작. 렌더 실패/0페이지면 원본 PDF 그대로 올린다. */
+  async function startPdfMasking(itemId: number, file: File) {
+    setUploadingId(itemId); setError(null);
+    let blobs: Blob[];
+    try { blobs = await pdfToPageImages(file); }
+    catch { setUploadingId(null); void upload(itemId, [file]); return; }
+    setUploadingId(null);
+    if (blobs.length === 0) { void upload(itemId, [file]); return; }
+    const base = file.name.replace(/\.[^.]+$/, '') || '문서';
+    const pages = blobs.map((b, i) => ({
+      url: URL.createObjectURL(b),
+      file: new File([b], `${base}-p${i + 1}.jpg`, { type: 'image/jpeg' }),
+    }));
+    setPdfMasking({ itemId, file, pages, index: 0, results: [], maskedAny: false });
+  }
+
+  /** 현재 페이지 결과(가린 이미지 또는 원본 페이지)를 쌓고 다음 페이지로. 마지막이면 업로드. */
+  function advancePdf(pageFile: File, wasMasked: boolean) {
+    if (!pdfMasking) return;
+    const results = [...pdfMasking.results, pageFile];
+    const maskedAny = pdfMasking.maskedAny || wasMasked;
+    const next = pdfMasking.index + 1;
+    if (next >= pdfMasking.pages.length) {
+      const { itemId, file, pages } = pdfMasking;
+      pages.forEach((p) => URL.revokeObjectURL(p.url));
+      setPdfMasking(null);
+      // 아무 페이지도 안 가렸으면 원본 PDF(텍스트 레이어 보존) 그대로, 하나라도 가렸으면 페이지 이미지들을 올려 서버가 1 PDF 로 병합.
+      void upload(itemId, maskedAny ? results : [file]);
+    } else {
+      setPdfMasking({ ...pdfMasking, index: next, results, maskedAny });
+    }
   }
 
   async function submit() {
@@ -245,6 +309,37 @@ export default function CollectPublicPage() {
             initialCorners={autoCorners}
             onConfirm={(c) => void uploadAligned(c as [number, number][])}
             onCancel={closePending}
+          />
+        </div>
+      )}
+
+      {/* 보정 후 가리기 — 가릴 곳을 검정 박스로 덮어 적용하면 그 픽셀이 실제로 칠해져 업로드된다. 건너뛰면 보정본 그대로. */}
+      {masking && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/70">
+          <div className="flex items-center justify-between gap-3 bg-white px-4 py-3">
+            <span className="text-sm font-bold text-slate-800">가릴 곳 덮기 (선택)</span>
+          </div>
+          <DocumentMaskEditor
+            imageUrl={masking.url}
+            onConfirm={(f) => void uploadMasked(f)}
+            onCancel={skipMasking}
+          />
+        </div>
+      )}
+
+      {/* PDF 페이지별 가리기 — 각 페이지 이미지 위에 가릴 곳을 덮는다. 마지막 페이지까지 마치면 업로드(서버가 1 PDF 로 병합). */}
+      {pdfMasking && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/70">
+          <div className="flex items-center justify-between gap-3 bg-white px-4 py-3">
+            <span className="text-sm font-bold text-slate-800">
+              가릴 곳 덮기 · 페이지 {pdfMasking.index + 1}/{pdfMasking.pages.length}
+            </span>
+          </div>
+          <DocumentMaskEditor
+            key={pdfMasking.index}
+            imageUrl={pdfMasking.pages[pdfMasking.index].url}
+            onConfirm={(f) => advancePdf(f, true)}
+            onCancel={() => advancePdf(pdfMasking.pages[pdfMasking.index].file, false)}
           />
         </div>
       )}

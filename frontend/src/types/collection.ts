@@ -53,6 +53,8 @@ export type PublicItem = {
   uploaded: boolean;
   file_name?: string | null;
   sample_image_url?: string | null;
+  /** 샘플이 PDF면 true — 뷰어 img/iframe 분기용. */
+  sample_pdf?: boolean;
   sample_description?: string | null;
 };
 
