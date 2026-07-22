@@ -25,6 +25,23 @@ export async function fetchSuggestedSel(ownerType: OwnerType, ownerId: number): 
   }
 }
 
+/**
+ * 등록형 프리필 — owner 자원 없이 종류(장비종류 code / 역할)로만 필수·선택 서류를 폼 선택상태로 변환.
+ * EQUIPMENT 는 typeCode, PERSON 은 role 로 조회. 실패 시 빈 선택(전부 제외).
+ */
+export async function fetchSuggestedSelByType(ownerType: OwnerType, code: string): Promise<Sel> {
+  try {
+    const params = ownerType === 'EQUIPMENT' ? { ownerType, typeCode: code } : { ownerType, role: code };
+    const r = await api.get<SuggestResponse>('/api/document-collections/suggest-by-type', { params });
+    const sel: Sel = {};
+    r.data.required_type_ids.forEach((id) => { sel[id] = 'required'; });
+    r.data.optional_type_ids.forEach((id) => { sel[id] = 'optional'; });
+    return sel;
+  } catch {
+    return {};
+  }
+}
+
 type SuggestBatchResponse = {
   results: Array<{ owner_type: OwnerType; owner_id: number; required_type_ids: number[]; optional_type_ids: number[] }>;
 };

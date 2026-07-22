@@ -2,6 +2,7 @@ package com.skep.collection;
 
 import com.skep.collection.dto.CollectionDtos;
 import com.skep.document.OwnerType;
+import com.skep.person.PersonRole;
 import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
 import org.springframework.http.ResponseEntity;
@@ -40,6 +41,15 @@ public class DocumentCollectionController {
     public CollectionDtos.SuggestResponse suggest(@RequestParam OwnerType ownerType, @RequestParam Long ownerId,
                                                   @CurrentUser AuthenticatedUser actor) {
         return service.suggest(ownerType, ownerId, actor);
+    }
+
+    /** 등록형 프리필 — 종류(장비종류 code / 역할)로만 필수/선택 서류를 반환(owner 조회 없음). */
+    @GetMapping("/suggest-by-type")
+    public CollectionDtos.SuggestResponse suggestByType(@RequestParam OwnerType ownerType,
+                                                        @RequestParam(required = false) String typeCode,
+                                                        @RequestParam(required = false) PersonRole role,
+                                                        @CurrentUser AuthenticatedUser actor) {
+        return service.suggestByType(ownerType, typeCode, role, actor);
     }
 
     /** 폼 자동 체크용(다중 대상) — 대상 목록을 한 번에. */

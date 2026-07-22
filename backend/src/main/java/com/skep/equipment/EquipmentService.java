@@ -292,6 +292,25 @@ public class EquipmentService {
         return repo.save(e);
     }
 
+    /**
+     * 서류수집 '등록형' 무로그인 생성 — 공개 링크에서 차량번호 입력 순간 장비 신규 등록.
+     * owner(supplier)는 요청의 target_company_id 로 강제(토큰 유출돼도 그 회사 밖 생성 불가). category 유효성만 재사용,
+     * 나머지(model/보험/조종원/만료일 등)는 null → 직원/OCR 사후 보완. actor 스코핑 없음(토큰이 인가).
+     */
+    public Equipment createViaCollection(Long supplierId, String category, String vehicleNo) {
+        Company supplier = companies.findById(supplierId)
+                .orElseThrow(() -> ApiException.badRequest("SUPPLIER_NOT_FOUND", "회사 " + supplierId + " 를 찾을 수 없습니다"));
+        if (supplier.getType() != CompanyType.EQUIPMENT) {
+            throw ApiException.badRequest("SUPPLIER_NOT_EQUIPMENT", "장비공급사 유형이 아닌 회사에 장비를 등록할 수 없습니다");
+        }
+        requireActiveCategory(category);
+        return repo.save(Equipment.builder()
+                .supplierId(supplierId)
+                .vehicleNo(vehicleNo)
+                .category(category)
+                .build());
+    }
+
     public Equipment update(Long id, UpdateEquipmentRequest req, AuthenticatedUser actor) {
         Equipment e = repo.findById(id)
                 .orElseThrow(() -> ApiException.notFound("EQUIPMENT_NOT_FOUND", "equipment " + id + " not found"));

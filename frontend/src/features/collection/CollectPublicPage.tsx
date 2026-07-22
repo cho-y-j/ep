@@ -19,6 +19,9 @@ export default function CollectPublicPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // 등록형(신규 자원) — 미등록 슬롯의 차량번호/이름 입력값과 진행 상태.
+  const [registerValue, setRegisterValue] = useState<Record<number, string>>({});
+  const [registeringId, setRegisteringId] = useState<number | null>(null);
   const [sample, setSample] = useState<{ url: string | null; desc: string | null } | null>(null);
   const [openTargetId, setOpenTargetId] = useState<number | null>(null);
   /** 이미지 업로드 전 4모서리 보정 대기 상태 (건너뛰기 가능). */
@@ -109,6 +112,22 @@ export default function CollectPublicPage() {
     } finally { setSubmitting(false); }
   }
 
+  /** 등록형 미등록 슬롯 — 차량번호/이름 입력 → 자원 신규 등록. 성공 시 재조회로 서류 업로드가 열린다. */
+  async function register(target: PublicTarget) {
+    if (!token) return;
+    const value = (registerValue[target.id] ?? '').trim();
+    if (!value) { setError(target.input_kind === 'VEHICLE_NO' ? '차량번호를 입력하세요' : '이름을 입력하세요'); return; }
+    setRegisteringId(target.id); setError(null);
+    try {
+      await api.post(`/api/collect/${token}/targets/${target.id}/register`, { value });
+      const r = await api.get<PublicCollection>(`/api/collect/${token}`);
+      setInfo(r.data);
+      setOpenTargetId(target.id); // 등록한 카드를 열어 둔 채 서류 업로드로 이어지게.
+    } catch (err) {
+      setError(err instanceof AxiosError ? (err.response?.data?.message ?? '등록 실패') : '등록 실패');
+    } finally { setRegisteringId(null); }
+  }
+
   if (loading) return <Centered><p className="text-sm text-slate-400">불러오는 중…</p></Centered>;
   if (error && !info) return <Centered><p className="text-sm text-red-600">{error}</p></Centered>;
   if (!info) return null;
@@ -165,21 +184,30 @@ export default function CollectPublicPage() {
                     <span className="truncate text-sm font-bold text-slate-900">{t.owner_label}</span>
                   </span>
                   <span className="shrink-0 text-xs">
-                    {left === 0
-                      ? <span className="font-semibold text-emerald-600">완료 {up}/{t.items.length}</span>
-                      : <span className="text-slate-500">{up}/{t.items.length} · 필수 <strong className="text-rose-600">{left}</strong></span>}
+                    {!t.registered
+                      ? <span className="font-semibold text-amber-600">등록 필요</span>
+                      : left === 0
+                        ? <span className="font-semibold text-emerald-600">완료 {up}/{t.items.length}</span>
+                        : <span className="text-slate-500">{up}/{t.items.length} · 필수 <strong className="text-rose-600">{left}</strong></span>}
                     <span className="ml-2 text-slate-400">{open ? '▲' : '▼'}</span>
                   </span>
                 </button>
                 {open && (
                   <div className="space-y-2 border-t border-slate-100 p-3">
-                    {t.items.map((it) => (
-                      <ItemRow key={it.id} item={it} disabled={disabled} uploading={uploadingId === it.id}
-                        inputRef={(el) => { inputs.current[it.id] = el; }}
-                        onPick={(f) => pickFile(it.id, f)}
-                        onClickUpload={() => inputs.current[it.id]?.click()}
-                        onShowSample={setSample} />
-                    ))}
+                    {!t.registered ? (
+                      <RegisterRow target={t} value={registerValue[t.id] ?? ''} disabled={disabled}
+                        registering={registeringId === t.id}
+                        onChange={(v) => setRegisterValue((s) => ({ ...s, [t.id]: v }))}
+                        onSubmit={() => register(t)} />
+                    ) : (
+                      t.items.map((it) => (
+                        <ItemRow key={it.id} item={it} disabled={disabled} uploading={uploadingId === it.id}
+                          inputRef={(el) => { inputs.current[it.id] = el; }}
+                          onPick={(f) => pickFile(it.id, f)}
+                          onClickUpload={() => inputs.current[it.id]?.click()}
+                          onShowSample={setSample} />
+                      ))
+                    )}
                   </div>
                 )}
               </div>
@@ -270,6 +298,37 @@ function ItemRow({ item, disabled, uploading, inputRef, onPick, onClickUpload, o
           className={`rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
             item.uploaded ? 'border border-slate-300 text-slate-700 hover:bg-slate-50' : 'bg-brand-600 text-white hover:bg-brand-700'}`}>
           {uploading ? '올리는 중…' : item.uploaded ? '다시 올리기' : '파일 올리기'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** 등록형 미등록 슬롯 — 차량번호/이름 입력 + [등록]. 등록되면 이 자리에 서류 업로드 목록이 뜬다. */
+function RegisterRow({ target, value, disabled, registering, onChange, onSubmit }: {
+  target: PublicTarget;
+  value: string;
+  disabled: boolean;
+  registering: boolean;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+}) {
+  const isVehicle = target.input_kind === 'VEHICLE_NO';
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+      <p className="mb-2 text-xs text-slate-600">
+        <strong className="text-slate-800">{target.planned_type_label ?? (isVehicle ? '장비' : '인력')}</strong>
+        {' '}— {isVehicle ? '차량번호' : '이름'}을 입력하면 등록되고 서류 업로드가 열립니다.
+      </p>
+      <div className="flex items-center gap-2">
+        <input value={value} onChange={(e) => onChange(e.target.value)}
+          placeholder={isVehicle ? '예: 12가3456' : '예: 홍길동'}
+          disabled={disabled || registering}
+          onKeyDown={(e) => { if (e.key === 'Enter') onSubmit(); }}
+          className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50" />
+        <button type="button" onClick={onSubmit} disabled={disabled || registering || !value.trim()}
+          className="shrink-0 rounded-md bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50">
+          {registering ? '등록 중…' : '등록'}
         </button>
       </div>
     </div>

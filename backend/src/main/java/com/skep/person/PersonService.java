@@ -186,6 +186,23 @@ public class PersonService {
         return repo.save(p);
     }
 
+    /**
+     * 서류수집 '등록형' 무로그인 생성 — 공개 링크에서 이름 입력 순간 인력 신규 등록.
+     * owner(supplier)는 요청의 target_company_id 로 강제. 역할 유효성·출근코드만 재사용, 로그인 계정/생년/보험 등은 null
+     * → 직원 사후 발급/보완. actor 스코핑 없음(토큰이 인가).
+     */
+    public Person createViaCollection(Long supplierId, String name, Set<PersonRole> roles) {
+        Company supplier = companies.findById(supplierId)
+                .orElseThrow(() -> ApiException.badRequest("SUPPLIER_NOT_FOUND", "회사 " + supplierId + " 를 찾을 수 없습니다"));
+        validateRoles(roles, supplier.getType());
+        return repo.save(Person.builder()
+                .supplierId(supplierId)
+                .name(name)
+                .roles(roles)
+                .attendanceCode(generateUniqueAttendanceCode())
+                .build());
+    }
+
     /** 작업자 앱 로그인 계정(아이디/비번) 설정·변경. 아이디는 전역 유일, 비번은 BCrypt 해시 저장. */
     private void applyCredentials(Person p, String username, String password) {
         String u = username == null ? null : username.trim();

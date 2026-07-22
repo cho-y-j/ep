@@ -59,6 +59,7 @@ public class SecurityConfig {
                         // 서류 수집 공개 링크 — 토큰 기반, 비로그인 접근.
                         .requestMatchers(HttpMethod.GET, "/api/collect/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/collect/*/documents").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/collect/*/targets/*/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/collect/*/submit").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/collect/*/detect-corners").permitAll()
                         // V116: 서류종류 '샘플 보기' 예시 이미지 — 마스킹된 예시(민감정보 아님), 비로그인 공개.

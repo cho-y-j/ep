@@ -7,6 +7,7 @@ import type { CollectionSummary } from '../../types/collection';
 import type { DocumentTypeResponse } from '../../types/document';
 import TargetDocEditor from './TargetDocEditor';
 import TargetPicker from './TargetPicker';
+import RegisterTargetForm from './RegisterTargetForm';
 import { fetchSuggestedSelBatch, type Sel } from './suggest';
 import { targetKey, type PickedTarget } from './target';
 
@@ -21,8 +22,9 @@ export default function DocumentCollectionPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // 새 요청 폼 — 대상 고르기 → 대상별 서류 확인 2단계.
+  // 새 요청 폼 — 갱신형(기존 자원)은 대상 고르기 → 서류 확인 2단계, 등록형(신규 자원)은 별도 폼.
   const [showNew, setShowNew] = useState(false);
+  const [mode, setMode] = useState<'renew' | 'register'>('renew');
   const [step, setStep] = useState<'pick' | 'docs'>('pick');
   const [targets, setTargets] = useState<PickedTarget[]>([]);
   const [sel, setSel] = useState<Record<string, Sel>>({});
@@ -94,7 +96,7 @@ export default function DocumentCollectionPage() {
   });
 
   function resetForm() {
-    setShowNew(false); setStep('pick'); setTargets([]); setSel({}); setSuggested({});
+    setShowNew(false); setMode('renew'); setStep('pick'); setTargets([]); setSel({}); setSuggested({});
     setTitle(''); setRecipientName(''); setRecipientPhone('');
   }
 
@@ -154,7 +156,19 @@ export default function DocumentCollectionPage() {
 
         {showNew && (
           <div className="card space-y-4 p-5">
-            {step === 'pick' ? (
+            <div className="inline-flex overflow-hidden rounded-lg border border-slate-300 text-sm">
+              {(['renew', 'register'] as const).map((m) => (
+                <button key={m} type="button" onClick={() => setMode(m)}
+                  className={`px-3 py-1.5 font-semibold border-r border-slate-200 last:border-r-0 ${
+                    mode === m ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                  {m === 'renew' ? '등록된 자원 갱신' : '신규 자원 등록'}
+                </button>
+              ))}
+            </div>
+
+            {mode === 'register' ? (
+              <RegisterTargetForm typesEq={typesEq} typesPe={typesPe} onDone={() => { resetForm(); void reload(); }} />
+            ) : step === 'pick' ? (
               <>
                 <h2 className="text-sm font-bold text-slate-800">1단계 — 대상 고르기</h2>
                 <TargetPicker value={targets} onChange={setTargets} />

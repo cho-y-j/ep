@@ -28,6 +28,10 @@ public class DocumentCollectionRequest {
     @Column(name = "supplier_company_id")
     private Long supplierCompanyId;
 
+    /** 등록형 — 공개 링크에서 만들 자원의 소유 협력업체. 갱신형은 NULL. 토큰 유출돼도 이 회사 밖 생성 불가. */
+    @Column(name = "target_company_id")
+    private Long targetCompanyId;
+
     @Column(name = "created_by")
     private Long createdBy;
 
@@ -58,11 +62,12 @@ public class DocumentCollectionRequest {
 
     @Builder
     private DocumentCollectionRequest(String token, LocalDateTime tokenExpiresAt,
-                                      Long supplierCompanyId, Long createdBy, String title,
+                                      Long supplierCompanyId, Long targetCompanyId, Long createdBy, String title,
                                       String recipientName, String recipientPhone, String recipientEmail) {
         this.token = token;
         this.tokenExpiresAt = tokenExpiresAt;
         this.supplierCompanyId = supplierCompanyId;
+        this.targetCompanyId = targetCompanyId;
         this.createdBy = createdBy;
         this.title = title;
         this.recipientName = recipientName;

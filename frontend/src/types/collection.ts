@@ -60,6 +60,14 @@ export type PublicTarget = {
   id: number;
   owner_type: OwnerType;
   owner_label: string;
+  /** 등록형(신규 자원) 슬롯 정보 — 갱신형은 planned_type=null·registered=true. */
+  planned_type?: string | null;
+  planned_type_label?: string | null;
+  registered: boolean;
+  /** 입력 종류 — EQUIPMENT=VEHICLE_NO, PERSON=NAME. */
+  input_kind: string;
+  /** 등록된 값(차량번호/이름). 미등록이면 null. */
+  input_value?: string | null;
   item_count: number;
   uploaded_count: number;
   required_remaining: number;

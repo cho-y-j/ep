@@ -9,20 +9,27 @@ import java.util.List;
 public final class CollectionDtos {
     private CollectionDtos() {}
 
-    /** 생성 요청의 대상 1건 — 대상마다 필수/선택 서류타입을 따로 고른다. */
+    /**
+     * 생성 요청의 대상 1건 — 대상마다 필수/선택 서류타입을 따로 고른다.
+     * 갱신형: ownerId 로 기존 자원 지정. 등록형: ownerId=null, plannedType(장비종류 code / 역할 name)+quantity 로
+     * 미등록 슬롯 N개 생성(공개 링크에서 값 입력 시 자원 생성). 한 요청에 갱신형+등록형 혼합 금지.
+     */
     public record CreateTarget(
             OwnerType ownerType,
             Long ownerId,
             List<Long> requiredTypeIds,
-            List<Long> optionalTypeIds
+            List<Long> optionalTypeIds,
+            String plannedType,
+            Integer quantity
     ) {}
 
-    /** 수집 요청 생성 — 대상 N개(배열 순서 = sort_order) + 받는사람. */
+    /** 수집 요청 생성 — 대상 N개(배열 순서 = sort_order) + 받는사람. 등록형이면 targetCompanyId(소유 협력업체) 필수. */
     public record CreateRequest(
             String title,
             String recipientName,
             String recipientPhone,
             String recipientEmail,
+            Long targetCompanyId,
             List<CreateTarget> targets
     ) {}
 
@@ -102,11 +109,20 @@ public final class CollectionDtos {
             String sampleDescription    // V119: 샘플 설명글, null = 미등록
     ) {}
 
-    /** 공개(무로그인) 페이지용 대상 섹션. */
+    /**
+     * 공개(무로그인) 페이지용 대상 섹션.
+     * 등록형 미등록 슬롯이면 registered=false — 화면은 [유형(plannedTypeLabel)][값 입력(inputKind)][등록] 을 먼저 보여주고
+     * 등록 후에야 서류 업로드가 열린다. inputValue = 등록된 값(차량번호/이름), 미등록이면 null.
+     */
     public record PublicTarget(
             Long id,
             OwnerType ownerType,
             String ownerLabel,
+            String plannedType,
+            String plannedTypeLabel,
+            boolean registered,
+            String inputKind,
+            String inputValue,
             int itemCount,
             int uploadedCount,
             int requiredRemaining,

@@ -33,6 +33,16 @@ public class PublicCollectionController {
         return ResponseEntity.noContent().build();
     }
 
+    /** 등록형 무로그인 등록 — 차량번호/이름 입력 순간 자원(장비/인력) 신규 생성 후 슬롯 연결. body {value}. */
+    @PostMapping("/{token}/targets/{targetId}/register")
+    public ResponseEntity<Void> register(@PathVariable String token, @PathVariable Long targetId,
+                                         @RequestBody(required = false) RegisterRequest req) {
+        service.publicRegister(token, targetId, req != null ? req.value() : null);
+        return ResponseEntity.noContent().build();
+    }
+
+    public record RegisterRequest(String value) {}
+
     @PostMapping("/{token}/submit")
     public ResponseEntity<Void> submit(@PathVariable String token) {
         service.publicSubmit(token);

@@ -27,8 +27,13 @@ public class DocumentCollectionTarget {
     @Column(name = "owner_type", nullable = false, length = 16)
     private OwnerType ownerType;
 
-    @Column(name = "owner_id", nullable = false)
+    /** 등록형은 공개 링크에서 값 입력 순간 자원을 만들며 채워진다. 그 전까지 NULL(미등록 슬롯). */
+    @Column(name = "owner_id")
     private Long ownerId;
+
+    /** 등록형에서 무엇을 만들지 — EQUIPMENT=장비종류 code, PERSON=역할 name. 갱신형은 NULL. */
+    @Column(name = "planned_type", length = 32)
+    private String plannedType;
 
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
@@ -37,13 +42,17 @@ public class DocumentCollectionTarget {
     private LocalDateTime createdAt;
 
     @Builder
-    private DocumentCollectionTarget(Long requestId, OwnerType ownerType, Long ownerId, int sortOrder) {
+    private DocumentCollectionTarget(Long requestId, OwnerType ownerType, Long ownerId, String plannedType, int sortOrder) {
         this.requestId = requestId;
         this.ownerType = ownerType;
         this.ownerId = ownerId;
+        this.plannedType = plannedType;
         this.sortOrder = sortOrder;
     }
 
     @PrePersist
     void onCreate() { this.createdAt = LocalDateTime.now(); }
+
+    /** 등록형 — 공개 링크에서 자원을 만든 뒤 그 owner id 를 슬롯에 연결. */
+    public void linkOwner(Long ownerId) { this.ownerId = ownerId; }
 }
