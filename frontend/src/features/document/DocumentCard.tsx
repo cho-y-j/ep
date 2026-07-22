@@ -161,7 +161,8 @@ export default function DocumentCard({ doc, canEdit, isAdmin, canAutoVerify, onO
                       자동 검증
                     </button>
                   )}
-                  {isAdmin && (
+                  {/* 진위 확정(수동 검증) — ADMIN 전체 + 자기/자식 소유 자원 공급사(canEdit). 백엔드 ensureCanModify 로 최종 스코프 강제. */}
+                  {(canEdit || isAdmin) && (
                     <button
                       type="button"
                       onClick={() => { setMenuOpen(false); onToggleVerify(); }}

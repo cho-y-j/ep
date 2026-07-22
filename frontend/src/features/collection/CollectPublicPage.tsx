@@ -14,6 +14,8 @@ type Pending = { itemId: number; file: File; url: string };
 type Masking = { itemId: number; file: File; url: string };
 /** PDF 를 페이지 이미지로 렌더해 페이지별로 가리는 대기 상태 — 다 가리면 이미지들을 올려 서버가 1 PDF 로 재병합. */
 type PdfMasking = { itemId: number; file: File; pages: { url: string; file: File }[]; index: number; results: File[]; maskedAny: boolean };
+/** 항목별로 '담아둔' 장(사진/PDF) — 한 장씩 누적한 뒤 [업로드]로 한 번에 병합 전송(서버가 N개→1 PDF). */
+type Staged = { url: string; file: File };
 
 const uploadedOf = (t: PublicTarget) => t.items.filter((i) => i.uploaded).length;
 const requiredLeftOf = (t: PublicTarget) => t.items.filter((i) => i.required && !i.uploaded).length;
@@ -37,6 +39,8 @@ export default function CollectPublicPage() {
   const [masking, setMasking] = useState<Masking | null>(null);
   /** PDF 페이지별 가리기 대기 상태. */
   const [pdfMasking, setPdfMasking] = useState<PdfMasking | null>(null);
+  /** 항목별 스테이징 — 처리(보정/마스킹/PDF)까지 끝난 장들을 담아두고, [업로드]로 한 번에 전송. */
+  const [staged, setStaged] = useState<Record<number, Staged[]>>({});
 
   useEffect(() => {
     if (!token) return;
@@ -73,10 +77,10 @@ export default function CollectPublicPage() {
     });
   }
 
-  /** 촬영 / 단일 이미지 — 4모서리 보정 후 1장 업로드. PDF 1개는 바로 업로드. */
+  /** 촬영 / 단일 이미지 — 4모서리 보정 후 스테이징에 담는다. PDF 1개는 페이지 가리기 후 담는다. */
   function pickFile(itemId: number, file: File) {
     if (file.type === 'application/pdf') { void startPdfMasking(itemId, file); return; }
-    if (!file.type.startsWith('image/')) { void upload(itemId, [file]); return; }
+    if (!file.type.startsWith('image/')) { stage(itemId, [file]); return; }
     // 이미지면 먼저 4모서리 보정 — 자동검출은 백그라운드(실패해도 이미지 꼭짓점으로 시작).
     setAutoCorners(undefined);
     setPending({ itemId, file, url: URL.createObjectURL(file) });
@@ -84,11 +88,11 @@ export default function CollectPublicPage() {
     void detectDocumentCorners(file, token).then((c) => { if (c) setAutoCorners(c); });
   }
 
-  /** 앨범/파일 다중 선택 — 1장이면 정렬 단계를 거치고, 2장 이상이면 올린 순서대로 병합(1개 PDF). */
+  /** 앨범/파일 다중 선택 — 1장이면 정렬 단계를 거치고, 2장 이상(Ctrl 다중)이면 그대로 스테이징에 합류. */
   function pickFiles(itemId: number, files: File[]) {
     if (files.length === 0) return;
     if (files.length === 1) { pickFile(itemId, files[0]); return; }
-    void upload(itemId, files);
+    stage(itemId, files);
   }
 
   function closePending() {
@@ -96,9 +100,9 @@ export default function CollectPublicPage() {
     setAutoCorners(undefined);
   }
 
-  /** 파일 1개면 그대로, 2개 이상이면 올린 순서대로 서버가 1개 PDF로 병합해 저장. */
-  async function upload(itemId: number, files: File[]) {
-    if (!token || files.length === 0) return;
+  /** 파일 1개면 그대로, 2개 이상이면 올린 순서대로 서버가 1개 PDF로 병합해 저장. 성공하면 true. */
+  async function upload(itemId: number, files: File[]): Promise<boolean> {
+    if (!token || files.length === 0) return false;
     setUploadingId(itemId); setError(null);
     try {
       const fd = new FormData();
@@ -106,9 +110,37 @@ export default function CollectPublicPage() {
       for (const f of files) fd.append('file', f);
       await api.post(`/api/collect/${token}/documents`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       markUploaded(itemId, files.length === 1 ? files[0].name : `${files[0].name} 외 ${files.length - 1}건`);
+      return true;
     } catch (err) {
       setError(err instanceof AxiosError ? (err.response?.data?.message ?? '업로드 실패') : '업로드 실패');
+      return false;
     } finally { setUploadingId(null); }
+  }
+
+  /** 처리 끝난 장을 스테이징에 push(누적). 썸네일용 objectURL 을 만들어 둔다. */
+  function stage(itemId: number, files: File[]) {
+    if (files.length === 0) return;
+    const add = files.map((f) => ({ url: URL.createObjectURL(f), file: f }));
+    setStaged((s) => ({ ...s, [itemId]: [...(s[itemId] ?? []), ...add] }));
+  }
+  /** 담아둔 장 1개 삭제. */
+  function removeStaged(itemId: number, url: string) {
+    URL.revokeObjectURL(url);
+    setStaged((s) => ({ ...s, [itemId]: (s[itemId] ?? []).filter((x) => x.url !== url) }));
+  }
+  /** 항목 스테이징 비우기(업로드 성공 후). objectURL 회수. */
+  function clearStaged(itemId: number) {
+    setStaged((s) => {
+      (s[itemId] ?? []).forEach((x) => URL.revokeObjectURL(x.url));
+      const next = { ...s }; delete next[itemId]; return next;
+    });
+  }
+  /** [업로드] — 담아둔 장 전체를 한 번에 병합 전송. 성공하면 스테이징을 비운다. */
+  async function uploadStaged(itemId: number) {
+    const cur = staged[itemId] ?? [];
+    if (cur.length === 0) return;
+    const ok = await upload(itemId, cur.map((x) => x.file));
+    if (ok) clearStaged(itemId);
   }
 
   /** 4모서리 확정 → 원근보정(warp) 후, 바로 올리지 않고 가리기(마스킹) 단계를 연다. */
@@ -124,30 +156,30 @@ export default function CollectPublicPage() {
     setMasking((m) => { if (m) URL.revokeObjectURL(m.url); return null; });
   }
 
-  /** 가리기 "적용" — 검정 박스가 구워진 File 을 올린다(자동 마스킹 위에 수동 박스 중첩). */
-  async function uploadMasked(maskedFile: File) {
+  /** 가리기 "적용" — 검정 박스가 구워진 File 을 스테이징에 담는다(자동 마스킹 위에 수동 박스 중첩). */
+  function uploadMasked(maskedFile: File) {
     if (!masking) return;
     const { itemId } = masking;
     closeMasking();
-    await upload(itemId, [maskedFile]);
+    stage(itemId, [maskedFile]);
   }
 
-  /** 가리기 "건너뛰기" — 보정본 그대로 올린다. */
+  /** 가리기 "건너뛰기" — 보정본 그대로 담는다. */
   function skipMasking() {
     if (!masking) return;
     const { itemId, file } = masking;
     closeMasking();
-    void upload(itemId, [file]);
+    stage(itemId, [file]);
   }
 
-  /** PDF → 페이지 이미지로 렌더 후 페이지별 가리기 시작. 렌더 실패/0페이지면 원본 PDF 그대로 올린다. */
+  /** PDF → 페이지 이미지로 렌더 후 페이지별 가리기 시작. 렌더 실패/0페이지면 원본 PDF 를 그대로 담는다. */
   async function startPdfMasking(itemId: number, file: File) {
     setUploadingId(itemId); setError(null);
     let blobs: Blob[];
     try { blobs = await pdfToPageImages(file); }
-    catch { setUploadingId(null); void upload(itemId, [file]); return; }
+    catch { setUploadingId(null); stage(itemId, [file]); return; }
     setUploadingId(null);
-    if (blobs.length === 0) { void upload(itemId, [file]); return; }
+    if (blobs.length === 0) { stage(itemId, [file]); return; }
     const base = file.name.replace(/\.[^.]+$/, '') || '문서';
     const pages = blobs.map((b, i) => ({
       url: URL.createObjectURL(b),
@@ -166,8 +198,8 @@ export default function CollectPublicPage() {
       const { itemId, file, pages } = pdfMasking;
       pages.forEach((p) => URL.revokeObjectURL(p.url));
       setPdfMasking(null);
-      // 아무 페이지도 안 가렸으면 원본 PDF(텍스트 레이어 보존) 그대로, 하나라도 가렸으면 페이지 이미지들을 올려 서버가 1 PDF 로 병합.
-      void upload(itemId, maskedAny ? results : [file]);
+      // 아무 페이지도 안 가렸으면 원본 PDF(텍스트 레이어 보존) 그대로, 하나라도 가렸으면 페이지 이미지들을 스테이징에 담는다.
+      stage(itemId, maskedAny ? results : [file]);
     } else {
       setPdfMasking({ ...pdfMasking, index: next, results, maskedAny });
     }
@@ -274,8 +306,11 @@ export default function CollectPublicPage() {
                     ) : (
                       t.items.map((it) => (
                         <ItemRow key={it.id} item={it} disabled={disabled} uploading={uploadingId === it.id}
+                          staged={staged[it.id] ?? []}
                           onPick={(f) => pickFile(it.id, f)}
                           onPickFiles={(fs) => pickFiles(it.id, fs)}
+                          onRemoveStaged={(url) => removeStaged(it.id, url)}
+                          onUpload={() => uploadStaged(it.id)}
                           onShowSample={setSample} />
                       ))
                     )}
@@ -290,17 +325,17 @@ export default function CollectPublicPage() {
           className="mt-6 w-full rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50">
           {submitting ? '제출 중…' : requiredLeft === 0 ? '제출 완료' : `제출 (필수 ${requiredLeft}건 남음)`}
         </button>
-        <p className="mt-2 text-center text-xs text-slate-400">촬영하거나 사진·PDF 파일을 올릴 수 있어요. 여러 장을 고르면 1개로 합쳐집니다.</p>
+        <p className="mt-2 text-center text-xs text-slate-400">촬영·사진·PDF를 한 장씩 담은 뒤 [업로드]를 누르면 1개로 합쳐 제출됩니다.</p>
       </div>
 
-      {/* 업로드 전 4모서리 보정 — 건너뛰면 원본 그대로 올라간다. */}
+      {/* 업로드 전 4모서리 보정 — 건너뛰면 원본 그대로 스테이징에 담긴다. */}
       {pending && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black/70">
           <div className="flex items-center justify-between gap-3 bg-white px-4 py-3">
             <span className="text-sm font-bold text-slate-800">서류 영역 맞추기</span>
-            <button type="button" onClick={() => { const p = pending; closePending(); void upload(p.itemId, [p.file]); }}
+            <button type="button" onClick={() => { const p = pending; closePending(); stage(p.itemId, [p.file]); }}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-              건너뛰고 바로 올리기
+              보정 건너뛰고 담기
             </button>
           </div>
           <DocumentCornerAligner
@@ -374,19 +409,23 @@ export default function CollectPublicPage() {
   );
 }
 
-function ItemRow({ item, disabled, uploading, onPick, onPickFiles, onShowSample }: {
+function ItemRow({ item, disabled, uploading, staged, onPick, onPickFiles, onRemoveStaged, onUpload, onShowSample }: {
   item: PublicItem;
   disabled: boolean;
   uploading: boolean;
-  onPick: (file: File) => void;          // 촬영/단일 이미지 → 정렬 후 업로드
-  onPickFiles: (files: File[]) => void;  // 앨범·파일 다중 → 병합 업로드
+  staged: Staged[];                      // 담아둔 장(썸네일)
+  onPick: (file: File) => void;          // 촬영/단일 이미지 → 정렬 후 스테이징
+  onPickFiles: (files: File[]) => void;  // 앨범·파일 다중 → 스테이징
+  onRemoveStaged: (url: string) => void; // 담아둔 장 1개 삭제
+  onUpload: () => void;                  // 담아둔 장 전체를 한 번에 병합 전송
   onShowSample: (s: { url: string | null; desc: string | null; pdf?: boolean }) => void;
 }) {
   // 촬영과 앨범/파일을 별도 input 으로 분리 — capture 는 촬영 input 에만 둬 앨범·파일·복수 선택을 막지 않는다.
   const cameraRef = useRef<HTMLInputElement | null>(null);
   const filesRef = useRef<HTMLInputElement | null>(null);
+  const count = staged.length;
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+    <div className="rounded-lg border border-slate-200 p-3">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold ${item.required ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -402,23 +441,48 @@ function ItemRow({ item, disabled, uploading, onPick, onPickFiles, onShowSample 
         </div>
         {item.uploaded && <div className="mt-0.5 truncate text-xs text-emerald-600">✓ 업로드됨{item.file_name ? ` · ${item.file_name}` : ''}</div>}
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {/* 촬영 — 후면 카메라 바로. 여러 장은 촬영→다시 촬영 반복으로 누적(서버가 병합). */}
+
+      {/* 담은 장 목록 — 한 장씩 쌓이고, 각 썸네일에서 개별 삭제. */}
+      {count > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {staged.map((s, i) => (
+            <div key={s.url} className="relative h-16 w-16 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+              {s.file.type.startsWith('image/')
+                ? <img src={s.url} alt={`${i + 1}장`} className="h-full w-full object-cover" />
+                : <span className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-slate-500">PDF</span>}
+              <span className="absolute left-0 top-0 rounded-br bg-black/50 px-1 text-[10px] font-bold text-white">{i + 1}</span>
+              <button type="button" onClick={() => onRemoveStaged(s.url)} aria-label={`${i + 1}장 삭제`}
+                className="absolute right-0 top-0 rounded-bl bg-black/60 px-1 text-[11px] leading-4 text-white hover:bg-black/80">✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {/* 촬영 — 후면 카메라. 반복 촬영으로 한 장씩 누적. */}
         <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = ''; }} />
-        {/* 앨범·파일 — 여러 장/PDF 가능(capture 없음 → 앨범·파일 선택 유지). */}
+        {/* 앨범·파일 — 여러 장/PDF 가능(capture 없음). Ctrl 다중선택도 그대로 누적. */}
         <input ref={filesRef} type="file" accept="image/*,application/pdf" multiple className="hidden"
           onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) onPickFiles(fs); e.target.value = ''; }} />
         <button type="button" disabled={disabled || uploading} onClick={() => cameraRef.current?.click()}
           className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-          📷 촬영
+          📷 촬영 추가
         </button>
         <button type="button" disabled={disabled || uploading} onClick={() => filesRef.current?.click()}
-          className={`rounded-md px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50 ${
-            item.uploaded ? 'border border-slate-300 text-slate-700 hover:bg-slate-50' : 'bg-brand-600 text-white hover:bg-brand-700'}`}>
-          {uploading ? '올리는 중…' : item.uploaded ? '다시 올리기' : '사진·파일'}
+          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          ＋ 사진·파일
         </button>
+        {count > 0 && (
+          <button type="button" disabled={disabled || uploading} onClick={onUpload}
+            className="ml-auto rounded-md bg-brand-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-700 disabled:opacity-50">
+            {uploading ? '올리는 중…' : `업로드 (${count}장)`}
+          </button>
+        )}
       </div>
+      {count > 0 && (
+        <p className="mt-1.5 text-[11px] text-slate-400">사진을 계속 추가한 뒤 <b className="text-slate-500">업로드</b>를 누르면 {count}장이 1개로 합쳐 제출됩니다.</p>
+      )}
     </div>
   );
 }

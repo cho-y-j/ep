@@ -2,6 +2,8 @@ package com.skep.collection;
 
 import com.skep.collection.dto.CollectionDtos;
 import com.skep.common.ApiException;
+import com.skep.company.Company;
+import com.skep.company.CompanyRepository;
 import com.skep.document.Document;
 import com.skep.document.DocumentRepository;
 import com.skep.document.DocumentService;
@@ -29,6 +31,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -60,6 +63,7 @@ public class DocumentCollectionService {
     private final EquipmentDocRequirementService equipmentDocReq;
     private final PersonDocRequirementService personDocReq;
     private final com.skep.company.CompanyService companyService;
+    private final CompanyRepository companyRepo;
     private final com.skep.alimtalk.AlimTalkService alimTalk;
     private final com.skep.equipment.EquipmentService equipmentService;
     private final com.skep.person.PersonService personService;
@@ -76,6 +80,7 @@ public class DocumentCollectionService {
                                      EquipmentRepository equipmentRepo, PersonRepository personRepo,
                                      EquipmentDocRequirementService equipmentDocReq, PersonDocRequirementService personDocReq,
                                      com.skep.company.CompanyService companyService,
+                                     CompanyRepository companyRepo,
                                      com.skep.alimtalk.AlimTalkService alimTalk,
                                      com.skep.equipment.EquipmentService equipmentService,
                                      com.skep.person.PersonService personService,
@@ -95,6 +100,7 @@ public class DocumentCollectionService {
         this.equipmentDocReq = equipmentDocReq;
         this.personDocReq = personDocReq;
         this.companyService = companyService;
+        this.companyRepo = companyRepo;
         this.alimTalk = alimTalk;
         this.equipmentService = equipmentService;
         this.personService = personService;
@@ -767,6 +773,7 @@ public class DocumentCollectionService {
                 .collect(Collectors.groupingBy(DocumentCollectionTarget::getRequestId));
         Map<Long, List<DocumentCollectionItem>> iByReq = items.stream()
                 .collect(Collectors.groupingBy(DocumentCollectionItem::getRequestId));
+        Map<Long, List<String>> supplierNames = supplierNamesByRequest(rows, tByReq);
 
         return rows.stream().map(r -> {
             List<DocumentCollectionTarget> ts = tByReq.getOrDefault(r.getId(), List.of());
@@ -776,7 +783,54 @@ public class DocumentCollectionService {
                     r.getRecipientName(), r.getRecipientPhone(), r.getRecipientEmail(),
                     r.getStatus(), r.getCreatedAt(), r.getSubmittedAt(), r.getSentAt(),
                     publicBaseUrl + "/collect/" + r.getToken(),
-                    ts.size(), is.size(), uploadedCount(is));
+                    ts.size(), is.size(), uploadedCount(is),
+                    supplierNames.getOrDefault(r.getId(), List.of()));
         }).toList();
+    }
+
+    /**
+     * 요청별 대상들의 소유 협력업체명(distinct, 대상 순서 보존).
+     * 갱신형: 대상 장비/인원의 supplierId → 회사명. 등록형(미등록 슬롯, ownerId=null): 요청의 지정 협력업체(supplierCompanyId)로 대체.
+     */
+    private Map<Long, List<String>> supplierNamesByRequest(
+            List<DocumentCollectionRequest> rows,
+            Map<Long, List<DocumentCollectionTarget>> tByReq) {
+        List<DocumentCollectionTarget> allTargets = tByReq.values().stream().flatMap(List::stream).toList();
+        List<OwnerRef> refs = allTargets.stream().map(t -> new OwnerRef(t.getOwnerType(), t.getOwnerId())).toList();
+        Map<Long, Equipment> equipment = equipmentById(refs);
+        Map<Long, Person> persons = personById(refs);
+        Set<Long> supplierIds = new HashSet<>();
+        for (DocumentCollectionRequest r : rows) if (r.getSupplierCompanyId() != null) supplierIds.add(r.getSupplierCompanyId());
+        for (DocumentCollectionTarget t : allTargets) {
+            Long sid = targetSupplierId(t, equipment, persons);
+            if (sid != null) supplierIds.add(sid);
+        }
+        Map<Long, String> names = new HashMap<>();
+        for (Company c : companyRepo.findAllById(supplierIds)) names.put(c.getId(), c.getName());
+        Map<Long, List<String>> out = new HashMap<>();
+        for (DocumentCollectionRequest r : rows) {
+            LinkedHashSet<String> set = new LinkedHashSet<>();
+            for (DocumentCollectionTarget t : tByReq.getOrDefault(r.getId(), List.of())) {
+                Long sid = targetSupplierId(t, equipment, persons);
+                if (sid == null) sid = r.getSupplierCompanyId();
+                String nm = sid != null ? names.get(sid) : null;
+                if (nm != null) set.add(nm);
+            }
+            out.put(r.getId(), new ArrayList<>(set));
+        }
+        return out;
+    }
+
+    private static Long targetSupplierId(DocumentCollectionTarget t, Map<Long, Equipment> equipment, Map<Long, Person> persons) {
+        if (t.getOwnerId() == null) return null;
+        if (t.getOwnerType() == OwnerType.EQUIPMENT) {
+            Equipment e = equipment.get(t.getOwnerId());
+            return e != null ? e.getSupplierId() : null;
+        }
+        if (t.getOwnerType() == OwnerType.PERSON) {
+            Person p = persons.get(t.getOwnerId());
+            return p != null ? p.getSupplierId() : null;
+        }
+        return null;
     }
 }

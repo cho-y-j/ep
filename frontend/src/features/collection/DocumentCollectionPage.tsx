@@ -36,6 +36,7 @@ export default function DocumentCollectionPage() {
   // 목록 필터(클라이언트)
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
 
   async function reload() {
     setLoading(true);
@@ -88,10 +89,15 @@ export default function DocumentCollectionPage() {
     () => [...new Set(requests.map((r) => r.status))].map((v) => ({ value: v, label: v })),
     [requests],
   );
+  const supplierOptions = useMemo(
+    () => [...new Set(requests.flatMap((r) => r.supplier_names ?? []))].map((v) => ({ value: v, label: v })),
+    [requests],
+  );
   const qLower = q.trim().toLowerCase();
   const shownRequests = requests.filter((r) => {
     if (statusFilter && r.status !== statusFilter) return false;
-    if (qLower && !`${r.owner_summary ?? ''} ${r.title ?? ''} ${r.recipient_name ?? ''}`.toLowerCase().includes(qLower)) return false;
+    if (supplierFilter && !(r.supplier_names ?? []).includes(supplierFilter)) return false;
+    if (qLower && !`${r.owner_summary ?? ''} ${r.title ?? ''} ${r.recipient_name ?? ''} ${(r.supplier_names ?? []).join(' ')}`.toLowerCase().includes(qLower)) return false;
     return true;
   });
 
@@ -136,6 +142,16 @@ export default function DocumentCollectionPage() {
       alert(r.data?.status === 'SENT' ? '링크를 문자로 발송했습니다.' : `문자 발송 결과: ${r.data?.status ?? '실패'}`);
     } catch (err) {
       setError(err instanceof AxiosError ? (err.response?.data?.message ?? '문자 발송 실패') : '문자 발송 실패');
+    } finally { setBusy(false); }
+  }
+  async function cancelRequest(req: CollectionSummary) {
+    if (!window.confirm('이 수집 요청을 취소하시겠습니까? 공개 링크가 더 이상 열리지 않습니다.')) return;
+    setBusy(true); setError(null);
+    try {
+      await api.post(`/api/document-collections/${req.id}/cancel`);
+      await reload();
+    } catch (err) {
+      setError(err instanceof AxiosError ? (err.response?.data?.message ?? '취소 실패') : '취소 실패');
     } finally { setBusy(false); }
   }
 
@@ -214,16 +230,19 @@ export default function DocumentCollectionPage() {
           requests.length === 0 ? <div className="card p-8 text-center text-sm text-slate-400">아직 수집 요청이 없습니다.</div> :
           <>
             <FilterBar
-              search={{ value: q, onChange: setQ, placeholder: '대상·제목·받는사람 검색' }}
-              activeFilterCount={[q, statusFilter].filter(Boolean).length}
-              onReset={() => { setQ(''); setStatusFilter(''); }}
+              search={{ value: q, onChange: setQ, placeholder: '대상·제목·받는사람·협력업체 검색' }}
+              activeFilterCount={[q, statusFilter, supplierFilter].filter(Boolean).length}
+              onReset={() => { setQ(''); setStatusFilter(''); setSupplierFilter(''); }}
             >
+              {supplierOptions.length > 0 && (
+                <FilterSelect value={supplierFilter} onChange={setSupplierFilter} placeholder="협력업체 전체" options={supplierOptions} />
+              )}
               <FilterSelect value={statusFilter} onChange={setStatusFilter} placeholder="상태 전체" options={statusOptions} />
             </FilterBar>
             {shownRequests.length === 0 ? <div className="card p-8 text-center text-sm text-slate-400">조건에 맞는 요청이 없습니다.</div> :
             <div className="space-y-2">
               {shownRequests.map((req) => (
-                <div key={req.id} className="card space-y-2 p-4">
+                <div key={req.id} className={`card space-y-2 p-4 ${req.status === 'CANCELLED' ? 'opacity-60' : ''}`}>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-slate-800">
                       {req.owner_summary}{req.title ? ` · ${req.title}` : ''}
@@ -235,11 +254,25 @@ export default function DocumentCollectionPage() {
                       대상 {req.target_count}건 · {req.uploaded_count}/{req.item_count} 업로드
                     </span>
                   </div>
+                  {(req.supplier_names?.length ?? 0) > 0 && (
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="text-[11px] text-slate-400">협력업체</span>
+                      {req.supplier_names!.map((name) => (
+                        <span key={name} className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <input readOnly value={req.public_url} className="input flex-1 text-xs" />
                     <button onClick={() => copyLink(req.public_url)} className="shrink-0 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold hover:bg-slate-50">복사</button>
                     <button onClick={() => sendSms(req)} disabled={busy || !req.recipient_phone}
                       className="shrink-0 rounded-md border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-40">문자</button>
+                    {req.status !== 'CANCELLED' && (
+                      <button onClick={() => cancelRequest(req)} disabled={busy}
+                        className="shrink-0 rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40">취소</button>
+                    )}
                   </div>
                 </div>
               ))}

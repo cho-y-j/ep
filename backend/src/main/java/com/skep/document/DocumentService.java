@@ -516,7 +516,9 @@ public class DocumentService {
         }
         Long companyId = actor.companyId();
         if (companyId == null) return List.of();
-        List<Document> rows = docRepo.findMySupplierDocuments(companyId);
+        // V77 스코프: 본인 + 직속 자식(협력사) 회사. 자식 소유 자원(수집 업로드분)까지 목록에 포함.
+        List<Long> companyIds = companyService.selfAndChildren(companyId);
+        List<Document> rows = docRepo.findMySupplierDocuments(companyIds);
         if (rows.isEmpty()) return List.of();
         Map<Long, DocumentType> typeMap = new HashMap<>();
         for (Document d : rows) typeMap.computeIfAbsent(d.getDocumentTypeId(), id -> typeRepo.findById(id).orElse(null));
@@ -611,16 +613,20 @@ public class DocumentService {
     }
 
     public DocumentResponse setVerified(Long id, boolean verified, AuthenticatedUser actor) {
-        if (actor.role() != Role.ADMIN) {
-            throw ApiException.forbidden("VERIFY_ADMIN_ONLY", "검증 표시는 관리자만 가능합니다");
+        // 진위 확정(수동 검증)은 ADMIN 전체 / 장비·인력 공급사는 자기+직속 자식 소유 문서만.
+        boolean isSupplier = actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER;
+        if (actor.role() != Role.ADMIN && !isSupplier) {
+            throw ApiException.forbidden("VERIFY_FORBIDDEN", "검증 표시 권한이 없습니다");
         }
         Document d = docRepo.findById(id).orElseThrow(() ->
                 ApiException.notFound("DOCUMENT_NOT_FOUND", "document " + id + " not found"));
+        Long ownerSupplierId = ownerSupplierIdOrThrow(d.getOwnerType(), d.getOwnerId());
+        // ADMIN 은 통과, 공급사는 self+children 스코프 밖이면 403 (크로스테넌트 차단).
+        ensureCanModify(actor, ownerSupplierId);
         boolean before = d.isVerified();
         // V14 정책: verified_by / verified_at 도 함께 채운다.
         if (verified) d.markVerifiedBy(actor.id()); else d.unmarkVerified();
         DocumentType type = typeRepo.findById(d.getDocumentTypeId()).orElseThrow();
-        Long ownerSupplierId = ownerSupplierIdOrThrow(d.getOwnerType(), d.getOwnerId());
         auditLog.record(actor, AuditAction.DOCUMENT_VERIFIED, AuditTargetType.DOCUMENT,
                 d.getId(), ownerSupplierId, null,
                 "{\"verified\":" + before + "}",

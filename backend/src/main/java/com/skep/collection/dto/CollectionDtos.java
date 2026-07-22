@@ -78,7 +78,7 @@ public final class CollectionDtos {
             List<TargetResponse> targets
     ) {}
 
-    /** 목록용 — targets/items 없이 카운트만. 50대 규모에서 응답 폭증·N+1 방지. */
+    /** 목록용 — targets/items 없이 카운트만. 50대 규모에서 응답 폭증·N+1 방지. supplierNames = 대상 소유 협력업체명(distinct). */
     public record SummaryResponse(
             Long id,
             String token,
@@ -94,7 +94,8 @@ public final class CollectionDtos {
             String publicUrl,
             int targetCount,
             int itemCount,
-            int uploadedCount
+            int uploadedCount,
+            List<String> supplierNames
     ) {}
 
     /** 공개(무로그인) 페이지용 항목. id = 업로드 단위. */

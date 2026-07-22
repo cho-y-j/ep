@@ -108,9 +108,12 @@ export default function TargetPicker({ value, onChange }: {
   }, [tab, supplierId, role, q]);
 
   const qLower = q.trim().toLowerCase();
+  // 취급 장비종류 설정이 있으면(typePass) 목록도 그 종류만 노출. '전체 보기' 토글 시 typePass=null → 전체.
   const shownEquipment = useMemo(
-    () => (qLower ? equipment.filter((e) => equipLabel(e).toLowerCase().includes(qLower)) : equipment),
-    [equipment, qLower],
+    () => equipment.filter((e) =>
+      (!typePass || typePass(e.category))
+      && (!qLower || equipLabel(e).toLowerCase().includes(qLower))),
+    [equipment, qLower, typePass],
   );
 
   /** 장비 1대가 담을 대상들 — 장비 + (토글 ON 이면) 그 장비 조종원 전원. */

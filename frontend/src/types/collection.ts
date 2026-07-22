@@ -13,6 +13,8 @@ export type CollectionSummary = {
   target_count: number;
   item_count: number;
   uploaded_count: number;
+  /** 대상 장비/인력의 소유 협력업체명(distinct). 없으면 빈 배열. */
+  supplier_names?: string[] | null;
 };
 
 /** 상세/생성 응답의 서류 1건. id = 공개 업로드 단위. */
