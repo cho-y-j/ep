@@ -15,13 +15,14 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * P4a 안전 상황판 — 맵 중심 단일 관제. BP·ADMIN·CLIENT 공용(현장 스코프는 서비스에서 재검증).
- * SecurityConfig 에서 /api/safety-board/** = ADMIN/BP/CLIENT (CLIENT 전역 차단의 화이트리스트 예외).
+ * P4a 안전 상황판 — 맵 중심 단일 관제. BP·ADMIN·CLIENT·공급사 공용(현장/인원 스코프는 서비스에서 재검증).
+ * 공급사(EQUIPMENT/MANPOWER_SUPPLIER)는 자기 소속 작업자가 투입된 현장·그 작업자만 조회.
+ * SecurityConfig 에서 /api/safety-board/** = ADMIN/BP/CLIENT/공급사 (CLIENT 전역 차단의 화이트리스트 예외).
  */
 @RestController
 @RequestMapping("/api/safety-board")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN','BP','CLIENT')")
+@PreAuthorize("hasAnyRole('ADMIN','BP','CLIENT','EQUIPMENT_SUPPLIER','MANPOWER_SUPPLIER')")
 public class SafetyBoardController {
 
     private final SafetyBoardService service;

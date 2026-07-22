@@ -76,4 +76,19 @@ public interface WorkPlanRepository extends JpaRepository<WorkPlan, Long> {
 
     /** P3d 이행 보고서 — 현장·기간 계획서 배치 조회(서명 완결 집계). */
     List<WorkPlan> findBySiteIdAndWorkDateBetweenOrderByWorkDateAscIdAsc(Long siteId, LocalDate from, LocalDate to);
+
+    /**
+     * P4a 안전 상황판 — 공급사(자기+직속 자식) 소속 인원이 배치된 활성 작업계획서의 현장 id(distinct).
+     * 상태는 board() 와 동일 활성 기준(SUBMITTED~DONE). 공급사 현장 목록·접근권 스코프용.
+     */
+    @Query("""
+            SELECT DISTINCT wp.siteId FROM WorkPlan wp
+            WHERE wp.status IN :statuses AND wp.siteId IS NOT NULL
+              AND EXISTS (
+                SELECT 1 FROM WorkPlanPerson wpp
+                WHERE wpp.workPlanId = wp.id AND wpp.supplierCompanyId IN :supplierIds
+              )
+            """)
+    List<Long> findSiteIdsWithSupplierPersons(@Param("supplierIds") java.util.Collection<Long> supplierIds,
+                                              @Param("statuses") java.util.Collection<WorkPlanStatus> statuses);
 }

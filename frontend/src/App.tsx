@@ -353,7 +353,7 @@ export default function App() {
         />
         <Route path="/sites" element={<ProtectedRoute><SitePage /></ProtectedRoute>} />
         <Route path="/sites/:id" element={<ProtectedRoute><SiteDetailPage /></ProtectedRoute>} />
-        <Route path="/safety-board" element={<ProtectedRoute roles={['ADMIN','BP','CLIENT']}><SafetyBoardPage /></ProtectedRoute>} />
+        <Route path="/safety-board" element={<ProtectedRoute roles={['ADMIN','BP','CLIENT','EQUIPMENT_SUPPLIER','MANPOWER_SUPPLIER']}><SafetyBoardPage /></ProtectedRoute>} />
         <Route path="/safety-inspections" element={<ProtectedRoute><SafetyInspectionsPage /></ProtectedRoute>} />
         <Route path="/safety-alerts" element={<ProtectedRoute roles={['ADMIN','BP']}><SafetyAlertsPage /></ProtectedRoute>} />
         <Route path="/safety-settings" element={<ProtectedRoute roles={['ADMIN','BP']}><SafetySettingsPage /></ProtectedRoute>} />

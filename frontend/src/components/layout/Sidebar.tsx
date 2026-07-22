@@ -193,6 +193,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       ]},
       { label: '정산', icon: <IconMoney />, items: settlementItems },
       { label: '안전', icon: <IconShield />, items: [
+        { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
         { label: '안전점검', to: '/safety-inspections', icon: <IconShield /> },
         { label: '혈압 체크인', to: '/bp-checkins', icon: <IconShield /> },
       ]},

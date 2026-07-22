@@ -9,6 +9,7 @@ import com.skep.attendance.AttendanceSessionRepository;
 import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
+import com.skep.company.CompanyService;
 import com.skep.equipment.DailyEquipmentInspection;
 import com.skep.equipment.DailyEquipmentInspectionRepository;
 import com.skep.equipment.Equipment;
@@ -55,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -91,6 +93,7 @@ public class SafetyBoardService {
     private final KmaWeatherClient weatherClient;
     private final PersonRepository persons;
     private final CompanyRepository companies;
+    private final CompanyService companyService;
     private final AnnouncementRepository announcements;
     private final AnnouncementRecipientRepository announcementRecipients;
 
@@ -115,11 +118,20 @@ public class SafetyBoardService {
         List<Long> wpIds = activePlans.stream().map(WorkPlan::getId).toList();
         List<WorkPlanPerson> deployedPersons = wpIds.isEmpty() ? List.of()
                 : wpPersons.findByWorkPlanIdIn(wpIds);
+        // 공급사(장비/인력): 자기 소속(자기+직속 자식) 배치 인원만 — 이하 마커·카드·집계를 그 인원으로 한정.
+        // allowedPersonIds == null 이면 필터 없음(ADMIN/BP/CLIENT 무회귀), personAllowed 로 각 조립을 좁힘.
+        Set<Long> allowedPersonIds = supplierPersonScope(actor, deployedPersons);
+        if (allowedPersonIds != null) {
+            deployedPersons = deployedPersons.stream()
+                    .filter(dp -> allowedPersonIds.contains(dp.getPersonId())).toList();
+        }
+        final Predicate<Long> personAllowed = allowedPersonIds == null ? pid -> true : allowedPersonIds::contains;
         List<Long> deployedPersonIds = deployedPersons.stream()
                 .map(WorkPlanPerson::getPersonId).distinct().toList();
         List<AttendanceSession> todaySessions = wpIds.isEmpty() ? List.of()
                 : attendance.findByWorkPlanIdInAndCheckInAtGreaterThanEqual(wpIds, todayStart).stream()
-                    .filter(s -> s.getCheckInAt().toLocalDate().equals(today)).toList();
+                    .filter(s -> s.getCheckInAt().toLocalDate().equals(today))
+                    .filter(s -> personAllowed.test(s.getPersonId())).toList();
 
         int attended = (int) todaySessions.stream().map(AttendanceSession::getPersonId).distinct().count();
         int checkedIn = (int) todaySessions.stream().filter(s -> s.getCheckOutAt() == null)
@@ -141,7 +153,8 @@ public class SafetyBoardService {
 
         // 미해결 경보 마커.
         List<FieldSafetyAlert> unresolved = alerts.findBySiteIdOrderByCreatedAtDesc(siteId).stream()
-                .filter(a -> !a.isResolved()).toList();
+                .filter(a -> !a.isResolved())
+                .filter(a -> personAllowed.test(a.getPersonId())).toList();
         Map<Long, Person> alertPersons = loadPersons(unresolved.stream()
                 .map(FieldSafetyAlert::getPersonId).distinct().toList());
         List<AlertMarker> alertMarkers = unresolved.stream()
@@ -165,27 +178,30 @@ public class SafetyBoardService {
         // 기상 — KMA 실황(체감온도·단계·풍속) + 강풍 작업중지 상태.
         Weather weather = weather(site);
 
-        // 공지 확인율 — 현장 스코프 공지.
-        List<Announcement> siteAnnouncements = announcements.findBySiteIdOrderByCreatedAtDesc(siteId);
-        Map<Long, List<AnnouncementRecipient>> recipsByAnn = siteAnnouncements.isEmpty()
-                ? Map.of()
-                : announcementRecipients.findByAnnouncementIdIn(
-                        siteAnnouncements.stream().map(Announcement::getId).toList()).stream()
-                    .collect(Collectors.groupingBy(AnnouncementRecipient::getAnnouncementId));
+        // 공지 확인율 — 현장 스코프 공지. 공급사는 현장 공지(타사 수신자 확인 포함)를 보지 않음 → 빈 목록.
         List<AnnouncementSummary> annSummaries = new ArrayList<>();
         int annReadTotal = 0, annRecipTotal = 0;
-        for (Announcement a : siteAnnouncements) {
-            List<AnnouncementRecipient> rs = recipsByAnn.getOrDefault(a.getId(), List.of());
-            int read = (int) rs.stream().filter(r -> r.getReadAt() != null).count();
-            annReadTotal += read;
-            annRecipTotal += rs.size();
-            annSummaries.add(new AnnouncementSummary(a.getId(), a.getTitle(), a.getCreatedAt(), rs.size(), read));
+        if (allowedPersonIds == null) {
+            List<Announcement> siteAnnouncements = announcements.findBySiteIdOrderByCreatedAtDesc(siteId);
+            Map<Long, List<AnnouncementRecipient>> recipsByAnn = siteAnnouncements.isEmpty()
+                    ? Map.of()
+                    : announcementRecipients.findByAnnouncementIdIn(
+                            siteAnnouncements.stream().map(Announcement::getId).toList()).stream()
+                        .collect(Collectors.groupingBy(AnnouncementRecipient::getAnnouncementId));
+            for (Announcement a : siteAnnouncements) {
+                List<AnnouncementRecipient> rs = recipsByAnn.getOrDefault(a.getId(), List.of());
+                int read = (int) rs.stream().filter(r -> r.getReadAt() != null).count();
+                annReadTotal += read;
+                annRecipTotal += rs.size();
+                annSummaries.add(new AnnouncementSummary(a.getId(), a.getTitle(), a.getCreatedAt(), rs.size(), read));
+            }
         }
 
         // P5-W0 워커 워치 타일 — 현장 스코프 최신 상태(문제 먼저 보이게 오래된 수신순).
         // P5-W1 스파크라인: 최근 2h 심박 시계열 + 개인 대역(정상범위 밴드) 배치 조회.
         LocalDateTime nowTs = LocalDateTime.now();
-        List<WorkerWatchState> watch = watchStates.findBySiteId(siteId);
+        List<WorkerWatchState> watch = watchStates.findBySiteId(siteId).stream()
+                .filter(w -> personAllowed.test(w.getPersonId())).toList();
         List<Long> watchPersonIds = watch.stream().map(WorkerWatchState::getPersonId).toList();
         Map<Long, List<Integer>> seriesByPerson = new java.util.HashMap<>();
         Map<Long, PersonVitalBaseline> bandByPerson = Map.of();
@@ -204,6 +220,7 @@ public class SafetyBoardService {
         Map<Long, BpCheckin> bpByPerson = new java.util.LinkedHashMap<>();
         for (BpCheckin bp : bpCheckins.findBySiteIdAndMeasuredAtBetweenOrderByMeasuredAtDesc(
                 siteId, todayStart, todayStart.plusDays(1))) {
+            if (!personAllowed.test(bp.getPersonId())) continue;   // 공급사면 자기 작업자만.
             bpByPerson.putIfAbsent(bp.getPersonId(), bp);   // 최신순 조회 → 첫 값=최신.
         }
         // 열린 낙상 경보 인원 — 이미 조회한 unresolved 재사용(추가 쿼리 없음).
@@ -299,6 +316,10 @@ public class SafetyBoardService {
 
     /** 공지 수신자 확인 상태(미확인자 명단). 발송 공지의 현장 접근권을 재검증. */
     public List<RecipientStatus> recipients(Long announcementId, AuthenticatedUser actor) {
+        // 공급사는 현장 공지 수신자 명단(타사 작업자 이름 포함)에 접근 불가.
+        if (isSupplier(actor)) {
+            throw ApiException.forbidden("ANNOUNCEMENT_DENIED", "접근 권한이 없습니다");
+        }
         Announcement a = announcements.findById(announcementId)
                 .orElseThrow(() -> ApiException.notFound("ANNOUNCEMENT_NOT_FOUND", "공지를 찾을 수 없습니다"));
         // 현장 지정 공지면 현장 접근권으로, 미지정이면 발송자(BP)·ADMIN 만.
@@ -326,8 +347,41 @@ public class SafetyBoardService {
             case BP -> actor.companyId() == null ? List.of()
                     : sites.findByBpCompanyIdOrderByIdDesc(actor.companyId());
             case CLIENT -> sites.findByClientOrgIdOrderByIdDesc(requireClientOrg(actor));
+            case EQUIPMENT_SUPPLIER, MANPOWER_SUPPLIER -> supplierSites(actor);
             default -> throw ApiException.forbidden("BOARD_DENIED", "안전 상황판 접근 권한이 없습니다");
         };
+    }
+
+    private boolean isSupplier(AuthenticatedUser actor) {
+        return actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER;
+    }
+
+    /** 공급사(자기+직속 자식) 소속 인원이 활성 배치된 현장 목록(내림차순). */
+    private List<Site> supplierSites(AuthenticatedUser actor) {
+        List<Long> ids = supplierSiteIds(actor);
+        return ids.isEmpty() ? List.of()
+                : sites.findAllById(ids).stream()
+                    .sorted(Comparator.comparing(Site::getId).reversed()).toList();
+    }
+
+    /** 공급사(자기+직속 자식) 소속 인원이 활성 배치된 현장 id — 목록/접근권 스코프 공용. */
+    private List<Long> supplierSiteIds(AuthenticatedUser actor) {
+        List<Long> supplierIds = companyService.selfAndChildren(actor.companyId());
+        return supplierIds.isEmpty() ? List.of()
+                : workPlans.findSiteIdsWithSupplierPersons(supplierIds, ACTIVE_WP);
+    }
+
+    /**
+     * 공급사면 이 현장 배치 인원 중 자기 소속(자기+직속 자식) person id 집합, 그 외 역할은 null(필터 없음).
+     * board() 의 마커·카드·집계를 이 집합으로 한정하는 근거.
+     */
+    private Set<Long> supplierPersonScope(AuthenticatedUser actor, List<WorkPlanPerson> deployedPersons) {
+        if (!isSupplier(actor)) return null;
+        Set<Long> supplierIds = Set.copyOf(companyService.selfAndChildren(actor.companyId()));
+        return deployedPersons.stream()
+                .filter(dp -> supplierIds.contains(dp.getSupplierCompanyId()))
+                .map(WorkPlanPerson::getPersonId)
+                .collect(Collectors.toSet());
     }
 
     private Site requireAccess(Long siteId, AuthenticatedUser actor) {
@@ -343,6 +397,11 @@ public class SafetyBoardService {
             case CLIENT -> {
                 if (!requireClientOrg(actor).equals(site.getClientOrgId())) {
                     throw ApiException.forbidden("CLIENT_SITE_DENIED", "내 원청 현장이 아닙니다");
+                }
+            }
+            case EQUIPMENT_SUPPLIER, MANPOWER_SUPPLIER -> {
+                if (!supplierSiteIds(actor).contains(siteId)) {
+                    throw ApiException.forbidden("SITE_DENIED", "본인 작업자가 투입된 현장만 조회할 수 있습니다");
                 }
             }
             default -> throw ApiException.forbidden("BOARD_DENIED", "안전 상황판 접근 권한이 없습니다");
