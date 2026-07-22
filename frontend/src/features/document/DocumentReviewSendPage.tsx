@@ -34,6 +34,11 @@ export default function DocumentReviewSendPage() {
   const [bpCompanies, setBpCompanies] = useState<Array<{ id: number; name: string }>>([]);
   const [bpId, setBpId] = useState('');
   const [bpUsers, setBpUsers] = useState<Array<{ id: number; name: string; email: string }>>([]);
+  // 출력형식: zip(기존, 자원별 압축) | bundle(장비묶음 병합 PDF)
+  const [mode, setMode] = useState<'zip' | 'bundle'>('zip');
+  const [operators, setOperators] = useState<Record<number, Array<{ person_id: number; person_name?: string | null }>>>({});
+  const [opSel, setOpSel] = useState<Record<number, Set<number>>>({});
+  const [separatorPage, setSeparatorPage] = useState(true);
 
   useEffect(() => {
     api.get<DocRow[]>('/api/documents/my-supplier')
@@ -69,11 +74,49 @@ export default function DocumentReviewSendPage() {
     return Array.from(m.values());
   }, [rows]);
 
+  // 장비묶음 모드에서 보이는 자원은 장비뿐(그 교대조 조종원은 카드 안에서 개별 선택).
+  const visibleGroups = useMemo(
+    () => (mode === 'bundle' ? groups.filter((g) => g.owner_type === 'EQUIPMENT') : groups),
+    [groups, mode],
+  );
+
+  // 장비묶음 모드 — 장비 그룹의 교대조 조종원을 배치 1회로 로드(개별 체크용).
+  useEffect(() => {
+    if (mode !== 'bundle') return;
+    const eqIds = groups.filter((g) => g.owner_type === 'EQUIPMENT').map((g) => g.owner_id);
+    if (eqIds.length === 0) { setOperators({}); return; }
+    api.post<{ results: Array<{ equipment_id: number; operators: Array<{ person_id: number; person_name?: string | null }> }> }>(
+      '/api/equipment/default-operators', { equipment_ids: eqIds })
+      .then((r) => {
+        const map: Record<number, Array<{ person_id: number; person_name?: string | null }>> = {};
+        r.data.results.forEach((res) => { map[res.equipment_id] = res.operators; });
+        setOperators(map);
+      })
+      .catch(() => setOperators({}));
+  }, [mode, groups]);
+
   const selectedCount = selected.size;
   const selectedDocs = useMemo(
-    () => groups.filter((g) => selected.has(g.key)).reduce((s, g) => s + g.docCount, 0),
-    [groups, selected],
+    () => visibleGroups.filter((g) => selected.has(g.key)).reduce((s, g) => s + g.docCount, 0),
+    [visibleGroups, selected],
   );
+
+  const opIds = (eqId: number) => (operators[eqId] ?? []).map((o) => o.person_id);
+  const isOpOn = (eqId: number, pid: number) => { const s = opSel[eqId]; return s ? s.has(pid) : true; };
+  function toggleOp(eqId: number, pid: number) {
+    setOpSel((prev) => {
+      const cur = prev[eqId] ?? new Set(opIds(eqId));
+      const next = new Set(cur);
+      if (next.has(pid)) next.delete(pid); else next.add(pid);
+      return { ...prev, [eqId]: next };
+    });
+  }
+  function switchMode(m: 'zip' | 'bundle') {
+    if (m === mode) return;
+    setMode(m);
+    setSelected(new Set());
+    setOpSel({});
+  }
 
   function toggle(key: string) {
     setSelected((prev) => {
@@ -83,7 +126,7 @@ export default function DocumentReviewSendPage() {
     });
   }
   function toggleAll() {
-    setSelected((prev) => prev.size === groups.length ? new Set() : new Set(groups.map((g) => g.key)));
+    setSelected((prev) => prev.size === visibleGroups.length ? new Set() : new Set(visibleGroups.map((g) => g.key)));
   }
 
   function pushEmail(raw: string) {
@@ -100,8 +143,41 @@ export default function DocumentReviewSendPage() {
     setEmails((prev) => prev.filter((x) => x !== e));
   }
 
+  async function sendBundle() {
+    const eqGroups = visibleGroups.filter((g) => selected.has(g.key));
+    if (eqGroups.length === 0) { toast.error('보낼 장비를 선택하세요'); return; }
+    const bundles = eqGroups.map((g) => ({
+      equipment_id: g.owner_id,
+      operator_person_ids: opSel[g.owner_id] ? [...opSel[g.owner_id]] : opIds(g.owner_id),
+    }));
+    setSending(true);
+    try {
+      const res = await api.post('/api/documents/review-bundle-pdf', {
+        bundles,
+        emails,
+        message: message.trim() || undefined,
+        bp_company_id: bpId ? Number(bpId) : undefined,
+        separator_page: separatorPage,
+      }, { timeout: 120_000 }); // 서류 병합 PDF 생성 + 메일 첨부라 전역 10초로는 부족
+      const d = res.data as { bundles: number; recipients: number; bp_delivered: boolean; total_docs: number; skipped_empty: number };
+      const parts: string[] = [];
+      if (d.recipients > 0) parts.push(`이메일 ${d.recipients}명`);
+      if (d.bp_delivered) parts.push('BP사 계정');
+      let msg = `발송 완료 (${parts.join(' + ')}) — 묶음 ${d.bundles}건 / 서류 ${d.total_docs}건`;
+      if (d.skipped_empty > 0) msg += ` · 서류없음 ${d.skipped_empty}건 제외`;
+      toast.success(msg);
+      setSelected(new Set());
+      setOpSel({});
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? '발송 실패');
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function send() {
     if (emails.length === 0 && !bpId) { toast.error('받는 사람 이메일 또는 BP사를 선택하세요'); return; }
+    if (mode === 'bundle') { await sendBundle(); return; }
     const eqIds: number[] = [], pIds: number[] = [];
     for (const g of groups) {
       if (!selected.has(g.key)) continue;
@@ -135,8 +211,30 @@ export default function DocumentReviewSendPage() {
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-5">
         <PageHeader
           title="서류 심사 보내기"
-          subtitle="보낼 자원(장비·인원)을 고르면 각 자원의 서류를 자원별 압축파일(zip)로 묶어 입력한 이메일로 발송합니다. 받는 분이 시스템에 가입되어 있지 않아도 됩니다."
+          subtitle={mode === 'bundle'
+            ? '장비를 고르면 그 교대조 조종원 서류까지 하나의 PDF로 병합해 발송합니다. 조종원은 개별 선택할 수 있습니다.'
+            : '보낼 자원(장비·인원)을 고르면 각 자원의 서류를 자원별 압축파일(zip)로 묶어 입력한 이메일로 발송합니다. 받는 분이 시스템에 가입되어 있지 않아도 됩니다.'}
         />
+
+        {/* 출력형식 */}
+        <section className="card p-4 space-y-3">
+          <div className="text-sm font-semibold text-slate-700">출력 형식</div>
+          <div className="inline-flex overflow-hidden rounded-lg border border-slate-300">
+            {([['zip', '자원별 압축(ZIP)'], ['bundle', '장비묶음 병합 PDF']] as const).map(([m, label]) => (
+              <button key={m} type="button" onClick={() => switchMode(m)}
+                      className={`px-4 py-2 text-sm font-semibold ${mode === m ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {mode === 'bundle' && (
+            <label className="flex w-fit items-center gap-2 text-sm text-slate-600 cursor-pointer">
+              <input type="checkbox" checked={separatorPage} onChange={(e) => setSeparatorPage(e.target.checked)}
+                     className="h-4 w-4 accent-brand-600" />
+              자원마다 구분면(이름) 페이지 넣기
+            </label>
+          )}
+        </section>
 
         {/* 받는 사람 */}
         <section className="card p-4 space-y-2">
@@ -217,21 +315,68 @@ export default function DocumentReviewSendPage() {
         {/* 자원 선택 */}
         <section className="card p-0 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
-            <div className="text-sm font-semibold text-slate-700">보낼 자원 선택</div>
-            {groups.length > 0 && (
+            <div className="text-sm font-semibold text-slate-700">{mode === 'bundle' ? '보낼 장비 선택' : '보낼 자원 선택'}</div>
+            {visibleGroups.length > 0 && (
               <button type="button" onClick={toggleAll}
                       className="text-xs font-semibold text-slate-500 hover:text-slate-900">
-                {selected.size === groups.length ? '전체 해제' : '전체 선택'}
+                {selected.size === visibleGroups.length ? '전체 해제' : '전체 선택'}
               </button>
             )}
           </div>
           {loading ? (
             <div className="p-8 text-center text-sm text-slate-400">불러오는 중…</div>
-          ) : groups.length === 0 ? (
-            <div className="p-8 text-center text-sm text-slate-400">보낼 서류가 있는 자원이 없습니다.</div>
+          ) : visibleGroups.length === 0 ? (
+            <div className="p-8 text-center text-sm text-slate-400">
+              {mode === 'bundle' ? '보낼 서류가 있는 장비가 없습니다.' : '보낼 서류가 있는 자원이 없습니다.'}
+            </div>
+          ) : mode === 'bundle' ? (
+            <div className="space-y-2.5 p-4">
+              {visibleGroups.map((g) => {
+                const on = selected.has(g.key);
+                const ops = operators[g.owner_id] ?? [];
+                return (
+                  <div key={g.key}
+                       className={`rounded-xl border p-3 transition ${
+                         on ? 'border-brand-500 ring-2 ring-brand-200 bg-brand-50/40' : 'border-slate-200 bg-white'
+                       }`}>
+                    <button type="button" onClick={() => toggle(g.key)}
+                            className="flex w-full items-center justify-between gap-2 text-left">
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 truncate">{g.owner_name}</div>
+                        <div className="mt-0.5 text-xs text-slate-500">
+                          서류 {g.docCount}건{ops.length > 0 ? ` · 교대조 조종원 ${ops.length}명` : ''}
+                        </div>
+                      </div>
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                        on ? 'border-brand-500 bg-brand-500 text-white' : 'border-slate-300 text-transparent'
+                      }`}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      </span>
+                    </button>
+                    {on && ops.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-slate-100 pt-2">
+                        {ops.map((op) => (
+                          <label key={op.person_id} className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                            <input type="checkbox" checked={isOpOn(g.owner_id, op.person_id)}
+                                   onChange={() => toggleOp(g.owner_id, op.person_id)}
+                                   className="h-3.5 w-3.5 accent-brand-600" />
+                            조종원 {op.person_name || `#${op.person_id}`}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {on && ops.length === 0 && (
+                      <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-400">
+                        등록된 교대조 조종원이 없습니다 (장비 서류만 발송)
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-              {groups.map((g) => {
+              {visibleGroups.map((g) => {
                 const sub = formatOwnerSubLabel(g.owner_type, g.owner_sub_label);
                 const on = selected.has(g.key);
                 const typeCls = g.owner_type === 'EQUIPMENT' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700';
@@ -267,7 +412,7 @@ export default function DocumentReviewSendPage() {
         {/* 발송 */}
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm text-slate-500">
-            선택: <b className="text-slate-900">{selectedCount}</b>개 자원 · 서류 <b className="text-slate-900">{selectedDocs}</b>건
+            선택: <b className="text-slate-900">{selectedCount}</b>{mode === 'bundle' ? '개 장비' : '개 자원'} · 서류 <b className="text-slate-900">{selectedDocs}</b>건
           </div>
           <button type="button" onClick={send} disabled={sending || selectedCount === 0 || (emails.length === 0 && !bpId)}
                   className="px-5 py-2.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 disabled:opacity-50">
