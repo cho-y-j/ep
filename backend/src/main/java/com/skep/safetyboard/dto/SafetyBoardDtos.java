@@ -28,21 +28,24 @@ public class SafetyBoardDtos {
      * P5-W0 워커 워치 타일 — 상태등(state)·마지막 수신(secondsSinceSeen)·배터리·착용.
      * 회색(미착용/두절) 판정은 프론트에서 worn·secondsSinceSeen 로 파생.
      * P5-W1: hrSeries=최근 2h 심박(스파크라인), rest/work 대역=정상범위 밴드, baselineLearned=학습 여부(미학습 뱃지).
-     * 지도 통합: bodyTemp(체온)·lat/lng(최근 위치, 워치 지도 마커)·bpVerdict(오늘 혈압 판정 OK|CAUTION|BLOCK, null=미측정).
+     * 지도 통합: spo2·bodyTemp(체온)·lat/lng(최근 위치, 워치 지도 마커).
+     * 건강 종합: bpVerdict(오늘 혈압 판정 OK|CAUTION|BLOCK, null=미측정)+bpSys/bpDia(실측 혈압)·fallAlert(열린 낙상 경보).
      * 안전 지도: vehicleNo(조종 장비 차량번호)·vehicleStatus(장비 배치상태 ASSIGNED|AVAILABLE|BROKEN)·role(투입 역할)·
      * supplierName/supplierCompanyId(소속 공급사)·bpName/bpCompanyId(원청 BP) — work_plan_persons+장비+work_plan 조인.
+     * 워치 없이 오늘 혈압 체크인만 있는 인원도 포함(워치 필드 null 허용).
      */
     public record WatchWorker(
             Long personId, String name, String state,
             LocalDateTime lastSeenAt, Long secondsSinceSeen,
-            Integer battery, Boolean worn, Integer hr,
+            Integer battery, Boolean worn, Integer hr, Integer spo2,
             java.math.BigDecimal bodyTemp,
             Double lat, Double lng,
             List<Integer> hrSeries,
             Integer restHrLow, Integer restHrHigh, Integer workHrLow, Integer workHrHigh,
             boolean baselineLearned,
             String healthRiskLevel,      // P5-W4 2겹: NORMAL|CAUTION|HIGH (HIGH=관제 뱃지).
-            String bpVerdict,
+            boolean fallAlert,           // 열린 낙상(fall) 경보 — 건강필터 '경보'·뱃지.
+            String bpVerdict, Integer bpSys, Integer bpDia,
             String vehicleNo, String vehicleStatus, String role,
             String supplierName, Long supplierCompanyId,
             String bpName, Long bpCompanyId) {}
@@ -59,14 +62,15 @@ public class SafetyBoardDtos {
             LocalDateTime acknowledgedAt, LocalDateTime escalatedAt, LocalDateTime createdAt,
             boolean unacked) {}
 
-    /** 요약 스트립 수치. */
+    /** 요약 스트립 수치. healthAlert=종합 건강경보(RED/혈압 BLOCK/낙상) 인원, bpCaution=혈압주의(OK 아님) 인원. */
     public record Summary(
             Weather weather,
             int deployed, int attended, int checkedIn,
             int unackedAlerts,
             int legalDone, int legalTarget,
             int operatorDone, int operatorTarget,
-            int announcementRead, int announcementTotal) {}
+            int announcementRead, int announcementTotal,
+            int healthAlert, int bpCaution) {}
 
     /** 체감온도·폭염단계·풍속. available=false면 KMA 미조회(키 없음/좌표 없음/실패). level=info|caution|warning|danger. */
     public record Weather(

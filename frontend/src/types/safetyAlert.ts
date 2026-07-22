@@ -83,7 +83,10 @@ export const LEVEL_BADGE: Record<string, string> = {
 export const KIND_LABEL: Record<string, string> = {
   emergency: '긴급호출',
   fall: '낙상감지',
+  fall_detected: '낙상 감지',
   abnormal_vital: '바이탈이상',
+  vital_anomaly: '생체 이상',
+  watch_offline: '신호 두절',
   manual: '수동호출',
   heat: '폭염알림',
   rest: '휴식알림',

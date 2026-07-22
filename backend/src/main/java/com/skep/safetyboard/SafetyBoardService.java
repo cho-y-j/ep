@@ -71,6 +71,8 @@ public class SafetyBoardService {
             WorkPlanStatus.SUBMITTED, WorkPlanStatus.APPROVED, WorkPlanStatus.IN_PROGRESS, WorkPlanStatus.DONE);
     /** S5' 확인응답 대상 kind(작업자 수신 알림) — 프론트 ackState 와 동일 규칙. */
     private static final Set<String> ACK_KINDS = Set.of("wind_stop", "heat", "rest");
+    /** 낙상 경보 kind — 건강지표 뱃지·필터 '경보' 포함(일반 SOS emergency 제외, SafetyReportCalculator 와 동일). */
+    private static final Set<String> FALL_KINDS = Set.of("fall", "fall_detected");
 
     private final SiteRepository sites;
     private final UserRepository users;
@@ -180,19 +182,11 @@ public class SafetyBoardService {
             annSummaries.add(new AnnouncementSummary(a.getId(), a.getTitle(), a.getCreatedAt(), rs.size(), read));
         }
 
-        Summary summary = new Summary(weather,
-                deployedPersonIds.size(), attended, checkedIn,
-                unackedCount,
-                legalDone, eqIds.size(),
-                operatorDone, eqIds.size(),
-                annReadTotal, annRecipTotal);
-
         // P5-W0 워커 워치 타일 — 현장 스코프 최신 상태(문제 먼저 보이게 오래된 수신순).
         // P5-W1 스파크라인: 최근 2h 심박 시계열 + 개인 대역(정상범위 밴드) 배치 조회.
         LocalDateTime nowTs = LocalDateTime.now();
         List<WorkerWatchState> watch = watchStates.findBySiteId(siteId);
         List<Long> watchPersonIds = watch.stream().map(WorkerWatchState::getPersonId).toList();
-        Map<Long, Person> watchPersons = loadPersons(watchPersonIds);
         Map<Long, List<Integer>> seriesByPerson = new java.util.HashMap<>();
         Map<Long, PersonVitalBaseline> bandByPerson = Map.of();
         if (!watchPersonIds.isEmpty()) {
@@ -206,12 +200,26 @@ public class SafetyBoardService {
                     .collect(Collectors.toMap(PersonVitalBaseline::getPersonId, Function.identity()));
         }
         Map<Long, PersonVitalBaseline> bands = bandByPerson;
-        // P5-W4 1겹 — 오늘 혈압 체크인 판정(인당 최신 1건). 워치 상시 측정 불가라 마커/팝오버 병기.
-        Map<Long, String> bpVerdictByPerson = new java.util.HashMap<>();
+        // P5-W4 1겹 — 오늘 혈압 체크인(인당 최신 1건: verdict + 실측 sys/dia). 워치 상시 측정 불가라 마커/팝오버 병기.
+        Map<Long, BpCheckin> bpByPerson = new java.util.LinkedHashMap<>();
         for (BpCheckin bp : bpCheckins.findBySiteIdAndMeasuredAtBetweenOrderByMeasuredAtDesc(
                 siteId, todayStart, todayStart.plusDays(1))) {
-            bpVerdictByPerson.putIfAbsent(bp.getPersonId(), bp.getVerdict().name());   // 최신순 조회 → 첫 값=최신.
+            bpByPerson.putIfAbsent(bp.getPersonId(), bp);   // 최신순 조회 → 첫 값=최신.
         }
+        // 열린 낙상 경보 인원 — 이미 조회한 unresolved 재사용(추가 쿼리 없음).
+        Set<Long> fallPersonIds = unresolved.stream()
+                .filter(a -> FALL_KINDS.contains(a.getKind()))
+                .map(FieldSafetyAlert::getPersonId).collect(Collectors.toSet());
+        // 보드 인원 = 워치 상태 보유자(문제 먼저: 오래된 수신순) ∪ 오늘 혈압 체크인 보유자 — 워치 없이 혈압만 있어도 카드/요약 노출.
+        java.util.LinkedHashSet<Long> boardPersonIds = new java.util.LinkedHashSet<>();
+        watch.stream()
+                .sorted(Comparator.comparing(WorkerWatchState::getLastSeenAt,
+                        Comparator.nullsFirst(Comparator.naturalOrder())))
+                .forEach(w -> boardPersonIds.add(w.getPersonId()));
+        boardPersonIds.addAll(bpByPerson.keySet());
+        Map<Long, Person> boardPersons = loadPersons(new ArrayList<>(boardPersonIds));
+        Map<Long, WorkerWatchState> watchByPerson = watch.stream()
+                .collect(Collectors.toMap(WorkerWatchState::getPersonId, Function.identity(), (a, b) -> a));
 
         // 안전 지도 — 투입 인원별 조종 장비 차량번호·역할·소속(공급사)·원청(BP).
         // work_plan_persons(역할·공급사·장비) + 장비(차량/가동상태) + work_plan(BP) 조인, 장비 매칭 행 우선.
@@ -236,29 +244,32 @@ public class SafetyBoardService {
                 : companies.findAllById(deployCompanyIds).stream()
                     .collect(Collectors.toMap(Company::getId, Company::getName));
 
-        List<WatchWorker> watchWorkers = watch.stream()
-                .sorted(Comparator.comparing(WorkerWatchState::getLastSeenAt,
-                        Comparator.nullsFirst(Comparator.naturalOrder())))
-                .map(w -> {
-                    PersonVitalBaseline pv = bands.get(w.getPersonId());
-                    List<Integer> series = seriesByPerson.getOrDefault(w.getPersonId(), List.of());
+        List<WatchWorker> watchWorkers = boardPersonIds.stream()
+                .map(pid -> {
+                    WorkerWatchState w = watchByPerson.get(pid);
+                    BpCheckin bp = bpByPerson.get(pid);
+                    PersonVitalBaseline pv = bands.get(pid);
+                    List<Integer> series = seriesByPerson.getOrDefault(pid, List.of());
                     if (series.size() > 90) series = series.subList(series.size() - 90, series.size());  // 경량 cap.
-                    WorkPlanPerson dp = deployByPerson.get(w.getPersonId());
+                    WorkPlanPerson dp = deployByPerson.get(pid);
                     Equipment eq = dp != null && dp.getEquipmentId() != null ? deployEqById.get(dp.getEquipmentId()) : null;
                     Long supplierId = dp != null ? dp.getSupplierCompanyId() : null;
                     Long bpId = dp != null ? bpByWp.get(dp.getWorkPlanId()) : null;
                     return new WatchWorker(
-                            w.getPersonId(), personName(watchPersons, w.getPersonId()), w.getState(),
-                            w.getLastSeenAt(),
-                            w.getLastSeenAt() == null ? null : Duration.between(w.getLastSeenAt(), nowTs).getSeconds(),
-                            w.getBattery(), w.getWorn(), w.getHr(),
-                            w.getBodyTemp(), w.getLat(), w.getLng(),
+                            pid, personName(boardPersons, pid), w != null ? w.getState() : null,
+                            w != null ? w.getLastSeenAt() : null,
+                            w == null || w.getLastSeenAt() == null ? null : Duration.between(w.getLastSeenAt(), nowTs).getSeconds(),
+                            w != null ? w.getBattery() : null, w != null ? w.getWorn() : null, w != null ? w.getHr() : null,
+                            w != null ? w.getSpo2() : null,
+                            w != null ? w.getBodyTemp() : null, w != null ? w.getLat() : null, w != null ? w.getLng() : null,
                             series,
                             pv != null ? pv.getRestHrLow() : null, pv != null ? pv.getRestHrHigh() : null,
                             pv != null ? pv.getWorkHrLow() : null, pv != null ? pv.getWorkHrHigh() : null,
                             pv != null && pv.isLearned(),
-                            healthRisk(watchPersons, w.getPersonId()),
-                            bpVerdictByPerson.get(w.getPersonId()),
+                            healthRisk(boardPersons, pid),
+                            fallPersonIds.contains(pid),
+                            bp != null ? bp.getVerdict().name() : null,
+                            bp != null ? bp.getSys() : null, bp != null ? bp.getDia() : null,
                             eq != null ? eq.getVehicleNo() : null,
                             eq != null ? eq.getAssignmentStatus().name() : null,
                             dp != null ? dp.getRole() : null,
@@ -266,6 +277,19 @@ public class SafetyBoardService {
                             bpId != null ? companyNameById.get(bpId) : null, bpId);
                 })
                 .toList();
+
+        // 요약 건강 타일 — 종합 건강경보(RED/혈압 BLOCK/낙상) + 혈압주의(OK 아님). 프론트 healthCat 과 동일 기준.
+        int healthAlert = (int) watchWorkers.stream()
+                .filter(w -> "RED".equals(w.state()) || "BLOCK".equals(w.bpVerdict()) || w.fallAlert()).count();
+        int bpCaution = (int) watchWorkers.stream()
+                .filter(w -> w.bpVerdict() != null && !"OK".equals(w.bpVerdict())).count();
+        Summary summary = new Summary(weather,
+                deployedPersonIds.size(), attended, checkedIn,
+                unackedCount,
+                legalDone, eqIds.size(),
+                operatorDone, eqIds.size(),
+                annReadTotal, annRecipTotal,
+                healthAlert, bpCaution);
 
         return new SiteBoard(site.getId(), site.getName(), site.getCode(), site.getAddress(),
                 site.getLatitude(), site.getLongitude(), site.getPolygonGeojson(),

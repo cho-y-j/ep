@@ -168,8 +168,9 @@ export default function SafetyBoardPage() {
         tooltipHtml: `<div style="padding:6px 10px;font-size:12px"><b>${escapeHtml(board.site_name)}</b><div style="margin-top:2px;color:#64748b">현장 범위${board.geofence_radius_m ? ` ${board.geofence_radius_m}m` : ''}</div></div>`,
       });
     }
-    // 워치 마커 — 필터 통과분만. 최근 수신 위치에 바이탈 팝오버(맥박·체온·배터리·상태·혈압·차량·역할·소속). 위험은 펄스.
-    const watchAllIds = new Set(board.watch_workers.map((w) => w.person_id));
+    // 워치 마커 — 필터 통과분만. 최근 수신 위치에 바이탈 팝오버(맥박·체온·SpO₂·배터리·상태·혈압·낙상·차량·역할·소속). 위험은 펄스.
+    // 워치 마커가 실제로 그려지는 인원(위치 있음)만 출근 마커 중복 억제 — 위치 없는 워치/혈압전용 인원은 출근 마커 유지.
+    const watchGeoIds = new Set(board.watch_workers.filter((w) => w.lat != null && w.lng != null).map((w) => w.person_id));
     for (const w of filteredWatch) {
       if (w.lat == null || w.lng == null) continue;
       const d = watchDisplay(w);
@@ -182,7 +183,7 @@ export default function SafetyBoardPage() {
     // 작업자 마커 — 워치 대상은 제외(중복 방지). 필터 활성 시엔 속성 없는 출근-only 마커 숨김. 체크인=파랑 / 체크아웃=회색.
     for (const w of board.workers) {
       if (w.lat == null || w.lng == null) continue;
-      if (watchAllIds.has(w.person_id)) continue;
+      if (watchGeoIds.has(w.person_id)) continue;
       if (filtersActive) continue;
       const when = new Date(w.check_in_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
       out.push({
@@ -351,7 +352,7 @@ export default function SafetyBoardPage() {
         </div>
 
         {/* 요약 스트립 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-2">
           <StatCard label="체감온도">
             {s?.weather.available ? (
               <div className="flex items-center gap-1.5">
@@ -380,6 +381,18 @@ export default function SafetyBoardPage() {
             <span className={`text-lg font-bold tabular-nums ${(s?.unacked_alerts ?? 0) > 0 ? 'text-rose-600' : 'text-slate-800'}`}>
               {s?.unacked_alerts ?? 0}
             </span>
+          </StatCard>
+          <StatCard label="건강경보">
+            <span className={`text-lg font-bold tabular-nums ${(s?.health_alert ?? 0) > 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+              {s?.health_alert ?? 0}
+            </span>
+            <span className="text-xs text-slate-400"> 명</span>
+          </StatCard>
+          <StatCard label="혈압주의">
+            <span className={`text-lg font-bold tabular-nums ${(s?.bp_caution ?? 0) > 0 ? 'text-amber-600' : 'text-slate-800'}`}>
+              {s?.bp_caution ?? 0}
+            </span>
+            <span className="text-xs text-slate-400"> 명</span>
           </StatCard>
           <StatCard label="법정점검">
             <span className="text-lg font-bold text-slate-800 tabular-nums">{s?.legal_done ?? 0}</span>
@@ -526,10 +539,12 @@ function MapFallback({ board, watchWorkers, hasKey, hasGeo, mapFailed }: { board
                   {w.role && <span className="text-xs text-slate-500">{roleLabel(w.role)}</span>}
                   {w.vehicle_no && <span className="text-xs font-medium text-slate-700">🚜 {w.vehicle_no}{w.vehicle_status ? ` (${VEHICLE_STATUS_LABEL[w.vehicle_status] ?? w.vehicle_status})` : ''}</span>}
                   {w.supplier_name && <span className="text-xs text-slate-400">{w.supplier_name}</span>}
+                  {w.fall_alert && <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">낙상 감지</span>}
                   {w.hr != null && w.hr > 0 && <span className="text-xs text-slate-500">심박 {w.hr}</span>}
                   {w.body_temp != null && <span className="text-xs text-slate-500">체온 {w.body_temp}℃</span>}
+                  {w.spo2 != null && w.spo2 > 0 && <span className="text-xs text-slate-500">SpO₂ {w.spo2}%</span>}
                   {w.battery != null && <span className="text-xs text-slate-500">배터리 {w.battery}%</span>}
-                  {w.bp_verdict && <span className="text-xs text-slate-500">{BP_VERDICT_LABEL[w.bp_verdict] ?? w.bp_verdict}</span>}
+                  {w.bp_verdict && <span className="text-xs text-slate-500">혈압 {w.bp_sys != null && w.bp_dia != null ? `${w.bp_sys}/${w.bp_dia} · ` : ''}{(BP_VERDICT_LABEL[w.bp_verdict] ?? w.bp_verdict).replace('혈압 ', '')}</span>}
                   {w.lat != null && w.lng != null && <span className="text-xs text-slate-400">· {w.lat.toFixed(4)}, {w.lng.toFixed(4)}</span>}
                 </li>
               );
@@ -633,20 +648,28 @@ function minsAgo(sec: number | null): string {
 }
 
 function watchDisplay(w: WatchWorker): { dot: string; label: string; tone: string; pulse: boolean } {
-  const offline = w.last_seen_at == null || (w.seconds_since_seen != null && w.seconds_since_seen > WATCH_OFFLINE_SEC);
-  if (offline) return { dot: 'bg-slate-400', label: '신호 두절', tone: 'text-slate-500', pulse: false };
+  // 워치 상태 행이 없는 인원(오늘 혈압 체크인만) — last_seen_at 은 항상 실측이라 null=워치 없음. 낙상·혈압으로 표시.
+  if (w.last_seen_at == null) {
+    if (w.fall_alert) return { dot: 'bg-rose-500', label: '낙상 감지', tone: 'text-rose-600', pulse: true };
+    if (w.bp_verdict === 'BLOCK') return { dot: 'bg-rose-500', label: '혈압 위험', tone: 'text-rose-600', pulse: true };
+    if (w.bp_verdict === 'CAUTION') return { dot: 'bg-amber-500', label: '혈압 주의', tone: 'text-amber-600', pulse: false };
+    return { dot: 'bg-slate-300', label: '워치 없음', tone: 'text-slate-400', pulse: false };
+  }
+  if (w.seconds_since_seen != null && w.seconds_since_seen > WATCH_OFFLINE_SEC)
+    return { dot: 'bg-slate-400', label: '신호 두절', tone: 'text-slate-500', pulse: false };
   if (w.worn === false) return { dot: 'bg-slate-400', label: '미착용', tone: 'text-slate-500', pulse: false };
-  if (w.state === 'RED') return { dot: 'bg-rose-500', label: '경보', tone: 'text-rose-600', pulse: true };
-  if (w.state === 'YELLOW') return { dot: 'bg-amber-500', label: '주의', tone: 'text-amber-600', pulse: false };
+  const cat = healthCat(w);
+  if (cat === 'danger') return { dot: 'bg-rose-500', label: w.fall_alert ? '낙상 감지' : '경보', tone: 'text-rose-600', pulse: true };
+  if (cat === 'caution') return { dot: 'bg-amber-500', label: '주의', tone: 'text-amber-600', pulse: false };
   return { dot: 'bg-emerald-500', label: '정상', tone: 'text-emerald-600', pulse: false };
 }
 
 const BP_VERDICT_LABEL: Record<string, string> = { OK: '혈압 정상', CAUTION: '혈압 주의', BLOCK: '혈압 위험' };
 const VEHICLE_STATUS_LABEL: Record<string, string> = { ASSIGNED: '가동중', AVAILABLE: '대기', BROKEN: '정비' };
 
-/** 건강 필터 분류 — 워치 상태등(RED/YELLOW) + 오늘 혈압 판정(BLOCK/CAUTION) 통합. */
+/** 건강 필터 분류 — 워치 상태등(RED/YELLOW·체온 반영) + 오늘 혈압(BLOCK/CAUTION) + 낙상 경보 종합. */
 function healthCat(w: WatchWorker): 'normal' | 'caution' | 'danger' {
-  if (w.state === 'RED' || w.bp_verdict === 'BLOCK') return 'danger';
+  if (w.state === 'RED' || w.bp_verdict === 'BLOCK' || w.fall_alert) return 'danger';
   if (w.state === 'YELLOW' || w.bp_verdict === 'CAUTION') return 'caution';
   return 'normal';
 }
@@ -684,33 +707,36 @@ function uniqueCompanyOptions(list: WatchWorker[], kind: 'supplier' | 'bp'): Arr
   return [...seen].map(([value, label]) => ({ value, label }));
 }
 
-/** 워치 지도 마커 색 — 상태등 팔레트(정상 emerald·주의 amber·경보 rose·미착용/두절 slate). watchDisplay 와 동일 기준. */
+/** 워치 지도 마커 색 — 종합 건강(healthCat: 상태등+혈압+낙상) 팔레트. 미착용/두절은 slate. 혈압 BLOCK도 rose. */
 function watchColor(w: WatchWorker): NonNullable<MapMarker['color']> {
   const offline = w.last_seen_at == null || (w.seconds_since_seen != null && w.seconds_since_seen > WATCH_OFFLINE_SEC);
   if (offline || w.worn === false) return 'slate';
-  if (w.state === 'RED') return 'rose';
-  if (w.state === 'YELLOW') return 'amber';
-  return 'emerald';
+  const cat = healthCat(w);
+  return cat === 'danger' ? 'rose' : cat === 'caution' ? 'amber' : 'emerald';
 }
 
-/** 워치 마커 바이탈 팝오버 — 이름·역할·차량번호·소속·상태·심박·체온·배터리·마지막 수신·고위험·혈압. */
+/** 워치 마커 바이탈 팝오버 — 이름·역할·차량번호·소속·상태·심박·체온·SpO₂·배터리·마지막 수신·고위험·낙상·혈압. */
 function watchTooltip(w: WatchWorker, stateLabel: string): string {
   const hr = w.hr != null && w.hr > 0 ? `${w.hr} bpm` : '—';
   const temp = w.body_temp != null ? `${w.body_temp}℃` : '—';
+  const spo2 = w.spo2 != null && w.spo2 > 0 ? ` · SpO₂ ${w.spo2}%` : '';
   const bat = w.battery != null ? `${w.battery}%` : '—';
   const highRisk = w.health_risk_level === 'HIGH'
     ? '<span style="margin-left:4px;padding:1px 5px;border-radius:4px;background:#ffe4e6;color:#e11d48;font-weight:700;font-size:10px">고위험</span>' : '';
+  const fall = w.fall_alert
+    ? '<span style="margin-left:4px;padding:1px 5px;border-radius:4px;background:#ffe4e6;color:#e11d48;font-weight:700;font-size:10px">낙상</span>' : '';
   const roleTxt = roleLabel(w.role);
   const affil = [roleTxt, w.supplier_name].filter(Boolean).map((t) => escapeHtml(t as string)).join(' · ');
   const affilLine = affil ? `<div style="margin-top:2px;color:#64748b">${affil}${w.bp_name ? ` <span style="color:#94a3b8">· 원청 ${escapeHtml(w.bp_name)}</span>` : ''}</div>` : '';
   const vehicle = w.vehicle_no
     ? `<div style="margin-top:2px;color:#334155;font-weight:600">🚜 ${escapeHtml(w.vehicle_no)}${w.vehicle_status ? ` <span style="color:#94a3b8;font-weight:400">${escapeHtml(VEHICLE_STATUS_LABEL[w.vehicle_status] ?? w.vehicle_status)}</span>` : ''}</div>` : '';
+  const bpMeasured = w.bp_sys != null && w.bp_dia != null ? `${w.bp_sys}/${w.bp_dia} · ` : '';
   const bp = w.bp_verdict
-    ? `<div style="margin-top:3px;font-weight:600;color:${w.bp_verdict === 'OK' ? '#059669' : w.bp_verdict === 'BLOCK' ? '#e11d48' : '#d97706'}">${BP_VERDICT_LABEL[w.bp_verdict] ?? w.bp_verdict}</div>` : '';
+    ? `<div style="margin-top:3px;font-weight:600;color:${w.bp_verdict === 'OK' ? '#059669' : w.bp_verdict === 'BLOCK' ? '#e11d48' : '#d97706'}">혈압 ${bpMeasured}${(BP_VERDICT_LABEL[w.bp_verdict] ?? w.bp_verdict).replace('혈압 ', '')}</div>` : '';
   return `<div style="padding:8px 10px;font-size:12px;min-width:170px">`
-    + `<b>${escapeHtml(w.name)}</b> <span style="color:#64748b">${escapeHtml(stateLabel)}</span>${highRisk}`
+    + `<b>${escapeHtml(w.name)}</b> <span style="color:#64748b">${escapeHtml(stateLabel)}</span>${highRisk}${fall}`
     + `${affilLine}${vehicle}`
-    + `<div style="margin-top:3px;color:#475569">심박 ${hr} · 체온 ${temp}</div>`
+    + `<div style="margin-top:3px;color:#475569">심박 ${hr} · 체온 ${temp}${spo2}</div>`
     + `<div style="margin-top:2px;color:#64748b">배터리 ${bat} · ${minsAgo(w.seconds_since_seen)} 수신</div>`
     + `${bp}</div>`;
 }
@@ -750,7 +776,7 @@ function Sparkline({ series, low, high, width = 132, height = 34 }:
 
 function WatchTab({ workers, canManage }: { workers: WatchWorker[]; canManage: boolean }) {
   const [openId, setOpenId] = useState<number | null>(null);
-  // 관리자 그룹 요약 — 공급사별 인원·경보(건강 경보=워치 RED 또는 혈압 BLOCK) 수.
+  // 관리자 그룹 요약 — 공급사별 인원·경보(건강 경보=워치 RED·혈압 BLOCK·낙상, healthCat danger) 수.
   const groups = useMemo(() => {
     const m = new Map<string, { name: string; count: number; alerts: number }>();
     for (const w of workers) {
@@ -805,13 +831,21 @@ function WatchTab({ workers, canManage }: { workers: WatchWorker[]; canManage: b
                       {w.health_risk_level === 'HIGH' && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-semibold shrink-0">🔴 고위험</span>
                       )}
+                      {w.fall_alert && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-semibold shrink-0">낙상 감지</span>
+                      )}
                       {!w.baseline_learned && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">학습 전</span>
                       )}
                     </div>
                     <div className="text-xs text-slate-400">
-                      {minsAgo(w.seconds_since_seen)} 수신{w.hr != null && w.hr > 0 ? ` · 심박 ${w.hr}` : ''}
+                      {minsAgo(w.seconds_since_seen)} 수신{w.hr != null && w.hr > 0 ? ` · 심박 ${w.hr}` : ''}{w.body_temp != null ? ` · 체온 ${w.body_temp}℃` : ''}{w.spo2 != null && w.spo2 > 0 ? ` · SpO₂ ${w.spo2}%` : ''}
                     </div>
+                    {w.bp_verdict && (
+                      <div className={`text-[11px] mt-0.5 font-medium ${w.bp_verdict === 'BLOCK' ? 'text-rose-600' : w.bp_verdict === 'CAUTION' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        혈압 {w.bp_sys != null && w.bp_dia != null ? `${w.bp_sys}/${w.bp_dia} · ` : ''}{(BP_VERDICT_LABEL[w.bp_verdict] ?? w.bp_verdict).replace('혈압 ', '')}
+                      </div>
+                    )}
                     {(w.role || w.vehicle_no || w.supplier_name) && (
                       <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-1.5">
                         {w.role && <span>{roleLabel(w.role)}</span>}

@@ -54,6 +54,8 @@ export type BoardSummary = {
   operator_target: number;
   announcement_read: number;
   announcement_total: number;
+  health_alert: number;    // 종합 건강경보(RED·혈압 BLOCK·낙상) 인원.
+  bp_caution: number;      // 혈압주의(OK 아님) 인원.
 };
 
 export type AnnouncementSummary = {
@@ -75,6 +77,7 @@ export type WatchWorker = {
   battery: number | null;
   worn: boolean | null;
   hr: number | null;
+  spo2: number | null;        // SpO₂(%) — 지도 팝오버·카드.
   body_temp: number | null;   // 체온(℃) — 지도 마커 팝오버.
   lat: number | null;         // 최근 수신 위치 — 워치 지도 마커(null=미보고, 지도엔 미표시).
   lng: number | null;
@@ -85,7 +88,10 @@ export type WatchWorker = {
   work_hr_high: number | null;
   baseline_learned: boolean;
   health_risk_level: string;   // P5-W4 2겹: NORMAL|CAUTION|HIGH (HIGH=🔴 뱃지).
+  fall_alert: boolean;         // 열린 낙상 경보 — 건강필터 '경보'·뱃지.
   bp_verdict: string | null;   // 오늘 혈압 판정 OK|CAUTION|BLOCK (null=미측정).
+  bp_sys: number | null;       // 실측 수축기 혈압.
+  bp_dia: number | null;       // 실측 이완기 혈압.
   vehicle_no: string | null;        // 조종 장비 차량번호 (null=장비 미매칭).
   vehicle_status: string | null;    // 장비 배치상태 ASSIGNED|AVAILABLE|BROKEN.
   role: string | null;              // 투입 역할 (PersonRole enum 명).
