@@ -50,6 +50,7 @@ import ResourceChangeCreatePage from './features/resourceChange/ResourceChangeCr
 import ResourceChangeDetailPage from './features/resourceChange/ResourceChangeDetailPage';
 import MyCompanyPage from './features/company/MyCompanyPage';
 import SubSuppliersPage from './features/company/SubSuppliersPage';
+import HandledEquipmentTypesPage from './features/company/HandledEquipmentTypesPage';
 import OnboardingWizardPage from './features/onboarding/OnboardingWizardPage';
 import ContractsPage from './features/contract/ContractsPage';
 import QuoteTemplatesPage from './features/quotetemplate/QuoteTemplatesPage';
@@ -339,6 +340,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['EQUIPMENT_SUPPLIER']}>
               <OnboardingWizardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/equipment-types"
+          element={
+            <ProtectedRoute roles={['EQUIPMENT_SUPPLIER']}>
+              <HandledEquipmentTypesPage />
             </ProtectedRoute>
           }
         />

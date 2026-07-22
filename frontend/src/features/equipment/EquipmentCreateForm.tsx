@@ -12,6 +12,7 @@ import type { CompanyResponse } from '../../types/auth';
 import type { EquipmentResponse } from '../../types/equipment';
 import { EQUIPMENT_CATEGORIES, EQUIPMENT_CATEGORY_LABEL } from '../../types/equipment';
 import { useEquipmentTypes } from './useEquipmentTypes';
+import { useHandledEquipmentTypes, handledCodeFilter } from './useHandledEquipmentTypes';
 import type { DocumentTypeResponse } from '../../types/document';
 import { ownerMatches } from '../document/docTypeGrouping';
 
@@ -61,6 +62,11 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
   const categoryOptions = typeOptions.length
     ? typeOptions
     : EQUIPMENT_CATEGORIES.map((c) => ({ code: c, name: EQUIPMENT_CATEGORY_LABEL[c], grp: '' }));
+  // 취급 장비종류 설정이 있으면 그 종류만 기본 표시 + '전체 보기' 토글. 없으면 전체(기존 동작).
+  const handledTypes = useHandledEquipmentTypes();
+  const [showAllTypes, setShowAllTypes] = useState(false);
+  const typePass = handledCodeFilter(handledTypes, showAllTypes);
+  const shownCategoryOptions = typePass ? categoryOptions.filter((c) => typePass(c.code)) : categoryOptions;
   const [values, setValues] = useState<EquipmentFieldValues>(EMPTY_EQUIPMENT_FIELDS);
   const [inspectionExpiry, setInspectionExpiry] = useState(''); // 검사만료일(정기검사 유효기간) — 폼 입력/OCR 자동채움
   const [busy, setBusy] = useState(false);
@@ -87,6 +93,14 @@ export default function EquipmentCreateForm({ equipmentSuppliers, requireSupplie
   // 장비종류별 필요 등록증(설정 기반) — 자동차/건설기계 등록증 하드코딩 대신.
   const [equipTypes, setEquipTypes] = useState<DocumentTypeResponse[]>([]);
   const regDocType = useMemo(() => pickRegistrationType(equipTypes, values.category), [equipTypes, values.category]);
+
+  // 취급 종류로 좁혀졌는데 현재 선택 종류가 목록 밖이면 첫 표시 종류로 이동(빈 select 방지).
+  useEffect(() => {
+    if (!typePass) return;
+    setValues((prev) => (typePass(prev.category) || shownCategoryOptions.length === 0)
+      ? prev
+      : { ...prev, category: shownCategoryOptions[0].code as EquipmentFieldValues['category'] });
+  }, [handledTypes, showAllTypes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** 미리보기 클릭 → 새 창(축소/확대·%·화면맞춤·닫기 컨트롤 포함)으로 열기. 폼을 덮지 않고 나란히 보며 입력. */
   function openPreviewInNewTab() {
@@ -376,13 +390,21 @@ fit();</script></body></html>`);
       <h2 className="text-base font-bold">새 장비 등록</h2>
       {/* 장비 종류 먼저 — 종류에 따라 필요한 등록증(자동차/건설기계)이 달라진다. */}
       <label className="block">
-        <span className="text-sm font-medium text-slate-700">장비 종류 <span className="text-xs text-rose-600 font-semibold">(필수)</span></span>
+        <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          장비 종류 <span className="text-xs text-rose-600 font-semibold">(필수)</span>
+          {handledTypes && handledTypes.length > 0 && (
+            <button type="button" onClick={() => setShowAllTypes((v) => !v)}
+              className="ml-auto text-xs font-medium text-brand-600 hover:underline">
+              {showAllTypes ? '취급 종류만 보기' : '전체 보기'}
+            </button>
+          )}
+        </span>
         <select
           value={values.category}
           onChange={(e) => setValues({ ...values, category: e.target.value as EquipmentFieldValues['category'] })}
           className="input mt-1 bg-white"
         >
-          {categoryOptions.map((c) => (
+          {shownCategoryOptions.map((c) => (
             <option key={c.code} value={c.code}>{c.name}</option>
           ))}
         </select>

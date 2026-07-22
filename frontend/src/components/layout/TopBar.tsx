@@ -24,6 +24,7 @@ const ICON = {
   message: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
   megaphone: <><path d="M3 11l18-5v12L3 14v-3z" /><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" /></>,
   list: <><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></>,
+  truck: <><rect x="1" y="3" width="15" height="13" /><polygon points="16 8 20 8 23 11 23 16 16 16 16 8" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" /></>,
 } as const;
 
 /** ⚙ 유틸 소메뉴 — 저빈도 관리 기능을 섹션으로 묶어 슬라이드 패널에 노출. 역할별 필터. */
@@ -36,6 +37,7 @@ function utilSections(role: string, isMaster: boolean): UtilSection[] {
   if (isBp || isSupplier) company.push({ label: '내 회사', to: '/my-company', icon: ICON.building });
   if ((isBp || isSupplier) && isMaster) company.push({ label: '직원 관리', to: '/company/users', icon: ICON.users });
   if (isEquip && isMaster) company.push({ label: '협력업체 관리', to: '/sub-suppliers', icon: ICON.network });
+  if (isEquip && isMaster) company.push({ label: '취급 장비종류', to: '/settings/equipment-types', icon: ICON.truck });
 
   const tools: UtilItem[] = [];
   if (role === 'ADMIN' || isBp) {

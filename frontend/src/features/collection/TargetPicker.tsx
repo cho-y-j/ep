@@ -5,6 +5,7 @@ import type { CompanyResponse } from '../../types/auth';
 import type { OwnerType } from '../../types/document';
 import type { EquipmentResponse } from '../../types/equipment';
 import { equipmentCategoryLabel, EQUIPMENT_CATEGORY_LABEL, type EquipmentCategory } from '../../types/equipment';
+import { useHandledEquipmentTypes, handledCodeFilter } from '../equipment/useHandledEquipmentTypes';
 import type { PersonResponse, PersonRole } from '../../types/person';
 import { ALL_PERSON_ROLES, PERSON_ROLE_LABEL } from '../../types/person';
 import { targetKey, type PickedTarget } from './target';
@@ -38,11 +39,23 @@ export default function TargetPicker({ value, onChange }: {
   const [role, setRole] = useState('');
   const [q, setQ] = useState('');
 
+  // 취급 장비종류 설정이 있으면 종류 필터를 그 종류만 기본 표시 + '전체 보기' 토글. 없으면 전체(기존 동작).
+  const handledTypes = useHandledEquipmentTypes();
+  const [showAllTypes, setShowAllTypes] = useState(false);
+  const typePass = handledCodeFilter(handledTypes, showAllTypes);
+  const shownCatKeys = (Object.keys(EQUIPMENT_CATEGORY_LABEL) as EquipmentCategory[])
+    .filter((c) => !typePass || typePass(c));
+
   // 장비별 "조종원 함께" — 기본 ON(장비 고르면 교대조가 따라오는 게 기본 기대).
   const [withOperators, setWithOperators] = useState<Record<number, boolean>>({});
   const opsOn = (id: number) => withOperators[id] ?? true;
 
   const picked = useMemo(() => new Set(value.map(targetKey)), [value]);
+
+  // '취급만'으로 좁혀졌는데 선택된 종류가 목록 밖이면 종류 필터를 초기화(전체).
+  useEffect(() => {
+    if (typePass && category && !typePass(category)) setCategory('');
+  }, [handledTypes, showAllTypes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 협력업체 목록 — /api/companies 는 ADMIN 전용이라 공급사도 볼 수 있는 /suppliers 사용.
   useEffect(() => {
@@ -196,9 +209,16 @@ export default function TargetPicker({ value, onChange }: {
       <div className="flex flex-wrap gap-2">
         <FilterSelect value={supplierId} onChange={setSupplierId} placeholder="협력업체 전체" options={supplierOptions} />
         {tab === 'EQUIPMENT' ? (
-          <FilterSelect value={category} onChange={setCategory} placeholder="종류 전체"
-            options={(Object.keys(EQUIPMENT_CATEGORY_LABEL) as EquipmentCategory[])
-              .map((c) => ({ value: c, label: EQUIPMENT_CATEGORY_LABEL[c] }))} />
+          <div className="flex items-center gap-2">
+            <FilterSelect value={category} onChange={setCategory} placeholder="종류 전체"
+              options={shownCatKeys.map((c) => ({ value: c, label: EQUIPMENT_CATEGORY_LABEL[c] }))} />
+            {handledTypes && handledTypes.length > 0 && (
+              <button type="button" onClick={() => setShowAllTypes((v) => !v)}
+                className="shrink-0 text-xs font-medium text-brand-600 hover:underline">
+                {showAllTypes ? '취급만' : '전체 보기'}
+              </button>
+            )}
+          </div>
         ) : (
           <FilterSelect value={role} onChange={setRole} placeholder="역할 전체"
             options={ALL_PERSON_ROLES.map((r: PersonRole) => ({ value: r, label: PERSON_ROLE_LABEL[r] }))} />
