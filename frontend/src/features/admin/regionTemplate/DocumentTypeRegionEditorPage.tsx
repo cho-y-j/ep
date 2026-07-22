@@ -67,6 +67,7 @@ export default function DocumentTypeRegionEditorPage() {
 
   const [docType, setDocType] = useState<DocumentTypeResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sampleLoading, setSampleLoading] = useState(false);   // 등록된 샘플을 배경으로 불러오는 중
   const [step, setStep] = useState<Step>('upload');
 
   const [aspect, setAspect] = useState<Aspect>(DEFAULT_ASPECT);
@@ -95,6 +96,24 @@ export default function DocumentTypeRegionEditorPage() {
         setDocType(dt);
         const parsed = dt ? parseTemplate(dt.ocr_region_template) : null;
         if (parsed) { setAspect(parsed.aspect); setBoxes(parsed.boxes); }
+        // V116 샘플 이미지가 있으면 그 위에서 바로 영역 편집(재업로드 불필요). 좌표계는 그대로 —
+        // 새 템플릿일 때만 aspect 를 샘플 natural 로 잡고(skipAlign 과 동일), 기존 템플릿은 저장 aspect 유지.
+        // 로드 실패(키만 있고 파일 유실 등)면 조용히 업로드 폼으로 폴백.
+        const sampleKey = dt?.sample_image_key;
+        if (dt && sampleKey) {
+          setSampleLoading(true);
+          const url = `/api/document-types/${dt.id}/sample?v=${encodeURIComponent(sampleKey)}`;
+          const img = new Image();
+          img.onload = () => {
+            if (!alive) return;
+            if (!parsed) setAspect({ w: img.naturalWidth, h: img.naturalHeight });
+            setCanvasUrl(url);
+            setStep('edit');
+            setSampleLoading(false);
+          };
+          img.onerror = () => { if (alive) setSampleLoading(false); };
+          img.src = url;
+        }
       })
       .catch(() => { if (alive) toast.error('서류 종류를 불러올 수 없습니다'); })
       .finally(() => { if (alive) setLoading(false); });
@@ -244,12 +263,24 @@ export default function DocumentTypeRegionEditorPage() {
           </h1>
         </div>
 
-        {loading ? (
+        {loading || sampleLoading ? (
           <div className="card p-8 text-center text-slate-400">불러오는 중…</div>
         ) : !docType ? (
           <div className="card p-8 text-center text-slate-400">해당 서류 종류를 찾을 수 없습니다.</div>
         ) : step === 'upload' ? (
           <div className="card p-6 space-y-5 max-w-2xl">
+            {!docType.sample_image_key && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-800">
+                  샘플 이미지를 먼저 등록하면 그 위에서 영역을 지정할 수 있습니다.
+                </p>
+                <p className="mt-1 text-xs text-amber-700">
+                  서류종류 관리에서 이 서류의 샘플 이미지를 등록하면, 다음부터 그 이미지를 배경으로 바로 영역을 그릴 수 있어요.
+                  <button type="button" onClick={() => navigate('/admin/document-types')}
+                    className="ml-1 font-semibold underline hover:text-amber-900">서류종류 관리로 이동</button>
+                </p>
+              </div>
+            )}
             <div>
               <div className="text-sm font-semibold text-slate-700 mb-1">정렬 비율(aspect)</div>
               <div className="flex items-end gap-2">

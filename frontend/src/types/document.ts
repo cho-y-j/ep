@@ -29,6 +29,7 @@ export type DocumentTypeResponse = {
   applies_to_person_roles?: string | null;  // PersonRole CSV, null=모든 역할
   applies_to_categories?: string | null;    // EquipmentCategory CSV, null=모든 카테고리
   ocr_region_template?: string | null;      // 영역-크롭 OCR 템플릿 JSON, null=미사용 (정렬/영역OCR 분기 기준)
+  sample_image_key?: string | null;         // V116: 샘플 이미지 스토리지 키(관리자 엔티티 응답), null=미등록
 };
 
 export type DocumentResponse = {
