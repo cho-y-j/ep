@@ -1,5 +1,6 @@
 package com.skep.resourceCheck;
 
+import com.skep.resourceCheck.dto.IssueComboRequest;
 import com.skep.resourceCheck.dto.IssueRequest;
 import com.skep.resourceCheck.dto.ResourceCheckResponse;
 import com.skep.resourceCheck.dto.ReviewRequest;
@@ -26,6 +27,13 @@ public class ResourceCheckController {
     public ResourceCheckResponse issue(@Valid @RequestBody IssueRequest req,
                                         @CurrentUser AuthenticatedUser actor) {
         return service.issue(req, actor);
+    }
+
+    /** R2: 조합(장비+교대조 조종원) 일괄 발행 — 단일 트랜잭션, 전 행 combo_equipment_id 스냅샷. */
+    @PostMapping("/issue-combo")
+    public List<ResourceCheckResponse> issueCombo(@Valid @RequestBody IssueComboRequest req,
+                                                   @CurrentUser AuthenticatedUser actor) {
+        return service.issueCombo(req, actor);
     }
 
     /** 공급사 회신 — documentId 만 첨부. */

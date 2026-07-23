@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
@@ -157,6 +157,101 @@ export default function ResourceCheckBpList() {
   const activeFilterCount = [q, statusFilter, typeFilter].filter(Boolean).length;
   const resetFilters = () => { setQ(''); setStatusFilter(''); setTypeFilter(''); };
 
+  const renderRow = (r: ResourceCheckResponse) => {
+    const si = inspStatusFor(r);
+    const rd = readinessFor(r);
+    return (
+    <div key={r.id} className="card p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-bold text-slate-900">{CHECK_TYPE_LABEL[r.check_type]}</span>
+          <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${CHECK_STATUS_CHIP_CLS[r.status]}`}>
+            {CHECK_STATUS_LABEL[r.status]}
+          </span>
+          {isRecheck(r) && (
+            <span className="px-1.5 py-0.5 text-[10px] rounded-full font-semibold bg-violet-100 text-violet-800">
+              재검사
+            </span>
+          )}
+          {si && (
+            <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${si.cls}`}>
+              안전점검 {si.label}
+            </span>
+          )}
+          {rd && (
+            <span title={rd.title} className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${rd.cls}`}>
+              {rd.label}
+            </span>
+          )}
+        </div>
+        <div className="mt-0.5 text-sm text-slate-700 truncate">
+          {r.owner_label} → {r.supplier_company_name ?? '공급사'}
+          {r.due_date && <span className="ml-2 text-xs text-rose-700">마감 {r.due_date}</span>}
+        </div>
+        {r.notes && <div className="mt-0.5 text-xs text-slate-500 truncate">{r.notes}</div>}
+      </div>
+      <div className="shrink-0 flex items-center gap-2">
+        {r.document_id && (
+          <a href={`/api/documents/${r.document_id}/file`} target="_blank" rel="noopener noreferrer"
+             className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-50">
+            제출 서류 보기
+          </a>
+        )}
+        {r.status === 'SUBMITTED' && (
+          <>
+            <button onClick={() => void review(r.id, 'approve')} disabled={busy === r.id}
+                    className="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
+              승인
+            </button>
+            <button onClick={() => void review(r.id, 'reject')} disabled={busy === r.id}
+                    className="px-3 py-1.5 text-xs rounded border border-rose-500 text-rose-700 hover:bg-rose-50 disabled:opacity-50">
+              반려
+            </button>
+          </>
+        )}
+        {r.status === 'REJECTED' && (
+          <button
+            onClick={() => setCheckTarget({
+              ownerType: r.owner_type,
+              ownerId: r.owner_id,
+              ownerLabel: r.owner_label,
+              supplierCompanyId: r.supplier_company_id,
+              supplierCompanyName: r.supplier_company_name,
+              initialTypes: [r.check_type],
+            })}
+            className="px-3 py-1.5 text-xs rounded bg-amber-600 text-white hover:bg-amber-700">
+            재검사 통보
+          </button>
+        )}
+      </div>
+    </div>
+    );
+  };
+
+  // R2 조합 묶음 — 같은 combo_equipment_id 행을 장비 라벨 헤더 아래로 묶음(첫 등장 위치에 배치).
+  // combo_equipment_id 없는 행은 기존 단독 렌더 그대로(무회귀).
+  const blocks: ReactElement[] = [];
+  const seenCombo = new Set<number>();
+  for (const r of filtered) {
+    if (r.combo_equipment_id == null) { blocks.push(renderRow(r)); continue; }
+    if (seenCombo.has(r.combo_equipment_id)) continue;
+    seenCombo.add(r.combo_equipment_id);
+    const group = filtered.filter((x) => x.combo_equipment_id === r.combo_equipment_id);
+    blocks.push(
+      <div key={`combo-${r.combo_equipment_id}`}
+           className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-2 space-y-2">
+        <div className="flex items-center gap-2 px-1">
+          <span className="px-1.5 py-0.5 text-[10px] rounded-full font-semibold bg-indigo-600 text-white">조합</span>
+          <span className="text-sm font-bold text-slate-900 truncate">
+            {r.combo_equipment_label ?? `장비 #${r.combo_equipment_id}`}
+          </span>
+          <span className="text-xs text-slate-500">점검 {group.length}건</span>
+        </div>
+        {group.map((g) => renderRow(g))}
+      </div>,
+    );
+  }
+
   return (
     <AppShell>
       <PageHeader
@@ -186,76 +281,7 @@ export default function ResourceCheckBpList() {
         <div className="card p-8 text-center text-slate-400">조건에 맞는 요청이 없습니다.</div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((r) => {
-            const si = inspStatusFor(r);
-            const rd = readinessFor(r);
-            return (
-            <div key={r.id} className="card p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-slate-900">{CHECK_TYPE_LABEL[r.check_type]}</span>
-                  <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${CHECK_STATUS_CHIP_CLS[r.status]}`}>
-                    {CHECK_STATUS_LABEL[r.status]}
-                  </span>
-                  {isRecheck(r) && (
-                    <span className="px-1.5 py-0.5 text-[10px] rounded-full font-semibold bg-violet-100 text-violet-800">
-                      재검사
-                    </span>
-                  )}
-                  {si && (
-                    <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${si.cls}`}>
-                      안전점검 {si.label}
-                    </span>
-                  )}
-                  {rd && (
-                    <span title={rd.title} className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${rd.cls}`}>
-                      {rd.label}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-0.5 text-sm text-slate-700 truncate">
-                  {r.owner_label} → {r.supplier_company_name ?? '공급사'}
-                  {r.due_date && <span className="ml-2 text-xs text-rose-700">마감 {r.due_date}</span>}
-                </div>
-                {r.notes && <div className="mt-0.5 text-xs text-slate-500 truncate">{r.notes}</div>}
-              </div>
-              <div className="shrink-0 flex items-center gap-2">
-                {r.document_id && (
-                  <a href={`/api/documents/${r.document_id}/file`} target="_blank" rel="noopener noreferrer"
-                     className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-50">
-                    제출 서류 보기
-                  </a>
-                )}
-                {r.status === 'SUBMITTED' && (
-                  <>
-                    <button onClick={() => void review(r.id, 'approve')} disabled={busy === r.id}
-                            className="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
-                      승인
-                    </button>
-                    <button onClick={() => void review(r.id, 'reject')} disabled={busy === r.id}
-                            className="px-3 py-1.5 text-xs rounded border border-rose-500 text-rose-700 hover:bg-rose-50 disabled:opacity-50">
-                      반려
-                    </button>
-                  </>
-                )}
-                {r.status === 'REJECTED' && (
-                  <button
-                    onClick={() => setCheckTarget({
-                      ownerType: r.owner_type,
-                      ownerId: r.owner_id,
-                      ownerLabel: r.owner_label,
-                      supplierCompanyId: r.supplier_company_id,
-                      supplierCompanyName: r.supplier_company_name,
-                      initialTypes: [r.check_type],
-                    })}
-                    className="px-3 py-1.5 text-xs rounded bg-amber-600 text-white hover:bg-amber-700">
-                    재검사 통보
-                  </button>
-                )}
-              </div>
-            </div>
-            );
-          })}
+          {blocks}
         </div>
       )}
 

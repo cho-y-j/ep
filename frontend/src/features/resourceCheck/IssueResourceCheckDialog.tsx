@@ -45,16 +45,38 @@ export default function IssueResourceCheckDialog({
   // 같은 자원에 이미 회신 대기(REQUESTED) 중인 점검 종류 — 중복 발송 경고용.
   const [existingRequested, setExistingRequested] = useState<Set<ResourceCheckType>>(new Set());
   const [autoPhone, setAutoPhone] = useState<string | null>(null);
+  // R2 조합 모드(장비 대상 한정): 교대조 조종원 자동 로드 → issue-combo 1회 호출. 끄면 단건 발행 기존 그대로.
+  const [comboMode, setComboMode] = useState(false);
+  const [comboOperators, setComboOperators] = useState<{ person_id: number; person_name?: string | null }[]>([]);
+  const [comboChecked, setComboChecked] = useState<Set<number>>(new Set());
+  const [operatorTypes, setOperatorTypes] = useState<Set<ResourceCheckType>>(new Set(RECOMMENDED_FOR_PERSON));
 
-  const showAlimtalk = [...selected].some((t) => ALIMTALK_TYPES.includes(t));
+  const showAlimtalk = !comboMode && [...selected].some((t) => ALIMTALK_TYPES.includes(t));
   const dupTypes = [...selected].filter((t) => existingRequested.has(t));
 
   // F4: 열 때 자원 종류별 추천 프리셀렉트. 재검사 통보는 initialTypes(해당 종류만)로 프리필.
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setComboMode(false); return; }
+    setOperatorTypes(new Set(RECOMMENDED_FOR_PERSON));
     if (initialTypes && initialTypes.length > 0) { setSelected(new Set(initialTypes)); return; }
     setSelected(new Set(ownerType === 'EQUIPMENT' ? RECOMMENDED_FOR_EQUIPMENT : RECOMMENDED_FOR_PERSON));
   }, [open, ownerType, initialTypes]);
+
+  // R2: 조합 모드 켜면 그 장비의 교대조 조종원 로드(기존 배치 API) — 전원 기본 선택, 개별 해제 가능.
+  useEffect(() => {
+    if (!open || !comboMode || ownerType !== 'EQUIPMENT') return;
+    let alive = true;
+    api.post<{ results: Array<{ equipment_id: number; operators: Array<{ person_id: number; person_name?: string | null }> }> }>(
+      '/api/equipment/default-operators', { equipment_ids: [ownerId] })
+      .then((res) => {
+        if (!alive) return;
+        const ops = res.data.results.find((x) => x.equipment_id === ownerId)?.operators ?? [];
+        setComboOperators(ops);
+        setComboChecked(new Set(ops.map((o) => o.person_id)));
+      })
+      .catch(() => { if (alive) { setComboOperators([]); setComboChecked(new Set()); } });
+    return () => { alive = false; };
+  }, [open, comboMode, ownerType, ownerId]);
 
   // F4: 기존 동일 자원 REQUESTED 요청을 bp-list 에서 클라 필터해 중복 경고.
   useEffect(() => {
@@ -90,6 +112,45 @@ export default function IssueResourceCheckDialog({
     if (next.has(t)) next.delete(t); else next.add(t);
     return next;
   });
+
+  const toggleOperatorType = (t: ResourceCheckType) => setOperatorTypes((prev) => {
+    const next = new Set(prev);
+    if (next.has(t)) next.delete(t); else next.add(t);
+    return next;
+  });
+
+  const toggleOperator = (personId: number) => setComboChecked((prev) => {
+    const next = new Set(prev);
+    if (next.has(personId)) next.delete(personId); else next.add(personId);
+    return next;
+  });
+
+  // R2 조합 발행 — issue-combo 1회 호출(단일 트랜잭션·전 행 combo_equipment_id 스냅샷).
+  const submitCombo = async () => {
+    const equipmentTypes = [...selected];
+    const opTypes = [...operatorTypes];
+    const opIds = comboOperators.filter((o) => comboChecked.has(o.person_id)).map((o) => o.person_id);
+    if (equipmentTypes.length === 0 && (opIds.length === 0 || opTypes.length === 0)) {
+      toast.error('발행할 점검이 없습니다'); return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.post<ResourceCheckResponse[]>('/api/resource-checks/issue-combo', {
+        equipment_id: ownerId,
+        operator_person_ids: opIds,
+        supplier_company_id: supplierCompanyId,
+        work_plan_id: workPlanId,
+        due_date: dueDate || null,
+        notes: notes || null,
+        checks: { equipment: equipmentTypes, operator: opTypes },
+      });
+      toast.success(`조합 점검 ${res.data.length}건 발송 — ${supplierCompanyName ?? '공급사'}`);
+      onIssued();
+      onClose();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? '발송 실패');
+    } finally { setBusy(false); }
+  };
 
   const submit = async () => {
     const types = [...selected];
@@ -136,9 +197,17 @@ export default function IssueResourceCheckDialog({
           </p>
         </div>
         <div className="px-5 py-4 space-y-3">
+          {ownerType === 'EQUIPMENT' && (
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-800 cursor-pointer">
+              <input type="checkbox" checked={comboMode} onChange={(e) => setComboMode(e.target.checked)} />
+              <span>조합으로 발행</span>
+              <span className="font-normal text-xs text-slate-500">장비+교대조 조종원 일괄</span>
+            </label>
+          )}
           <div>
             <span className="text-xs font-semibold text-slate-500">
-              점검 종류 <span className="font-normal text-slate-400">(추천 자동 선택 — 수정 가능)</span>
+              {comboMode ? '장비 점검 종류' : '점검 종류'}{' '}
+              <span className="font-normal text-slate-400">(추천 자동 선택 — 수정 가능)</span>
             </span>
             <div className="mt-1 space-y-1.5">
               {allowed.map((t) => (
@@ -152,6 +221,37 @@ export default function IssueResourceCheckDialog({
               ))}
             </div>
           </div>
+          {comboMode && (
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 px-3 py-2 space-y-2">
+              <div>
+                <span className="text-xs font-semibold text-slate-500">조합(교대조) 조종원 — 발행 대상 선택</span>
+                {comboOperators.length === 0 ? (
+                  <div className="mt-1 text-xs text-slate-400">이 장비에 등록된 조종원이 없습니다 (장비 점검만 발행).</div>
+                ) : (
+                  <div className="mt-1 space-y-1.5">
+                    {comboOperators.map((o) => (
+                      <label key={o.person_id} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                        <input type="checkbox" checked={comboChecked.has(o.person_id)}
+                               onChange={() => toggleOperator(o.person_id)} />
+                        <span>{o.person_name ?? `인원 #${o.person_id}`}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-slate-500">조종원 점검 종류</span>
+                <div className="mt-1 space-y-1.5">
+                  {TYPES_FOR_PERSON.map((t) => (
+                    <label key={t} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                      <input type="checkbox" checked={operatorTypes.has(t)} onChange={() => toggleOperatorType(t)} />
+                      <span>{CHECK_TYPE_LABEL[t]}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           {dupTypes.length > 0 && (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               이미 회신 대기 중인 요청이 있습니다: {dupTypes.map((t) => CHECK_TYPE_LABEL[t]).join(', ')}. 중복 발송에 주의하세요.
@@ -180,8 +280,9 @@ export default function IssueResourceCheckDialog({
           <button onClick={onClose} className="px-3 py-1.5 rounded text-sm text-slate-700 hover:bg-slate-100">
             취소
           </button>
-          <button onClick={submit} disabled={busy} className="btn-primary disabled:opacity-50 text-sm">
-            {busy ? '발송 중…' : '발송'}
+          <button onClick={comboMode ? submitCombo : submit} disabled={busy}
+                  className="btn-primary disabled:opacity-50 text-sm">
+            {busy ? '발송 중…' : comboMode ? '조합 발송' : '발송'}
           </button>
         </div>
       </div>

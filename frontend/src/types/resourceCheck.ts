@@ -43,4 +43,7 @@ export type ResourceCheckResponse = {
   submitted_at?: string | null;
   reviewed_at?: string | null;
   review_note?: string | null;
+  /** R2 조합 스냅샷 — 같은 값 행을 목록에서 조합 묶음으로 그룹핑(단독 발행=null/생략). */
+  combo_equipment_id?: number | null;
+  combo_equipment_label?: string | null;
 };

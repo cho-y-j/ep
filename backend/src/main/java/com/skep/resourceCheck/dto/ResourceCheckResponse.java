@@ -25,9 +25,13 @@ public record ResourceCheckResponse(
         LocalDateTime issuedAt,
         LocalDateTime submittedAt,
         LocalDateTime reviewedAt,
-        String reviewNote
+        String reviewNote,
+        /** R2 조합 스냅샷 — 같은 값 행을 목록에서 조합 묶음으로 그룹핑(단독 발행=null). */
+        Long comboEquipmentId,
+        String comboEquipmentLabel
 ) {
-    public static ResourceCheckResponse from(ResourceCheckRequest r, String ownerLabel, String supplierName) {
+    public static ResourceCheckResponse from(ResourceCheckRequest r, String ownerLabel, String supplierName,
+                                             String comboEquipmentLabel) {
         return new ResourceCheckResponse(
                 r.getId(), r.getWorkPlanId(),
                 r.getOwnerType(), r.getOwnerId(), ownerLabel,
@@ -35,7 +39,8 @@ public record ResourceCheckResponse(
                 r.getBpCompanyId(),
                 r.getCheckType(), r.getDueDate(), r.getNotes(),
                 r.getStatus(), r.getDocumentId(),
-                r.getIssuedAt(), r.getSubmittedAt(), r.getReviewedAt(), r.getReviewNote()
+                r.getIssuedAt(), r.getSubmittedAt(), r.getReviewedAt(), r.getReviewNote(),
+                r.getComboEquipmentId(), comboEquipmentLabel
         );
     }
 }

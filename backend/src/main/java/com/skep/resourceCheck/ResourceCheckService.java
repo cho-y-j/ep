@@ -13,6 +13,7 @@ import com.skep.equipment.EquipmentRepository;
 import com.skep.notification.NotificationService;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
+import com.skep.resourceCheck.dto.IssueComboRequest;
 import com.skep.resourceCheck.dto.IssueRequest;
 import com.skep.resourceCheck.dto.ResourceCheckResponse;
 import com.skep.resourceCheck.dto.ReviewRequest;
@@ -31,9 +32,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -57,43 +61,12 @@ public class ResourceCheckService {
     /** BP·공급사·ADMIN 이 자원 점검을 발행. bp_company_id = 발행사(BP 발행이면 BP사, 공급사 발행이면 자기 회사). */
     @Transactional
     public ResourceCheckResponse issue(IssueRequest req, AuthenticatedUser actor) {
-        boolean supplierIssuer = actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER;
-        if (actor.role() != Role.ADMIN && actor.role() != Role.BP && !supplierIssuer) {
-            throw ApiException.forbidden("ISSUER_ONLY", "BP/공급사/ADMIN 만 점검 요청 가능");
-        }
-        Long bpCompanyId = actor.role() == Role.ADMIN ? req.supplierCompanyId() : actor.companyId();
-        // ADMIN 케이스: bpCompanyId 추론 어려움 — 실제로는 workPlan 의 bpCompanyId 또는 별도 필드 필요.
-        // 우선 BP 본인 케이스에 집중. ADMIN은 actor.companyId() 가 null 이라 supplier 와 다른 회사여야.
-        if (actor.role() == Role.BP) {
-            if (bpCompanyId == null) throw ApiException.badRequest("NO_COMPANY", "회사 식별 불가");
-            if (bpCompanyId.equals(req.supplierCompanyId())) {
-                throw ApiException.badRequest("SAME_COMPANY", "BP 자기 회사에 보낼 수 없습니다");
-            }
-        }
-        // 공급사 발행(BP 미사용 현실 대응): 자기 회사(+직속 자식 협력사) 자원에만 발행 가능.
-        // SAME_COMPANY 가드는 미적용 — 자기/자식 자원 대상 발행이 정상 흐름. bp_company_id 에는 발행사(자기 회사) id 저장.
-        if (supplierIssuer) {
-            if (bpCompanyId == null) throw ApiException.badRequest("NO_COMPANY", "회사 식별 불가");
-            List<Long> scope = companyService.selfAndChildren(bpCompanyId);
-            if (!scope.contains(resourceSupplierId(req.ownerType(), req.ownerId()))
-                    || !scope.contains(req.supplierCompanyId())) {
-                throw ApiException.forbidden("NOT_MY_RESOURCE", "자기 회사(협력사 포함) 자원에만 발행할 수 있습니다");
-            }
-        }
+        Long bpCompanyId = requireIssueScope(actor, req.supplierCompanyId(),
+                List.of(new OwnerRef(req.ownerType(), req.ownerId())));
 
-        // [판정 이원화 해소] 재검사 재발행: 같은 자원·같은 check_type 의 기존 REJECTED 건을 자동 CANCELLED.
-        // readiness/파이프라인/작업계획서 제출 술어는 "발행된 점검 전부 APPROVED(CANCELLED 는 통과)"라
-        // 반려 건이 남으면 새 건을 승인해도 영구 미준비 — CANCELLED 는 기존 상태값 그대로(스키마 무변경).
-        repo.findByOwnerTypeAndOwnerIdOrderByIdDesc(req.ownerType(), req.ownerId()).stream()
-                .filter(c -> c.getCheckType() == req.checkType()
-                        && c.getStatus() == ResourceCheckStatus.REJECTED)
-                .forEach(ResourceCheckRequest::cancel);
-
-        var entity = ResourceCheckRequest.issue(
-                req.workPlanId(), req.ownerType(), req.ownerId(),
+        var entity = createRow(req.workPlanId(), req.ownerType(), req.ownerId(),
                 req.supplierCompanyId(), bpCompanyId != null ? bpCompanyId : 0L,
-                req.checkType(), req.dueDate(), req.notes(), actor.id());
-        repo.save(entity);
+                req.checkType(), req.dueDate(), req.notes(), actor.id(), null);
 
         // 공급사 알림
         String label = ownerLabel(req.ownerType(), req.ownerId());
@@ -108,6 +81,121 @@ public class ResourceCheckService {
         sendAlimtalkIfRequested(req, bpCompanyId != null ? bpCompanyId : 0L, actor);
 
         return toResponse(entity);
+    }
+
+    /**
+     * R2: 조합(장비+교대조 조종원) 일괄 발행 — 단일 트랜잭션으로 장비 1×N종 + 조종원 N×M종 행 생성.
+     * 전 행에 combo_equipment_id 스냅샷. 가드는 단건 issue 와 공용(requireIssueScope) — 자원 1건이라도
+     * 스코프 밖이면 403 전체 롤백. 조종원의 equipment_default_operators 소속 여부는 강제하지 않음(임시 교대 현실).
+     * 공급사 수신 알림은 행당 N건 대신 묶음 1건.
+     */
+    @Transactional
+    public List<ResourceCheckResponse> issueCombo(IssueComboRequest req, AuthenticatedUser actor) {
+        List<Long> operatorIds = req.operatorPersonIds() == null ? List.of()
+                : req.operatorPersonIds().stream().distinct().toList();
+        List<ResourceCheckType> equipmentChecks = req.checks().equipment() != null ? req.checks().equipment() : List.of();
+        List<ResourceCheckType> operatorChecks = req.checks().operator() != null ? req.checks().operator() : List.of();
+        if (equipmentChecks.isEmpty() && (operatorIds.isEmpty() || operatorChecks.isEmpty())) {
+            throw ApiException.badRequest("NO_CHECKS", "발행할 점검이 없습니다");
+        }
+
+        List<OwnerRef> owners = new ArrayList<>();
+        owners.add(new OwnerRef(OwnerType.EQUIPMENT, req.equipmentId()));
+        operatorIds.forEach(pid -> owners.add(new OwnerRef(OwnerType.PERSON, pid)));
+        Long bpCompanyId = requireIssueScope(actor, req.supplierCompanyId(), owners);
+        long issuerCompanyId = bpCompanyId != null ? bpCompanyId : 0L;
+
+        Equipment equipment = equipmentRepo.findById(req.equipmentId()).orElseThrow(() ->
+                ApiException.notFound("RESOURCE_NOT_FOUND", "대상 자원 없음"));
+
+        List<ResourceCheckRequest> rows = new ArrayList<>();
+        for (ResourceCheckType t : equipmentChecks) {
+            rows.add(createRow(req.workPlanId(), OwnerType.EQUIPMENT, req.equipmentId(),
+                    req.supplierCompanyId(), issuerCompanyId, t, req.dueDate(), req.notes(),
+                    actor.id(), req.equipmentId()));
+        }
+        for (Long pid : operatorIds) {
+            for (ResourceCheckType t : operatorChecks) {
+                rows.add(createRow(req.workPlanId(), OwnerType.PERSON, pid,
+                        req.supplierCompanyId(), issuerCompanyId, t, req.dueDate(), req.notes(),
+                        actor.id(), req.equipmentId()));
+            }
+        }
+
+        // 공급사 알림 — 묶음 1건: 『차량번호』 조합 점검 N건 — 종류 요약. 링크는 첫 행(수신함 진입용).
+        String comboLabel = equipment.getVehicleNo() != null && !equipment.getVehicleNo().isBlank()
+                ? equipment.getVehicleNo()
+                : (equipment.getModel() != null ? equipment.getModel() : "장비 #" + equipment.getId());
+        String typeSummary = rows.stream().map(ResourceCheckRequest::getCheckType).distinct()
+                .map(ResourceCheckService::checkTypeLabel).collect(Collectors.joining("·"));
+        String operatorNames = personRepo.findAllById(operatorIds).stream()
+                .map(Person::getName).collect(Collectors.joining(", "));
+        notifications.sendToCompany(req.supplierCompanyId(),
+                "RESOURCE_CHECK_REQUEST",
+                "『" + comboLabel + "』 조합 점검 " + rows.size() + "건 — " + typeSummary,
+                (operatorNames.isBlank() ? "" : "조종원: " + operatorNames + " — ")
+                        + "마감일: " + (req.dueDate() != null ? req.dueDate().toString() : "미정"),
+                "RESOURCE_CHECK", rows.get(0).getId(), null, notifications.senderLabelOf(actor));
+
+        return rows.stream().map(this::toResponse).toList();
+    }
+
+    /** 발행 대상 자원 참조 — 단건·조합 공용 가드 인자. */
+    private record OwnerRef(OwnerType type, Long id) {}
+
+    /**
+     * 발행 주체·스코프 가드 — 단건(issue)·조합(issueCombo) 공용. 반환 = bp_company_id 저장값(발행사 회사 id).
+     * ADMIN 케이스: bpCompanyId 추론 어려움 — 실제로는 workPlan 의 bpCompanyId 또는 별도 필드 필요.
+     * 우선 BP 본인 케이스에 집중. ADMIN은 actor.companyId() 가 null 이라 supplier 와 다른 회사여야.
+     */
+    private Long requireIssueScope(AuthenticatedUser actor, Long supplierCompanyId, List<OwnerRef> owners) {
+        boolean supplierIssuer = actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER;
+        if (actor.role() != Role.ADMIN && actor.role() != Role.BP && !supplierIssuer) {
+            throw ApiException.forbidden("ISSUER_ONLY", "BP/공급사/ADMIN 만 점검 요청 가능");
+        }
+        Long bpCompanyId = actor.role() == Role.ADMIN ? supplierCompanyId : actor.companyId();
+        if (actor.role() == Role.BP) {
+            if (bpCompanyId == null) throw ApiException.badRequest("NO_COMPANY", "회사 식별 불가");
+            if (bpCompanyId.equals(supplierCompanyId)) {
+                throw ApiException.badRequest("SAME_COMPANY", "BP 자기 회사에 보낼 수 없습니다");
+            }
+        }
+        // 공급사 발행(BP 미사용 현실 대응): 자기 회사(+직속 자식 협력사) 자원에만 발행 가능.
+        // SAME_COMPANY 가드는 미적용 — 자기/자식 자원 대상 발행이 정상 흐름. bp_company_id 에는 발행사(자기 회사) id 저장.
+        if (supplierIssuer) {
+            if (bpCompanyId == null) throw ApiException.badRequest("NO_COMPANY", "회사 식별 불가");
+            List<Long> scope = companyService.selfAndChildren(bpCompanyId);
+            if (!scope.contains(supplierCompanyId)) {
+                throw ApiException.forbidden("NOT_MY_RESOURCE", "자기 회사(협력사 포함) 자원에만 발행할 수 있습니다");
+            }
+            for (OwnerRef o : owners) {
+                if (!scope.contains(resourceSupplierId(o.type(), o.id()))) {
+                    throw ApiException.forbidden("NOT_MY_RESOURCE", "자기 회사(협력사 포함) 자원에만 발행할 수 있습니다");
+                }
+            }
+        }
+        return bpCompanyId;
+    }
+
+    /**
+     * 행 생성 — 단건(issue)·조합(issueCombo) 공용.
+     * [판정 이원화 해소] 재검사 재발행: 같은 자원·같은 check_type 의 기존 REJECTED 건을 자동 CANCELLED.
+     * readiness/파이프라인/작업계획서 제출 술어는 "발행된 점검 전부 APPROVED(CANCELLED 는 통과)"라
+     * 반려 건이 남으면 새 건을 승인해도 영구 미준비 — CANCELLED 는 기존 상태값 그대로(스키마 무변경).
+     */
+    private ResourceCheckRequest createRow(Long workPlanId, OwnerType ownerType, Long ownerId,
+                                           Long supplierCompanyId, Long bpCompanyId,
+                                           ResourceCheckType checkType, LocalDate dueDate, String notes,
+                                           Long issuedBy, Long comboEquipmentId) {
+        repo.findByOwnerTypeAndOwnerIdOrderByIdDesc(ownerType, ownerId).stream()
+                .filter(c -> c.getCheckType() == checkType
+                        && c.getStatus() == ResourceCheckStatus.REJECTED)
+                .forEach(ResourceCheckRequest::cancel);
+
+        var entity = ResourceCheckRequest.issue(workPlanId, ownerType, ownerId,
+                supplierCompanyId, bpCompanyId, checkType, dueDate, notes, issuedBy);
+        entity.setComboEquipmentId(comboEquipmentId);
+        return repo.save(entity);
     }
 
     /** 공급사가 회신 — document 첨부. */
@@ -290,7 +378,10 @@ public class ResourceCheckService {
         String ownerLabel = ownerLabel(r.getOwnerType(), r.getOwnerId());
         String supplierName = companies.findById(r.getSupplierCompanyId())
                 .map(Company::getName).orElse(null);
-        return ResourceCheckResponse.from(r, ownerLabel, supplierName);
+        // R2: 조합 스냅샷 행이면 목록 묶음 헤더용 장비 라벨 동봉.
+        String comboLabel = r.getComboEquipmentId() != null
+                ? ownerLabel(OwnerType.EQUIPMENT, r.getComboEquipmentId()) : null;
+        return ResourceCheckResponse.from(r, ownerLabel, supplierName, comboLabel);
     }
 
     /** 공급사 발행 스코프 가드용 — 대상 자원의 실제 보유사 id. */
