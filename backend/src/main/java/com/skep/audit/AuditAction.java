@@ -31,6 +31,9 @@ public final class AuditAction {
 
     public static final String EQUIPMENT_STATUS_CHANGED = "EQUIPMENT_STATUS_CHANGED";
 
+    // R1 조합(차량+조종원): 장비 조합(교대조) 조종원 매칭 변경 — 전/후 person_ids 요약.
+    public static final String EQUIPMENT_DEFAULT_OPERATORS_CHANGED = "EQUIPMENT_DEFAULT_OPERATORS_CHANGED";
+
     // Phase S-5: 작업계획서
     public static final String WORK_PLAN_CREATED = "WORK_PLAN_CREATED";
     public static final String WORK_PLAN_CLONED = "WORK_PLAN_CLONED";

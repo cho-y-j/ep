@@ -23,6 +23,14 @@
 - **정산 계산**: 일대 = 일대×근무일수 + OT일수×OT일단가 / 월대 = (월대 ÷ 25)×근무일수 + OT일수×OT월단가. (÷25 = 월 근무일수). 근무일수·OT는 작업확인서에서 자동 파생(수동 우선). → `SettlementCalculator`.
 - **거래내역서(9단계) = 작업확인서 + 정산의 결합 문서**, 월별 또는 임의 날짜범위로 출력. (현 정산 요약과 별개의 "명세/청구" 산출물 필요 여부는 코드 매핑으로 확정.)
 
+## 조합(차량+조종원 매칭) — 확정 (2026-07-23, R1 구현)
+
+- **원장 = `equipment_default_operators`** (장비 1 : 조종원 N, priority = 교대 순번. 행이 없으면 `equipment.operator_person_id` 단일 폴백). 이 조합으로 서류수집·검사·투입·정산이 이어진다.
+- **관리 주체 = 소유 공급사(자기+직속 자식) + ADMIN** — BP 매칭 허용 제거(조회는 유지). 변경은 audit_logs(`EQUIPMENT_DEFAULT_OPERATORS_CHANGED`, 전/후 person_ids)에 기록.
+- **R1 판정 = 파생(저장 없음)**: `GET /api/resources/equipment/{id}/deploy-check-combo?siteId=` — 기존 4게이트(DeployCheckService)를 장비 1회 + 조종원 N회 합성. `combo_ready = 장비 ready AND 조종원 전원 ready`(0명이면 장비 단독). 접근권한은 **장비 접근권만** 검사(조종원은 내부 판정 — 장비가 보이면 조합 판정도 보임).
+- **단계 스냅샷(R2~R4 예정)**: 검사/투입/정산 단계 행에 `combo_equipment_id` 스냅샷을 남겨 조합 단위 추적. R1 은 판정+표시만(마이그레이션 없음).
+- **재검사 이원화 해소(R1 동반)**: 점검 재발행(`ResourceCheckService.issue`) 시 같은 자원·같은 check_type 의 기존 REJECTED 를 자동 CANCELLED — readiness/파이프라인/작업계획서 제출 술어("전부 APPROVED, CANCELLED 통과")와 deploy-check 판정이 재검사 승인 후 일치.
+
 ## 협력사(장비 협력사, V77 하위공급사) — 확정
 
 - **대행 = 전체 CRUD**: 부모(장비공급사)가 자식(협력사)의 **사업자정보·인력·장비를 등록 + 수정 + 삭제 모두** 대행 가능. (현행: 생성만 가능, 수정 403 → 수정권 확장 필요.)

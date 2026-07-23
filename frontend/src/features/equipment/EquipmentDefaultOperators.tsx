@@ -3,7 +3,7 @@ import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { PERSON_ROLE_LABEL, type PersonRole } from '../../types/person';
 
-interface OperatorItem { id: number; person_id: number; priority: number; }
+interface OperatorItem { id: number; person_id: number; person_name?: string | null; priority: number; }
 interface PersonOption { id: number; name: string; supplier_id?: number; roles?: string[]; team?: string; }
 
 interface Props {
@@ -59,7 +59,9 @@ export default function EquipmentDefaultOperators({ equipmentId, supplierId, can
     }
   };
 
-  const personLabel = (pid: number) => candidates.find((c) => c.id === pid)?.name ?? `인원 #${pid}`;
+  // 응답의 person_name 우선 — 조회 전용(BP 등, candidates 미로드)에서도 이름이 보이게. 폴백은 기존 그대로.
+  const personLabel = (it: OperatorItem) =>
+    it.person_name ?? candidates.find((c) => c.id === it.person_id)?.name ?? `인원 #${it.person_id}`;
 
   const handleRemove = (pid: number) => {
     save(items.filter((it) => it.person_id !== pid).map((it) => it.person_id));
@@ -69,9 +71,9 @@ export default function EquipmentDefaultOperators({ equipmentId, supplierId, can
     <section className="card p-4">
       <div className="flex items-center justify-between mb-2">
         <div>
-          <h3 className="text-sm font-bold text-slate-900">기본 조종원 (우선순위)</h3>
+          <h3 className="text-sm font-bold text-slate-900">조합(교대조) 조종원</h3>
           <p className="text-[11px] text-slate-500 mt-0.5">
-            견적 제안 / 작업계획서 작성 시 이 장비에 자동 매칭됩니다. 1순위가 가장 먼저.
+            이 조합으로 검사·투입·정산이 이어집니다. 견적/작업계획서 작성 시 자동 매칭 — 1순위가 가장 먼저.
           </p>
         </div>
         {loading && <span className="text-xs text-slate-400">로딩...</span>}
@@ -79,7 +81,7 @@ export default function EquipmentDefaultOperators({ equipmentId, supplierId, can
 
       {items.length === 0 ? (
         <div className="text-xs text-slate-400 italic py-3 text-center border border-dashed border-slate-200 rounded">
-          등록된 기본 조종원이 없습니다.
+          등록된 조합(교대조) 조종원이 없습니다.
         </div>
       ) : (
         <ul className="space-y-1">
@@ -88,7 +90,7 @@ export default function EquipmentDefaultOperators({ equipmentId, supplierId, can
             return (
               <li key={it.id} className="flex items-center gap-2 px-2 py-1.5 rounded border border-slate-200 bg-slate-50">
                 <span className="w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0" />
-                <span className="text-sm text-slate-900 flex-1 truncate">{personLabel(it.person_id)}</span>
+                <span className="text-sm text-slate-900 flex-1 truncate">{personLabel(it)}</span>
                 {cand?.team && (
                   <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">{cand.team}</span>
                 )}

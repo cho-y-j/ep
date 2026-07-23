@@ -26,4 +26,12 @@ public class DeployCheckController {
                                            @CurrentUser AuthenticatedUser actor) {
         return service.check(ownerType, ownerId, siteId, actor);
     }
+
+    /** R1 조합(차량+조종원) 판정 — 접근권한은 장비 접근권만(장비가 보이면 조합 판정도 보임). 파생, 저장 없음. */
+    @GetMapping("/api/resources/equipment/{equipmentId}/deploy-check-combo")
+    public ComboDeployCheckResponse deployCheckCombo(@PathVariable Long equipmentId,
+                                                     @RequestParam(required = false) Long siteId,
+                                                     @CurrentUser AuthenticatedUser actor) {
+        return service.checkCombo(equipmentId, siteId, actor);
+    }
 }

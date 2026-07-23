@@ -4,6 +4,16 @@ import { api } from '../../lib/api';
 export type DeployBlock = { kind: 'DOCUMENT' | 'CHECK' | 'SAFETY' | 'COMPLIANCE' | string; label: string; detail?: string | null };
 export type DeployCheckResult = { ready: boolean; blocks: DeployBlock[] };
 
+/** R1 조합(차량+조종원) 판정 — GET /api/resources/equipment/{id}/deploy-check-combo. */
+export type ComboOperatorCheck = { person_id: number; person_name: string; priority: number; ready: boolean; blocks: DeployBlock[] };
+export type ComboDeployCheckResult = {
+  equipment_id: number;
+  equipment_label: string;
+  combo_ready: boolean;
+  equipment: DeployCheckResult;
+  operators: ComboOperatorCheck[];
+};
+
 type Site = { id: number; name: string };
 
 const KIND_LABEL: Record<string, string> = {
@@ -21,6 +31,7 @@ export default function DeployCheckCard({ ownerType, ownerId }: { ownerType: 'eq
   const [sites, setSites] = useState<Site[]>([]);
   const [siteId, setSiteId] = useState<number | ''>('');
   const [result, setResult] = useState<DeployCheckResult | null>(null);
+  const [combo, setCombo] = useState<ComboDeployCheckResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,22 +46,40 @@ export default function DeployCheckCard({ ownerType, ownerId }: { ownerType: 'eq
     setLoading(true);
     setError(null);
     const params = siteId === '' ? {} : { siteId };
-    api.get<DeployCheckResult>(`/api/resources/${ownerType}/${ownerId}/deploy-check`, { params })
-      .then((r) => { if (!cancelled) setResult(r.data); })
-      .catch((e) => { if (!cancelled) { setResult(null); setError(e?.response?.data?.message || '판정을 불러올 수 없습니다'); } })
+    // 장비는 R1 조합 판정(장비 판정 포함)으로 — 장비 판정 값은 단건 API 와 동일(같은 4게이트 산출).
+    const req = ownerType === 'equipment'
+      ? api.get<ComboDeployCheckResult>(`/api/resources/equipment/${ownerId}/deploy-check-combo`, { params })
+          .then((r) => { if (!cancelled) { setCombo(r.data); setResult(r.data.equipment); } })
+      : api.get<DeployCheckResult>(`/api/resources/${ownerType}/${ownerId}/deploy-check`, { params })
+          .then((r) => { if (!cancelled) { setCombo(null); setResult(r.data); } });
+    req
+      .catch((e) => { if (!cancelled) { setResult(null); setCombo(null); setError(e?.response?.data?.message || '판정을 불러올 수 없습니다'); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [ownerType, ownerId, siteId]);
+
+  const operators = combo?.operators ?? [];
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-base font-bold text-slate-900">현장 투입가능 판정</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900">현장 투입가능 판정</h3>
+            {!loading && operators.length > 0 && (
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                combo?.combo_ready
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-amber-100 text-amber-700'}`}>
+                {combo?.combo_ready ? '조합 투입 준비' : '조합 미준비'}
+              </span>
+            )}
+          </div>
           <p className="mt-0.5 text-xs text-slate-500">
             기준: 필수서류 전건 검증완료·유효기한 내
             {ownerType === 'equipment' ? ' · 반입검사(차량 안전점검) 승인' : ' · 건강검진·안전교육 승인'}
             {' '}· 안전점검 완료 · 미해결 이행지시 없음
+            {operators.length > 0 && ' — 조합(교대조) 조종원 전원 통과 시 조합 투입 준비'}
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm">
@@ -91,6 +120,46 @@ export default function DeployCheckCard({ ownerType, ownerId }: { ownerType: 'eq
                     {b.label}
                     {b.detail ? <span className="ml-1 text-xs text-slate-500">· {b.detail}</span> : null}
                   </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* R1 조합(교대조) 조종원별 판정 — 장비 대상일 때만. 조종원 0명이면 장비 단독 판정(섹션 없음). */}
+        {!loading && !error && operators.length > 0 && (
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <div className="text-xs font-semibold text-slate-500">조합(교대조) 조종원 판정</div>
+            <ul className="mt-2 space-y-1.5">
+              {operators.map((op) => (
+                <li key={op.person_id}
+                  className={`rounded-lg border px-3 py-2 ${
+                    op.ready ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/60'}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                      {op.priority}순위
+                    </span>
+                    <span className="min-w-0 truncate text-sm font-medium text-slate-800">{op.person_name}</span>
+                    <span className={`ml-auto shrink-0 text-xs font-semibold ${
+                      op.ready ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {op.ready ? '통과 ✓' : `차단 ${op.blocks.length}건`}
+                    </span>
+                  </div>
+                  {!op.ready && (
+                    <ul className="mt-1.5 space-y-1">
+                      {op.blocks.map((b, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
+                          <span className="mt-0.5 shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                            {KIND_LABEL[b.kind] ?? b.kind}
+                          </span>
+                          <span className="min-w-0">
+                            {b.label}
+                            {b.detail ? <span className="ml-1 text-slate-400">· {b.detail}</span> : null}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

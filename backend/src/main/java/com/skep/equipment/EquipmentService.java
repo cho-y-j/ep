@@ -1,5 +1,8 @@
 package com.skep.equipment;
 
+import com.skep.audit.AuditAction;
+import com.skep.audit.AuditLogService;
+import com.skep.audit.AuditTargetType;
 import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
@@ -44,6 +47,7 @@ public class EquipmentService {
     private final com.skep.person.PersonRepository personRepo;
     private final com.skep.person.PersonService personService;
     private final EquipmentTypeService equipmentTypes;
+    private final AuditLogService auditLog;
 
     public EquipmentService(EquipmentRepository repo, CompanyRepository companies,
                             com.skep.company.CompanyService companyService,
@@ -52,7 +56,8 @@ public class EquipmentService {
                             EquipmentDefaultOperatorRepository defaultOperators,
                             com.skep.person.PersonRepository personRepo,
                             com.skep.person.PersonService personService,
-                            EquipmentTypeService equipmentTypes) {
+                            EquipmentTypeService equipmentTypes,
+                            AuditLogService auditLog) {
         this.repo = repo;
         this.companies = companies;
         this.companyService = companyService;
@@ -64,6 +69,7 @@ public class EquipmentService {
         this.personRepo = personRepo;
         this.personService = personService;
         this.equipmentTypes = equipmentTypes;
+        this.auditLog = auditLog;
     }
 
     // ── V36: 장비 기본 조종원 ───────────────────────────────
@@ -107,40 +113,40 @@ public class EquipmentService {
         Equipment e = repo.findById(equipmentId).orElseThrow(() ->
                 ApiException.notFound("EQUIPMENT_NOT_FOUND", "장비 " + equipmentId + " 없음"));
         ensureCanModifyDefaultOperators(actor, e);
+        // R1 조합 변경 감사 — 변경 전 person_ids 스냅샷(priority 순).
+        List<Long> beforeIds = defaultOperators.findByEquipmentIdOrderByPriorityAsc(e.getId()).stream()
+                .map(EquipmentDefaultOperator::getPersonId).toList();
         // delete 후 같은 트랜잭션 안에서 새 insert 가 일어나면 영속성 컨텍스트가 delete 미반영 상태일 수 있어
         // UNIQUE 제약 위반. 명시적 flush 로 delete 를 DB 에 즉시 반영.
         defaultOperators.deleteByEquipmentId(e.getId());
         defaultOperators.flush();
-        if (personIds == null || personIds.isEmpty()) return List.of();
-        int pri = 1;
         List<EquipmentDefaultOperator> saved = new java.util.ArrayList<>();
-        java.util.Set<Long> seen = new java.util.HashSet<>();
-        for (Long pid : personIds) {
-            if (pid == null || !seen.add(pid)) continue;
-            personRepo.findById(pid).orElseThrow(() ->
-                    ApiException.badRequest("PERSON_NOT_FOUND", "인원 " + pid + " 없음"));
-            // 인원 소속 회사 제약 + OPERATOR 역할 강제 모두 제거 — 어떤 인원을 매칭할지는 운영자가 결정.
-            // 권한은 ensureCanModifyDefaultOperators 가 이미 actor 단위로 검증.
-            saved.add(defaultOperators.save(EquipmentDefaultOperator.builder()
-                    .equipmentId(e.getId()).personId(pid).priority(pri++).build()));
+        if (personIds != null && !personIds.isEmpty()) {
+            int pri = 1;
+            java.util.Set<Long> seen = new java.util.HashSet<>();
+            for (Long pid : personIds) {
+                if (pid == null || !seen.add(pid)) continue;
+                personRepo.findById(pid).orElseThrow(() ->
+                        ApiException.badRequest("PERSON_NOT_FOUND", "인원 " + pid + " 없음"));
+                // 인원 소속 회사 제약 + OPERATOR 역할 강제 모두 제거 — 어떤 인원을 매칭할지는 운영자가 결정.
+                // 권한은 ensureCanModifyDefaultOperators 가 이미 actor 단위로 검증.
+                saved.add(defaultOperators.save(EquipmentDefaultOperator.builder()
+                        .equipmentId(e.getId()).personId(pid).priority(pri++).build()));
+            }
         }
+        auditLog.record(actor, AuditAction.EQUIPMENT_DEFAULT_OPERATORS_CHANGED, AuditTargetType.EQUIPMENT,
+                e.getId(), e.getSupplierId(), null,
+                "{\"person_ids\":" + beforeIds + "}",
+                "{\"person_ids\":" + saved.stream().map(EquipmentDefaultOperator::getPersonId).toList() + "}");
         return saved;
     }
 
-    /** 기본 조종원 매칭 가드. 일반 modify (장비 수정/삭제) 보다 관대 — BP 가 자기 사이트 참여 공급사 장비에도 매칭 가능. */
+    /** 조합(교대조) 조종원 매칭 가드 — 소유 공급사(자기+직속 자식)와 ADMIN 만. (BP 매칭 허용은 제거 — 조합 관리 주체 축소.) */
     private void ensureCanModifyDefaultOperators(AuthenticatedUser actor, Equipment e) {
         if (actor.role() == Role.ADMIN) return;
-        if (actor.companyId() != null && e.getSupplierId().equals(actor.companyId())) return;
-        if (actor.role() == Role.BP && actor.companyId() != null) {
-            List<Long> mySiteIds = sites.findByBpCompanyIdOrderByIdDesc(actor.companyId()).stream()
-                    .map(Site::getId).toList();
-            for (Long sid : mySiteIds) {
-                if (participants.existsBySiteIdAndCompanyIdAndStatus(sid, e.getSupplierId(), SiteParticipantStatus.ACTIVE)) {
-                    return;
-                }
-            }
-        }
-        throw ApiException.forbidden("FORBIDDEN", "기본 조종원 수정 권한이 없습니다");
+        if (actor.role() == Role.EQUIPMENT_SUPPLIER
+                && companyService.selfAndChildren(actor.companyId()).contains(e.getSupplierId())) return;
+        throw ApiException.forbidden("FORBIDDEN", "조합(교대조) 조종원 수정 권한이 없습니다");
     }
 
     @Transactional(readOnly = true)

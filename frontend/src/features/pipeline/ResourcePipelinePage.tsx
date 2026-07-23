@@ -7,10 +7,12 @@ import { useAuth } from '../auth/AuthContext';
 import PipelineDetail from './PipelineDetail';
 import {
   type PipelineItem,
+  type PipelineOperator,
   type Stage,
   type StageFilter,
   STAGE_ORDER,
   STAGE_FILTER_LABEL,
+  comboReadyOf,
   currentIndex,
   currentStage,
   itemKey,
@@ -26,17 +28,36 @@ export default function ResourcePipelinePage() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const [items, setItems] = useState<PipelineItem[]>([]);
+  const [operatorsByEquip, setOperatorsByEquip] = useState<Record<number, PipelineOperator[]>>({});
   const [loading, setLoading] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     api.get<PipelineItem[]>('/api/resources/pipeline')
-      .then((r) => { if (!cancelled) setItems(r.data ?? []); })
+      .then(async (r) => {
+        if (cancelled) return;
+        const list = r.data ?? [];
+        setItems(list);
+        // R1 조합 표시 — 장비별 조합(교대조) 조종원을 배치 1회로 로드(TargetPicker 와 동일 endpoint).
+        const equipmentIds = list.filter((it) => it.resource_type === 'EQUIPMENT').map((it) => it.resource_id);
+        if (equipmentIds.length === 0) { setOperatorsByEquip({}); return; }
+        try {
+          const b = await api.post<{ results: Array<{ equipment_id: number; operators: PipelineOperator[] }> }>(
+            '/api/equipment/default-operators', { equipment_ids: equipmentIds });
+          if (cancelled) return;
+          const map: Record<number, PipelineOperator[]> = {};
+          b.data.results.forEach((res) => { map[res.equipment_id] = res.operators; });
+          setOperatorsByEquip(map);
+        } catch { if (!cancelled) setOperatorsByEquip({}); }
+      })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  // 조합 준비 파생용 — PERSON 행 lookup (comboReadyOf 가 조종원 readiness 를 이 맵에서 찾는다).
+  const itemsByKey = useMemo(() => new Map(items.map((it) => [itemKey(it), it])), [items]);
 
   // URL 쿼리 = 필터/선택 상태(공유 가능한 링크).
   const site = params.get('site') ?? '';        // '' | '<id>' | 'none'
@@ -188,6 +209,8 @@ export default function ResourcePipelinePage() {
               <PipelineRow
                 key={itemKey(it)}
                 item={it}
+                operators={it.resource_type === 'EQUIPMENT' ? operatorsByEquip[it.resource_id] ?? [] : []}
+                itemsByKey={itemsByKey}
                 showSupplier={showCompanyFilter}
                 onSelect={() => setParam('resource', itemKey(it))}
               />
@@ -218,8 +241,15 @@ function Legend() {
   );
 }
 
-function PipelineRow({ item, showSupplier, onSelect }: { item: PipelineItem; showSupplier: boolean; onSelect: () => void }) {
+function PipelineRow({ item, operators, itemsByKey, showSupplier, onSelect }: {
+  item: PipelineItem;
+  operators: PipelineOperator[];
+  itemsByKey: Map<string, PipelineItem>;
+  showSupplier: boolean;
+  onSelect: () => void;
+}) {
   const cur = currentIndex(item.stages);
+  const comboReady = item.resource_type === 'EQUIPMENT' ? comboReadyOf(item, operators, itemsByKey) : null;
   return (
     <button
       onClick={onSelect}
@@ -238,6 +268,32 @@ function PipelineRow({ item, showSupplier, onSelect }: { item: PipelineItem; sho
                 {showSupplier && item.supplier_name}
                 {showSupplier && item.site_name && ' · '}
                 {item.site_name && `현장 ${item.site_name}`}
+              </div>
+            )}
+            {/* R1 조합(교대조) 조종원 칩 + 조합 준비 뱃지 — 장비 행에만. */}
+            {operators.length > 0 && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {comboReady != null && (
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    comboReady ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {comboReady ? '조합 준비' : '조합 미준비'}
+                  </span>
+                )}
+                {operators.map((op) => {
+                  const row = itemsByKey.get(`PERSON:${op.person_id}`);
+                  const state = row?.stages.readiness.state;
+                  return (
+                    <span key={op.person_id}
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                        state === 'DONE'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : state
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-slate-100 text-slate-500'}`}>
+                      {op.person_name ?? `인원 #${op.person_id}`}
+                    </span>
+                  );
+                })}
               </div>
             )}
           </div>

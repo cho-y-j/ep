@@ -81,6 +81,14 @@ public class ResourceCheckService {
             }
         }
 
+        // [판정 이원화 해소] 재검사 재발행: 같은 자원·같은 check_type 의 기존 REJECTED 건을 자동 CANCELLED.
+        // readiness/파이프라인/작업계획서 제출 술어는 "발행된 점검 전부 APPROVED(CANCELLED 는 통과)"라
+        // 반려 건이 남으면 새 건을 승인해도 영구 미준비 — CANCELLED 는 기존 상태값 그대로(스키마 무변경).
+        repo.findByOwnerTypeAndOwnerIdOrderByIdDesc(req.ownerType(), req.ownerId()).stream()
+                .filter(c -> c.getCheckType() == req.checkType()
+                        && c.getStatus() == ResourceCheckStatus.REJECTED)
+                .forEach(ResourceCheckRequest::cancel);
+
         var entity = ResourceCheckRequest.issue(
                 req.workPlanId(), req.ownerType(), req.ownerId(),
                 req.supplierCompanyId(), bpCompanyId != null ? bpCompanyId : 0L,

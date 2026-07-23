@@ -58,6 +58,31 @@ export function itemKey(it: Pick<PipelineItem, 'resource_type' | 'resource_id'>)
   return `${it.resource_type}:${it.resource_id}`;
 }
 
+/** R1 조합(교대조) 조종원 칩 — POST /api/equipment/default-operators 배치 응답 항목. */
+export type PipelineOperator = { person_id: number; person_name?: string | null };
+
+/**
+ * 조합 준비 파생(이 화면 데이터 합성, 별도 API 없음) —
+ * 장비 readiness DONE AND 조종원 전원(같은 파이프라인 응답의 PERSON 행) readiness DONE.
+ * 조종원 0명(장비 단독)이거나, 스코프 밖 조종원(행 없음)이 있어 확정 못 하면 null(뱃지 숨김).
+ * 확정 판정은 자원 상세의 deploy-check-combo(4게이트) 카드가 담당.
+ */
+export function comboReadyOf(
+  equip: PipelineItem,
+  operators: PipelineOperator[],
+  byKey: Map<string, PipelineItem>,
+): boolean | null {
+  if (operators.length === 0) return null;
+  if (equip.stages.readiness.state !== 'DONE') return false;
+  let unknown = false;
+  for (const op of operators) {
+    const row = byKey.get(`PERSON:${op.person_id}`);
+    if (!row) { unknown = true; continue; }
+    if (row.stages.readiness.state !== 'DONE') return false;
+  }
+  return unknown ? null : true;
+}
+
 /** deploy-check 카드·자원 상세 라우트용 ownerType(소문자). */
 export function ownerType(it: PipelineItem): 'equipment' | 'person' {
   return it.resource_type === 'EQUIPMENT' ? 'equipment' : 'person';

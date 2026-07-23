@@ -5,7 +5,10 @@ import com.skep.compliance.ComplianceOrder;
 import com.skep.compliance.ComplianceOrderService;
 import com.skep.compliance.ComplianceTargetType;
 import com.skep.document.OwnerType;
+import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentService;
+import com.skep.person.Person;
+import com.skep.person.PersonRepository;
 import com.skep.person.PersonService;
 import com.skep.readiness.DeployCheckResponse.DeployBlock;
 import com.skep.resourceCheck.ResourceCheckRequest;
@@ -24,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * L3 교체/투입 사전판정 — 자원 1건이 (선택적으로 특정 현장에) 투입 가능한지 4게이트 합성.
@@ -43,6 +48,7 @@ public class DeployCheckService {
 
     private final EquipmentService equipmentService;
     private final PersonService personService;
+    private final PersonRepository personRepo;
     private final WorkPlanService workPlanService;
     private final ResourceCheckRequestRepository resourceChecks;
     private final SafetyInspectionRepository safetyInspections;
@@ -57,7 +63,42 @@ public class DeployCheckService {
         } else {
             personService.get(ownerId, actor);
         }
+        List<DeployBlock> blocks = computeBlocks(ownerType, ownerId, siteId);
+        return new DeployCheckResponse(blocks.isEmpty(), blocks);
+    }
 
+    /**
+     * R1 조합(차량+조종원) 판정 — 4게이트를 장비 1회 + 조합(교대조) 조종원 N회 산출해 합성. 저장 없음.
+     * combo_ready = 장비 ready AND 조종원 전원 ready (조종원 0명이면 장비 단독 판정).
+     * 접근권한은 장비 접근권만 검사 — 조종원은 크로스회사 매칭이 가능해(PersonService.get 스코프 밖)
+     * 내부(레포) 조회로 판정·이름만 노출한다(DocumentBundlePdfService 조종원 이름 배치 로드와 동일 선례).
+     */
+    @Transactional(readOnly = true)
+    public ComboDeployCheckResponse checkCombo(Long equipmentId, Long siteId, AuthenticatedUser actor) {
+        Equipment e = equipmentService.get(equipmentId, actor); // 접근권한 + 존재 검증 — 장비 스코프 그대로.
+        // 조종원 목록 — priority 오름차순, 없으면 operator_person_id 단일 폴백(기존 배치 API 재사용).
+        List<Long> operatorIds = equipmentService.defaultOperatorsByEquipmentIds(List.of(equipmentId), actor)
+                .getOrDefault(equipmentId, List.of());
+
+        List<DeployBlock> equipmentBlocks = computeBlocks(OwnerType.EQUIPMENT, equipmentId, siteId);
+        DeployCheckResponse equipment = new DeployCheckResponse(equipmentBlocks.isEmpty(), equipmentBlocks);
+
+        Map<Long, String> names = personRepo.findAllById(operatorIds).stream()
+                .collect(Collectors.toMap(Person::getId, p -> p.getName() != null ? p.getName() : ("인원 #" + p.getId())));
+        List<ComboDeployCheckResponse.OperatorCheck> operators = new ArrayList<>();
+        for (int i = 0; i < operatorIds.size(); i++) {
+            Long pid = operatorIds.get(i);
+            List<DeployBlock> opBlocks = computeBlocks(OwnerType.PERSON, pid, siteId);
+            operators.add(new ComboDeployCheckResponse.OperatorCheck(
+                    pid, names.getOrDefault(pid, "인원 #" + pid), i + 1, opBlocks.isEmpty(), opBlocks));
+        }
+        boolean comboReady = equipment.ready()
+                && operators.stream().allMatch(ComboDeployCheckResponse.OperatorCheck::ready);
+        return new ComboDeployCheckResponse(equipmentId, equipmentLabel(e), comboReady, equipment, operators);
+    }
+
+    /** 4게이트 산출(접근검증 없음) — check(단건)와 checkCombo(조합)가 공유. 게이트 술어는 기존 그대로. */
+    private List<DeployBlock> computeBlocks(OwnerType ownerType, Long ownerId, Long siteId) {
         List<DeployBlock> blocks = new ArrayList<>();
 
         // 1) 서류 — blocks_assignment 미검증/만료 종류.
@@ -95,7 +136,14 @@ public class DeployCheckService {
             blocks.add(new DeployBlock("COMPLIANCE", "이행지시 " + blocking.size() + "건", "미해결 이행지시를 완료하세요"));
         }
 
-        return new DeployCheckResponse(blocks.isEmpty(), blocks);
+        return blocks;
+    }
+
+    /** ResourceCheckService.ownerLabel(장비)/ResourceReadinessService 미러: model → vehicleNo → "장비 #id". */
+    private static String equipmentLabel(Equipment e) {
+        if (e.getModel() != null) return e.getModel();
+        if (e.getVehicleNo() != null) return e.getVehicleNo();
+        return "장비 #" + e.getId();
     }
 
     private static OwnerType parseOwnerType(String raw) {

@@ -59,14 +59,6 @@ export default function EquipmentDetailPage() {
     return false;
   }, [equipment, user, subSuppliers]);
 
-  // BP 가 자기 직속 운전수를 다른 회사 장비에 매칭하는 케이스를 위해 기본 조종원 편집은 더 관대.
-  // 백엔드 ensureCanModifyDefaultOperators 와 동일 정책 — 장비 소유 회사 + BP (사이트 ACTIVE 참여 공급사 장비).
-  const canEditDefaultOperators = useMemo(() => {
-    if (canEdit) return true;
-    if (!user || user.role !== 'BP') return false;
-    return true; // BP 라면 일단 시도 가능. 백엔드 가드가 사이트 참여 여부 최종 검증.
-  }, [canEdit, user]);
-
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -357,11 +349,11 @@ export default function EquipmentDetailPage() {
           </div>
         </div>
 
-        {/* V36: 기본 조종원 (우선순위) — 견적/작업계획서 자동 prefill */}
+        {/* R1 조합(교대조) 조종원 — 견적/작업계획서 자동 prefill. 수정은 소유 공급사(자기+직속자식)+ADMIN 만(BP 조회만). */}
         <EquipmentDefaultOperators
           equipmentId={equipment.id}
           supplierId={equipment.supplier_id}
-          canEdit={canEditDefaultOperators}
+          canEdit={canEdit}
         />
 
         {/* 현장 배치 섹션 */}
