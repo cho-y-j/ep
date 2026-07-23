@@ -16,7 +16,7 @@ import AssignmentBadge from '../assignment/AssignmentBadge';
 import { equipmentCategoryLabel, type EquipmentResponse } from '../../types/equipment';
 import ClientOrgHistory from '../../components/ClientOrgHistory';
 import EquipmentDefaultOperators from './EquipmentDefaultOperators';
-import EquipmentDuePanel from './EquipmentDuePanel';
+import EquipmentDuePanel, { type DailyInsp } from './EquipmentDuePanel';
 import DeployCheckCard from '../readiness/DeployCheckCard';
 import OnboardingBadge from '../onboarding/OnboardingBadge';
 import { useEquipmentTypes } from './useEquipmentTypes';
@@ -51,6 +51,7 @@ export default function EquipmentDetailPage() {
   const [collectOpen, setCollectOpen] = useState(false);
   const [supplementOpen, setSupplementOpen] = useState(false);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const [dailyInsp, setDailyInsp] = useState<DailyInsp[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabId>('overview');
@@ -101,6 +102,22 @@ export default function EquipmentDetailPage() {
   }, [id]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // R3: 조종원 일상점검 이력(가동시간·운행거리 포함)을 페이지 단위로 1회 로드 — 상태대시 + 차량관리 패널 공용.
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    api.get<DailyInsp[]>(`/api/equipment/${id}/daily-inspections`)
+      .then((r) => { if (!cancelled) setDailyInsp(r.data); })
+      .catch(() => { if (!cancelled) setDailyInsp([]); });
+    return () => { cancelled = true; };
+  }, [id]);
+
+  // 가장 최근 '가동시간(아워미터)' 보고 — 상태대시 보조 표시용(정본 누적시간과 별개).
+  const reportedHourMeter = useMemo(() => {
+    const r = dailyInsp.find((h) => h.hour_meter != null);
+    return r ? { value: r.hour_meter as number, date: r.inspect_date } : null;
+  }, [dailyInsp]);
 
   useEffect(() => {
     if (!fromCompanyId) { setFromCompanyName(null); return; }
@@ -394,7 +411,7 @@ export default function EquipmentDetailPage() {
         </div>
 
         {/* 상태 대시 — 응답에 이미 있는 값 표시만(새 계산 없음) */}
-        <StatusDashboard equipment={equipment} />
+        <StatusDashboard equipment={equipment} reportedHourMeter={reportedHourMeter} />
 
         {editMode ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-6">
@@ -481,8 +498,8 @@ export default function EquipmentDetailPage() {
           </p>
         </div>
 
-        {/* P4: 차량 관리 — 검사·오일·등록 만료 + 일상점검 이력 */}
-        <EquipmentDuePanel equipment={equipment} canEdit={canEdit} onSaved={() => void load()} />
+        {/* P4: 차량 관리 — 검사·오일·등록 만료 + 일상점검 이력 + R3 가동시간 추이 */}
+        <EquipmentDuePanel equipment={equipment} canEdit={canEdit} history={dailyInsp} onSaved={() => void load()} />
 
         {/* L3: 현장 투입가능 사전판정 */}
         <DeployCheckCard ownerType="equipment" ownerId={equipment.id} />
@@ -559,7 +576,10 @@ function SpecItem({ label, value }: { label: string; value: ReactNode }) {
 }
 
 /** 상단 상태 대시 — 응답에 이미 있는 값만 표시(새 계산 없음). */
-function StatusDashboard({ equipment }: { equipment: EquipmentResponse }) {
+function StatusDashboard({ equipment, reportedHourMeter }: {
+  equipment: EquipmentResponse;
+  reportedHourMeter: { value: number; date: string } | null;
+}) {
   const tiles: Array<{ label: string; node: ReactNode }> = [
     { label: '배치 상태', node: equipment.assignment_status
         ? <AssignmentBadge status={equipment.assignment_status} />
@@ -572,13 +592,19 @@ function StatusDashboard({ equipment }: { equipment: EquipmentResponse }) {
         )}
       </span>
     ) },
+    // R3: 조종원이 앱에서 보고한 최신 아워미터 — 정본 누적시간과 구분되는 보조 표시.
+    { label: '조종원 보고 가동시간', node: reportedHourMeter
+        ? <span>{reportedHourMeter.value.toLocaleString()}h
+            <span className="text-xs font-normal text-slate-400"> · {reportedHourMeter.date}</span>
+          </span>
+        : <span className="text-slate-400">미보고</span> },
     { label: '정비', node: equipment.maintenance_due
         ? <span className="text-rose-600">정비 도래</span>
         : <span className="text-slate-700">정상</span> },
     { label: '정기검사', node: equipment.inspection_due_date ?? <span className="text-slate-400">미설정</span> },
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       {tiles.map((t) => (
         <div key={t.label} className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="text-xs text-slate-500">{t.label}</div>

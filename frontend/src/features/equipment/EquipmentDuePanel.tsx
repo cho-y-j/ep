@@ -4,13 +4,16 @@ import { toast } from '../../lib/toast';
 import type { EquipmentResponse } from '../../types/equipment';
 
 /** 차량 관리 — 정기검사/오일/등록 만료 due(편집) + 조종원 일상점검 이력. */
-type DailyInsp = {
+export type DailyInsp = {
   id: number;
   inspect_date: string;
   inspector_name?: string | null;
   overall?: string | null;
   notes?: string | null;
   items?: string | null;
+  // R3: 조종원 보고 가동시간(아워미터)·운행거리(km). 선택 — 표시 전용.
+  hour_meter?: number | null;
+  odometer_km?: number | null;
 };
 
 type CheckItem = { key?: string; label?: string; result?: string; note?: string };
@@ -43,21 +46,15 @@ function dday(date?: string | null): { txt: string; cls: string } | null {
   return { txt: `D-${d}`, cls: 'bg-slate-100 text-slate-500' };
 }
 
-export default function EquipmentDuePanel({ equipment, canEdit, onSaved }: {
-  equipment: EquipmentResponse; canEdit: boolean; onSaved: () => void;
+export default function EquipmentDuePanel({ equipment, canEdit, onSaved, history }: {
+  equipment: EquipmentResponse; canEdit: boolean; onSaved: () => void; history: DailyInsp[];
 }) {
-  const [history, setHistory] = useState<DailyInsp[]>([]);
   const [editing, setEditing] = useState(false);
   const [insp, setInsp] = useState('');
   const [oil, setOil] = useState('');
   const [reg, setReg] = useState('');
   const [saving, setSaving] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
-
-  useEffect(() => {
-    api.get<DailyInsp[]>(`/api/equipment/${equipment.id}/daily-inspections`)
-      .then((r) => setHistory(r.data)).catch(() => setHistory([]));
-  }, [equipment.id]);
 
   useEffect(() => {
     setInsp(equipment.inspection_due_date ?? '');
@@ -86,6 +83,9 @@ export default function EquipmentDuePanel({ equipment, canEdit, onSaved }: {
     ['오일교체', equipment.oil_change_due_date],
     ['차량등록 만료', equipment.registration_expiry],
   ];
+
+  // R3: 조종원이 보고한 가동시간/운행거리가 있는 점검만 추려 일자별 추이 표시(표시 전용, 정본 아님).
+  const reported = history.filter((h) => h.hour_meter != null || h.odometer_km != null);
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6">
@@ -137,6 +137,37 @@ export default function EquipmentDuePanel({ equipment, canEdit, onSaved }: {
           </div>
         </div>
       )}
+
+      <div className="mt-5 border-t border-slate-100 pt-4">
+        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
+          가동시간 추이
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-normal text-slate-500">조종원 보고 · 표시용</span>
+        </div>
+        {reported.length === 0 ? (
+          <p className="py-3 text-center text-sm text-slate-400">조종원이 보고한 가동시간/운행거리가 아직 없습니다</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-slate-400">
+                  <th className="py-1.5 pr-3 font-medium">일자</th>
+                  <th className="py-1.5 pr-3 font-medium text-right">아워미터 (h)</th>
+                  <th className="py-1.5 font-medium text-right">운행거리 (km)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {reported.slice(0, 12).map((h) => (
+                  <tr key={h.id}>
+                    <td className="py-1.5 pr-3 text-slate-700">{h.inspect_date}</td>
+                    <td className="py-1.5 pr-3 text-right font-medium text-slate-900">{h.hour_meter != null ? Number(h.hour_meter).toLocaleString() : '-'}</td>
+                    <td className="py-1.5 text-right font-medium text-slate-900">{h.odometer_km != null ? Number(h.odometer_km).toLocaleString() : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className="mt-5 border-t border-slate-100 pt-4">
         <div className="mb-2 text-sm font-semibold text-slate-700">일상점검 이력 ({history.length})</div>
