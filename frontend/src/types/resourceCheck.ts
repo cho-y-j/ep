@@ -3,7 +3,7 @@ export type ResourceCheckStatus = 'REQUESTED' | 'SUBMITTED' | 'APPROVED' | 'REJE
 export type ResourceOwnerType = 'EQUIPMENT' | 'PERSON';
 
 export const CHECK_TYPE_LABEL: Record<ResourceCheckType, string> = {
-  VEHICLE_SAFETY: '자동차 안전점검',
+  VEHICLE_SAFETY: '자동차 반입검사',
   HEALTH_CHECK: '건강검진',
   SAFETY_TRAINING: '안전교육',
   OTHER: '기타',
@@ -36,6 +36,8 @@ export type ResourceCheckResponse = {
   bp_company_id: number;
   check_type: ResourceCheckType;
   due_date?: string | null;
+  /** V125: 검사 시간(선택) — "14:00" 형식. */
+  due_time?: string | null;
   notes?: string | null;
   status: ResourceCheckStatus;
   document_id?: number | null;
@@ -43,6 +45,8 @@ export type ResourceCheckResponse = {
   submitted_at?: string | null;
   reviewed_at?: string | null;
   review_note?: string | null;
+  /** V125: 발행사 통화·연락 기록("[7/24 14:00 이름] 내용" 줄 누적). */
+  contact_log?: string | null;
   /** R2 조합 스냅샷 — 같은 값 행을 목록에서 조합 묶음으로 그룹핑(단독 발행=null/생략). */
   combo_equipment_id?: number | null;
   combo_equipment_label?: string | null;

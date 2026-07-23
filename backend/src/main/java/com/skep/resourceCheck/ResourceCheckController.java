@@ -69,6 +69,14 @@ public class ResourceCheckController {
         return service.reject(id, req, actor);
     }
 
+    /** V125: 발행사(공급사·BP)/ADMIN — 통화·연락 기록 한 줄 append. */
+    @PostMapping("/{id}/contact-log")
+    public ResourceCheckResponse addContactLog(@PathVariable Long id,
+                                                @RequestBody ReviewRequest req,
+                                                @CurrentUser AuthenticatedUser actor) {
+        return service.addContactLog(id, req != null ? req.note() : null, actor);
+    }
+
     /** 발행 목록 (BP/공급사 자기 발행분, ADMIN 전체). */
     @GetMapping("/bp-list")
     public List<ResourceCheckResponse> listForBp(@CurrentUser AuthenticatedUser actor) {

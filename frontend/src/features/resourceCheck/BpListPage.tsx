@@ -131,6 +131,20 @@ export default function ResourceCheckBpList() {
     items.some((o) => o.id < r.id && o.owner_type === r.owner_type && o.owner_id === r.owner_id
       && o.check_type === r.check_type && o.status === 'REJECTED');
 
+  // V125 통화·연락 기록 — 발행사(이 목록 = 자기 발행분)만 append 가능. "[7/24 14:00 이름] 내용" 형식은 서버가 부여.
+  const addContact = async (id: number) => {
+    const note = window.prompt('연락 기록 (예: 통화 — 검진 8/1 확정)');
+    if (!note || !note.trim()) return;
+    setBusy(id);
+    try {
+      await api.post(`/api/resource-checks/${id}/contact-log`, { note: note.trim() });
+      toast.success('기록됨');
+      void load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? '실패');
+    } finally { setBusy(null); }
+  };
+
   const review = async (id: number, action: 'approve' | 'reject') => {
     let note: string | null = null;
     if (action === 'reject') {
@@ -196,11 +210,24 @@ export default function ResourceCheckBpList() {
         </div>
         <div className="mt-0.5 text-sm text-slate-700 truncate">
           {r.owner_label} → {r.supplier_company_name ?? '공급사'}
-          {r.due_date && <span className="ml-2 text-xs text-rose-700">마감 {r.due_date}</span>}
+          {r.due_date && (
+            <span className="ml-2 text-xs text-rose-700">
+              마감 {r.due_date}{r.due_time ? ` ${r.due_time.slice(0, 5)}` : ''}
+            </span>
+          )}
         </div>
         {r.notes && <div className="mt-0.5 text-xs text-slate-500 truncate">{r.notes}</div>}
+        {r.contact_log && (
+          <div className="mt-1 px-2 py-1 rounded bg-slate-50 border border-slate-200 text-[11px] text-slate-600 whitespace-pre-line">
+            {r.contact_log}
+          </div>
+        )}
       </div>
       <div className="shrink-0 flex items-center gap-2">
+        <button onClick={() => void addContact(r.id)} disabled={busy === r.id}
+                className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          연락 기록
+        </button>
         {r.document_id && (
           <a href={`/api/documents/${r.document_id}/file`} target="_blank" rel="noopener noreferrer"
              className="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-700 hover:bg-slate-50">
@@ -266,7 +293,7 @@ export default function ResourceCheckBpList() {
     <AppShell>
       <PageHeader
         title="보낸 점검 요청"
-        subtitle="자원에 발행한 자동차 안전점검·건강검진·안전교육 등 — 회신 검토"
+        subtitle="자원에 발행한 자동차 반입검사·건강검진·안전교육 등 — 회신 검토"
         actions={isSupplier ? (
           <button type="button" onClick={() => setPickerOpen(true)} className="btn-primary text-sm">
             검사 통보

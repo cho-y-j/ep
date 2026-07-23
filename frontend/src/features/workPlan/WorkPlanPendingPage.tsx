@@ -69,7 +69,7 @@ export default function WorkPlanPendingPage() {
       <div className="mx-auto max-w-7xl space-y-4">
         <PageHeader
           title="투입 대기"
-          subtitle="사인 5건 완료 + 제출된 계획서. 자동차 안전점검·건강검진·안전교육 회신을 모두 받으면 현장 투입 단계로 넘어갑니다."
+          subtitle="사인 5건 완료 + 제출된 계획서. 자동차 반입검사·건강검진·안전교육 회신을 모두 받으면 현장 투입 단계로 넘어갑니다."
         />
 
         <FilterBar

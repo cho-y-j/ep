@@ -20,6 +20,8 @@ import com.skep.resourceCheck.dto.ReviewRequest;
 import com.skep.resourceCheck.dto.SubmitRequest;
 import com.skep.security.AuthenticatedUser;
 import com.skep.user.Role;
+import com.skep.user.User;
+import com.skep.user.UserRepository;
 import com.skep.alimtalk.AlimTalkService;
 import com.skep.alimtalk.AlimTalkTemplate;
 import com.skep.site.Site;
@@ -33,10 +35,15 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -57,6 +64,7 @@ public class ResourceCheckService {
     private final AlimTalkService alimTalk;
     private final WorkPlanRepository workPlans;
     private final SiteRepository sites;
+    private final UserRepository users;
 
     /** BP·공급사·ADMIN 이 자원 점검을 발행. bp_company_id = 발행사(BP 발행이면 BP사, 공급사 발행이면 자기 회사). */
     @Transactional
@@ -66,7 +74,7 @@ public class ResourceCheckService {
 
         var entity = createRow(req.workPlanId(), req.ownerType(), req.ownerId(),
                 req.supplierCompanyId(), bpCompanyId != null ? bpCompanyId : 0L,
-                req.checkType(), req.dueDate(), req.notes(), actor.id(), null);
+                req.checkType(), req.dueDate(), req.dueTime(), req.notes(), actor.id(), null);
 
         // 공급사 알림
         String label = ownerLabel(req.ownerType(), req.ownerId());
@@ -74,11 +82,11 @@ public class ResourceCheckService {
         notifications.sendToCompany(req.supplierCompanyId(),
                 "RESOURCE_CHECK_REQUEST",
                 "점검 요청 도착 — " + checkLabel,
-                label + " — 마감일: " + (req.dueDate() != null ? req.dueDate().toString() : "미정"),
+                label + " — 마감일: " + dueLabel(req.dueDate(), req.dueTime()),
                 "RESOURCE_CHECK", entity.getId(), null, notifications.senderLabelOf(actor));
 
-        // 알림톡 발송 (수신번호 입력 시) — 인앱 알림과 별개로 카카오 알림톡/SMS 통지
-        sendAlimtalkIfRequested(req, bpCompanyId != null ? bpCompanyId : 0L, actor);
+        // 알림톡 — 수신 공급사 담당자(소속 사용자 등록번호)에게 자동 발송 + 다이얼로그 입력 추가 수신번호.
+        sendIssueAlimtalk(req, bpCompanyId != null ? bpCompanyId : 0L, actor);
 
         return toResponse(entity);
     }
@@ -111,13 +119,13 @@ public class ResourceCheckService {
         List<ResourceCheckRequest> rows = new ArrayList<>();
         for (ResourceCheckType t : equipmentChecks) {
             rows.add(createRow(req.workPlanId(), OwnerType.EQUIPMENT, req.equipmentId(),
-                    req.supplierCompanyId(), issuerCompanyId, t, req.dueDate(), req.notes(),
+                    req.supplierCompanyId(), issuerCompanyId, t, req.dueDate(), req.dueTime(), req.notes(),
                     actor.id(), req.equipmentId()));
         }
         for (Long pid : operatorIds) {
             for (ResourceCheckType t : operatorChecks) {
                 rows.add(createRow(req.workPlanId(), OwnerType.PERSON, pid,
-                        req.supplierCompanyId(), issuerCompanyId, t, req.dueDate(), req.notes(),
+                        req.supplierCompanyId(), issuerCompanyId, t, req.dueDate(), req.dueTime(), req.notes(),
                         actor.id(), req.equipmentId()));
             }
         }
@@ -134,8 +142,11 @@ public class ResourceCheckService {
                 "RESOURCE_CHECK_REQUEST",
                 "『" + comboLabel + "』 조합 점검 " + rows.size() + "건 — " + typeSummary,
                 (operatorNames.isBlank() ? "" : "조종원: " + operatorNames + " — ")
-                        + "마감일: " + (req.dueDate() != null ? req.dueDate().toString() : "미정"),
+                        + "마감일: " + dueLabel(req.dueDate(), req.dueTime()),
                 "RESOURCE_CHECK", rows.get(0).getId(), null, notifications.senderLabelOf(actor));
+
+        // 알림톡 — 조합도 행당 N건이 아니라 묶음 1건. 공급사 담당자 자동 수신.
+        sendComboAlimtalk(req, equipmentChecks, operatorChecks, operatorNames, issuerCompanyId, actor);
 
         return rows.stream().map(this::toResponse).toList();
     }
@@ -185,8 +196,8 @@ public class ResourceCheckService {
      */
     private ResourceCheckRequest createRow(Long workPlanId, OwnerType ownerType, Long ownerId,
                                            Long supplierCompanyId, Long bpCompanyId,
-                                           ResourceCheckType checkType, LocalDate dueDate, String notes,
-                                           Long issuedBy, Long comboEquipmentId) {
+                                           ResourceCheckType checkType, LocalDate dueDate, LocalTime dueTime,
+                                           String notes, Long issuedBy, Long comboEquipmentId) {
         repo.findByOwnerTypeAndOwnerIdOrderByIdDesc(ownerType, ownerId).stream()
                 .filter(c -> c.getCheckType() == checkType
                         && c.getStatus() == ResourceCheckStatus.REJECTED)
@@ -194,6 +205,7 @@ public class ResourceCheckService {
 
         var entity = ResourceCheckRequest.issue(workPlanId, ownerType, ownerId,
                 supplierCompanyId, bpCompanyId, checkType, dueDate, notes, issuedBy);
+        entity.setDueTime(dueTime);
         entity.setComboEquipmentId(comboEquipmentId);
         return repo.save(entity);
     }
@@ -268,7 +280,7 @@ public class ResourceCheckService {
 
     private Long resolveDocumentTypeId(ResourceCheckType checkType, OwnerType ownerType) {
         String typeName = switch (checkType) {
-            case VEHICLE_SAFETY -> "자동차 안전점검 결과서";
+            case VEHICLE_SAFETY -> "자동차 반입검사 결과서";  // V125 에서 개명(구명은 V125 헤더 참조)
             case HEALTH_CHECK -> "건강검진 결과서";
             case SAFETY_TRAINING -> "안전교육 이수증";
             case OTHER -> ownerType == OwnerType.EQUIPMENT ? "점검 회신 - 기타 (장비)" : "점검 회신 - 기타 (인원)";
@@ -329,6 +341,29 @@ public class ResourceCheckService {
                 ownerLabel(entity.getOwnerType(), entity.getOwnerId()) + " — " + checkTypeLabel(entity.getCheckType()),
                 "RESOURCE_CHECK", entity.getId(), null, notifications.senderLabelOf(actor));
 
+        return toResponse(entity);
+    }
+
+    /** V125 통화·연락 기록 — 발행사(bp_company_id 소속 공급사·BP)/ADMIN 만. "[7/24 14:00 이름] 내용" 줄 append. */
+    @Transactional
+    public ResourceCheckResponse addContactLog(Long id, String note, AuthenticatedUser actor) {
+        if (actor.role() != Role.ADMIN && actor.role() != Role.BP
+                && actor.role() != Role.EQUIPMENT_SUPPLIER && actor.role() != Role.MANPOWER_SUPPLIER) {
+            throw ApiException.forbidden("ISSUER_ADMIN_ONLY", "발행사/ADMIN 만 기록 가능");
+        }
+        var entity = repo.findById(id).orElseThrow(() ->
+                ApiException.notFound("CHECK_NOT_FOUND", "점검 요청 없음"));
+        if (actor.role() != Role.ADMIN && !entity.getBpCompanyId().equals(actor.companyId())) {
+            throw ApiException.forbidden("DENIED", "발행사(본인 회사)의 요청만 기록 가능");
+        }
+        if (note == null || note.isBlank()) {
+            throw ApiException.badRequest("EMPTY_NOTE", "기록 내용을 입력하세요");
+        }
+        String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("M/d HH:mm"));
+        String who = actor.name() != null && !actor.name().isBlank() ? actor.name() : "담당자";
+        String line = "[" + stamp + " " + who + "] " + note.trim();
+        entity.setContactLog(entity.getContactLog() == null || entity.getContactLog().isBlank()
+                ? line : entity.getContactLog() + "\n" + line);
         return toResponse(entity);
     }
 
@@ -415,9 +450,8 @@ public class ResourceCheckService {
         return type.name() + " #" + id;
     }
 
-    /** 알림톡 발송 요청이 있으면 check_type→템플릿 매핑 후 수신번호별 발송. (AlimTalkService 가 실패 swallow) */
-    private void sendAlimtalkIfRequested(IssueRequest req, long bpCompanyId, AuthenticatedUser actor) {
-        if (req.alimtalkPhones() == null || req.alimtalkPhones().isEmpty()) return;
+    /** 단건 발행 알림톡 — 수신 공급사 담당자 자동 + 추가 수신번호. check_type→템플릿 매핑(미등록 종류는 미발송). */
+    private void sendIssueAlimtalk(IssueRequest req, long bpCompanyId, AuthenticatedUser actor) {
         AlimTalkTemplate template = switch (req.checkType()) {
             case HEALTH_CHECK -> AlimTalkTemplate.HEALTH_CHECK;
             case VEHICLE_SAFETY -> AlimTalkTemplate.VEHICLE_SAFETY;
@@ -425,22 +459,77 @@ public class ResourceCheckService {
         };
         if (template == null) return;
 
-        // ADMIN 발행 케이스는 bpCompanyId 가 supplier 로 폴백되므로(기존 로직) 그 경우 BP사 공란.
-        String bpName = (bpCompanyId != 0L && bpCompanyId != req.supplierCompanyId())
-                ? companyName(bpCompanyId) : "";
-        Map<String, String> vars = new HashMap<>();
-        vars.put("업체명", companyName(req.supplierCompanyId()));
-        vars.put("BP사", bpName);
-        vars.put("현장명", siteName(req.workPlanId()));
-        vars.put("요청기한", req.dueDate() != null ? req.dueDate().toString() : "미정");
+        Map<String, String> vars = alimtalkBaseVars(req.supplierCompanyId(), bpCompanyId,
+                req.workPlanId(), req.dueDate(), req.dueTime());
         if (template == AlimTalkTemplate.HEALTH_CHECK) {
             vars.put("대상자명", ownerLabel(req.ownerType(), req.ownerId()));
         } else {
             vars.put("차량번호", vehicleNo(req.ownerId()));
         }
-        for (String phone : req.alimtalkPhones()) {
+        dispatchAlimtalk(template, vars, req.supplierCompanyId(), req.alimtalkPhones(), actor);
+    }
+
+    /** 조합 발행 알림톡 — 묶음 1건. 장비 반입검사 템플릿 우선, 없으면 건강검진 템플릿(승인 템플릿 2종뿐). */
+    private void sendComboAlimtalk(IssueComboRequest req, List<ResourceCheckType> equipmentChecks,
+                                   List<ResourceCheckType> operatorChecks, String operatorNames,
+                                   long issuerCompanyId, AuthenticatedUser actor) {
+        AlimTalkTemplate template;
+        if (equipmentChecks.contains(ResourceCheckType.VEHICLE_SAFETY)) {
+            template = AlimTalkTemplate.VEHICLE_SAFETY;
+        } else if (operatorChecks.contains(ResourceCheckType.HEALTH_CHECK) && !operatorNames.isBlank()) {
+            template = AlimTalkTemplate.HEALTH_CHECK;
+        } else {
+            return;  // 등록 템플릿 없는 종류만 발행됨
+        }
+
+        Map<String, String> vars = alimtalkBaseVars(req.supplierCompanyId(), issuerCompanyId,
+                req.workPlanId(), req.dueDate(), req.dueTime());
+        if (template == AlimTalkTemplate.HEALTH_CHECK) {
+            vars.put("대상자명", operatorNames);
+        } else {
+            vars.put("차량번호", vehicleNo(req.equipmentId()));
+        }
+        dispatchAlimtalk(template, vars, req.supplierCompanyId(), null, actor);
+    }
+
+    /** 알림톡 공통 변수 — 발행사가 공급사 자신이면 BP사 공란(기존 정책 유지). */
+    private Map<String, String> alimtalkBaseVars(Long supplierCompanyId, long issuerCompanyId,
+                                                 Long workPlanId, LocalDate dueDate, LocalTime dueTime) {
+        String bpName = (issuerCompanyId != 0L && !Long.valueOf(issuerCompanyId).equals(supplierCompanyId))
+                ? companyName(issuerCompanyId) : "";
+        Map<String, String> vars = new HashMap<>();
+        vars.put("업체명", companyName(supplierCompanyId));
+        vars.put("BP사", bpName);
+        vars.put("현장명", siteName(workPlanId));
+        vars.put("요청기한", dueLabel(dueDate, dueTime));
+        return vars;
+    }
+
+    /** 수신자 = 공급사 담당자(소속 사용자 등록 전화번호) 자동 + 추가 수신번호. 번호 전무면 skip 로그(fail-open).
+     *  발송 자체는 AlimTalkService @Async 가 처리(키 미설정 dev 는 sms_logs FAILED 로만 남고 흐름 무영향). */
+    private void dispatchAlimtalk(AlimTalkTemplate template, Map<String, String> vars,
+                                  Long supplierCompanyId, List<String> extraPhones, AuthenticatedUser actor) {
+        Set<String> phones = new LinkedHashSet<>();
+        for (User u : users.findByCompanyIdOrderByIdAsc(supplierCompanyId)) {
+            if (u.getPhone() != null && !u.getPhone().isBlank()) phones.add(u.getPhone().trim());
+        }
+        if (extraPhones != null) {
+            extraPhones.stream().filter(p -> p != null && !p.isBlank()).map(String::trim).forEach(phones::add);
+        }
+        if (phones.isEmpty()) {
+            log.info("검사 통보 알림톡 skip — 공급사 {} 담당자 전화번호 없음", supplierCompanyId);
+            return;
+        }
+        log.info("검사 통보 알림톡 자동 발송 — 공급사 {} 수신 {}건 ({})", supplierCompanyId, phones.size(), template.name());
+        for (String phone : phones) {
             alimTalk.send(phone, template, vars, actor.id());
         }
+    }
+
+    /** 마감 표기 — "2026-08-01 14:00" / "2026-08-01" / "미정". 알림·인앱 문구 공용. */
+    private static String dueLabel(LocalDate d, LocalTime t) {
+        if (d == null) return "미정";
+        return t != null ? d + " " + t.format(DateTimeFormatter.ofPattern("HH:mm")) : d.toString();
     }
 
     private String companyName(Long companyId) {
@@ -466,7 +555,7 @@ public class ResourceCheckService {
 
     public static String checkTypeLabel(ResourceCheckType t) {
         return switch (t) {
-            case VEHICLE_SAFETY -> "자동차 안전점검";
+            case VEHICLE_SAFETY -> "자동차 반입검사";
             case HEALTH_CHECK -> "건강검진";
             case SAFETY_TRAINING -> "안전교육";
             case OTHER -> "기타";

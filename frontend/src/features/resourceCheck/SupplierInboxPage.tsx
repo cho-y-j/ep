@@ -69,7 +69,11 @@ export default function ResourceCheckSupplierInbox() {
         </div>
         <div className="mt-0.5 text-sm text-slate-700 truncate">
           {r.owner_label}
-          {r.due_date && <span className="ml-2 text-xs text-rose-700">마감 {r.due_date}</span>}
+          {r.due_date && (
+            <span className="ml-2 text-xs text-rose-700">
+              마감 {r.due_date}{r.due_time ? ` ${r.due_time.slice(0, 5)}` : ''}
+            </span>
+          )}
         </div>
         {r.notes && <div className="mt-0.5 text-xs text-slate-500 truncate">{r.notes}</div>}
         {r.review_note && (
@@ -128,7 +132,7 @@ export default function ResourceCheckSupplierInbox() {
     <AppShell>
       <PageHeader
         title="받은 점검 요청"
-        subtitle="BP 가 보낸 자동차 안전점검·건강검진·안전교육 등 요청"
+        subtitle="BP 가 보낸 자동차 반입검사·건강검진·안전교육 등 요청"
       />
 
       <FilterBar

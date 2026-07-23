@@ -434,7 +434,7 @@ export default function App() {
           element={<ProtectedRoute><ComplianceOrdersPage /></ProtectedRoute>}
         />
 
-        {/* DocReq: 자원 점검 요청 (자동차 안전점검/건강검진/안전교육) — 공급사도 자기+자식 자원에 직접 발행·승인 */}
+        {/* DocReq: 자원 점검 요청 (자동차 반입검사/건강검진/안전교육) — 공급사도 자기+자식 자원에 직접 발행·승인 */}
         <Route
           path="/resource-checks/bp"
           element={<ProtectedRoute roles={['ADMIN', 'BP', 'EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><ResourceCheckBpList /></ProtectedRoute>}

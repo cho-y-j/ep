@@ -4,6 +4,7 @@ import com.skep.resourceCheck.ResourceCheckType;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 /** R2 조합 일괄 발행 — 장비 1대 + 조종원 N명에 종류별 점검을 단일 트랜잭션으로 발행. */
@@ -13,6 +14,7 @@ public record IssueComboRequest(
         @NotNull Long supplierCompanyId,
         Long workPlanId,
         LocalDate dueDate,
+        LocalTime dueTime,
         String notes,
         @NotNull Checks checks
 ) {

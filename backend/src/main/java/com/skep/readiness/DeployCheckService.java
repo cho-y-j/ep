@@ -163,7 +163,7 @@ public class DeployCheckService {
     /** 부족 점검 종류별 행동 안내 문구. */
     private static String checkActionText(ResourceCheckType t) {
         return switch (t) {
-            case VEHICLE_SAFETY -> "반입검사(차량 안전점검)를 완료하고 승인받으세요";
+            case VEHICLE_SAFETY -> "자동차 반입검사를 완료하고 승인받으세요";
             case HEALTH_CHECK -> "건강검진을 완료하고 승인받으세요";
             case SAFETY_TRAINING -> "안전교육을 이수하고 승인받으세요";
             default -> ResourceCheckService.checkTypeLabel(t) + "을(를) 완료하고 승인받으세요";

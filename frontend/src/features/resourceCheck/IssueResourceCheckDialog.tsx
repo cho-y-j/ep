@@ -39,6 +39,7 @@ export default function IssueResourceCheckDialog({
   const allowed = ownerType === 'EQUIPMENT' ? TYPES_FOR_EQUIPMENT : TYPES_FOR_PERSON;
   const [selected, setSelected] = useState<Set<ResourceCheckType>>(new Set());
   const [dueDate, setDueDate] = useState('');
+  const [dueTime, setDueTime] = useState('');
   const [notes, setNotes] = useState('');
   const [alimtalkPhones, setAlimtalkPhones] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -52,6 +53,10 @@ export default function IssueResourceCheckDialog({
   const [operatorTypes, setOperatorTypes] = useState<Set<ResourceCheckType>>(new Set(RECOMMENDED_FOR_PERSON));
 
   const showAlimtalk = !comboMode && [...selected].some((t) => ALIMTALK_TYPES.includes(t));
+  // 자동 발송 안내 — 단건은 선택 종류, 조합은 장비/조종원 종류에 템플릿 보유 종류가 있을 때.
+  const autoAlimtalkNote = comboMode
+    ? [...selected, ...operatorTypes].some((t) => ALIMTALK_TYPES.includes(t))
+    : showAlimtalk;
   const dupTypes = [...selected].filter((t) => existingRequested.has(t));
 
   // F4: 열 때 자원 종류별 추천 프리셀렉트. 재검사 통보는 initialTypes(해당 종류만)로 프리필.
@@ -141,6 +146,7 @@ export default function IssueResourceCheckDialog({
         supplier_company_id: supplierCompanyId,
         work_plan_id: workPlanId,
         due_date: dueDate || null,
+        due_time: dueTime || null,
         notes: notes || null,
         checks: { equipment: equipmentTypes, operator: opTypes },
       });
@@ -165,6 +171,7 @@ export default function IssueResourceCheckDialog({
         supplier_company_id: supplierCompanyId,
         check_type: t,
         due_date: dueDate || null,
+        due_time: dueTime || null,
         notes: notes || null,
         alimtalk_phones: ALIMTALK_TYPES.includes(t) ? alimtalkPhones : [],
       }),
@@ -258,9 +265,13 @@ export default function IssueResourceCheckDialog({
             </div>
           )}
           <label className="block">
-            <span className="text-xs font-semibold text-slate-500">마감일 (점검 받아야 하는 날짜)</span>
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-                   className="mt-1 w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded" />
+            <span className="text-xs font-semibold text-slate-500">마감일·시간 (점검 받아야 하는 일시 — 시간은 선택)</span>
+            <div className="mt-1 flex gap-2">
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                     className="flex-1 px-2.5 py-1.5 text-sm border border-slate-300 rounded" />
+              <input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)}
+                     className="w-28 px-2.5 py-1.5 text-sm border border-slate-300 rounded" />
+            </div>
           </label>
           <label className="block">
             <span className="text-xs font-semibold text-slate-500">메모 (선택)</span>
@@ -268,11 +279,17 @@ export default function IssueResourceCheckDialog({
                       placeholder="추가 안내 사항"
                       className="mt-1 w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded" />
           </label>
+          {autoAlimtalkNote && (
+            <div className="text-[11px] text-slate-500">
+              반입검사·건강검진 통보는 공급사 담당자 등록번호로 알림톡이 자동 발송됩니다.
+            </div>
+          )}
           {showAlimtalk && (
             <AlimTalkSendBox
               personPhone={ownerType === 'PERSON' ? (personPhone ?? autoPhone) : null}
               value={alimtalkPhones}
               onChange={setAlimtalkPhones}
+              hint="공급사 담당자에게는 자동 발송됩니다. 추가로 받을 번호만 입력하세요."
             />
           )}
         </div>

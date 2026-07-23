@@ -5,6 +5,7 @@ import com.skep.resourceCheck.ResourceCheckType;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 public record IssueRequest(
@@ -14,6 +15,7 @@ public record IssueRequest(
         @NotNull Long supplierCompanyId,
         @NotNull ResourceCheckType checkType,
         LocalDate dueDate,
+        LocalTime dueTime,
         String notes,
         List<String> alimtalkPhones
 ) {}

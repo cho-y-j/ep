@@ -9,6 +9,7 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Entity
 @Table(name = "resource_check_requests")
@@ -45,8 +46,16 @@ public class ResourceCheckRequest {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
+    /** V125: 검사 시간(선택) — 날짜만 있는 기존 행은 NULL. */
+    @Column(name = "due_time")
+    private LocalTime dueTime;
+
     @Column(columnDefinition = "text")
     private String notes;
+
+    /** V125: 발행사 통화·연락 기록 — "[7/24 14:00 이름] 내용" 줄 append. */
+    @Column(name = "contact_log", columnDefinition = "text")
+    private String contactLog;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
