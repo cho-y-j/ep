@@ -15,6 +15,8 @@ public record ResourcePipelineResponse(
         String supplierName,     // 〃 이름
         Long siteId,             // 현재 배정 현장(current_site_id) — 현장 필터용, 미배정이면 null
         String siteName,         // 〃 이름
+        String reviewStatus,         // 이 자원이 담긴 최신 심사 봉투(DocumentReview) 상태 PENDING/APPROVED/REJECTED — 미발송이면 null
+        String reviewRejectedReason, // 〃 반려 사유(반려일 때만)
         Stages stages
 ) {
     public record Stages(

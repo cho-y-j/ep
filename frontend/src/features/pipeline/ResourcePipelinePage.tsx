@@ -5,9 +5,11 @@ import { EmptyState, PageHeader, FilterBar, FilterSelect } from '../../component
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import PipelineDetail from './PipelineDetail';
+import SetBoard from './SetBoard';
 import {
   type PipelineItem,
   type PipelineOperator,
+  type SetStageFilter,
   type Stage,
   type StageFilter,
   STAGE_ORDER,
@@ -21,7 +23,7 @@ import {
 const STAGE_FILTERS: StageFilter[] = ['docs', 'inspection', 'readiness', 'deployed', 'work', 'settlement', 'done'];
 
 /**
- * 자원 파이프라인 — 목록(필터·단계 드릴다운) + 개별 자원 상세(1대 뷰) 전환.
+ * 자원 현황(파이프라인) — 세트(조합) 흐름 보드(기본) + 자원별 목록 토글 + 개별 자원 상세(1대 뷰) 전환.
  * 필터/선택 상태는 URL 쿼리에 동기화되어 공유 가능. GET /api/resources/pipeline 집계 재사용.
  */
 export default function ResourcePipelinePage() {
@@ -31,6 +33,8 @@ export default function ResourcePipelinePage() {
   const [operatorsByEquip, setOperatorsByEquip] = useState<Record<number, PipelineOperator[]>>({});
   const [loading, setLoading] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // 세트 보드에서 검사 통보 발송 후 재로딩 트리거.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +58,7 @@ export default function ResourcePipelinePage() {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadKey]);
 
   // 조합 준비 파생용 — PERSON 행 lookup (comboReadyOf 가 조종원 readiness 를 이 맵에서 찾는다).
   const itemsByKey = useMemo(() => new Map(items.map((it) => [itemKey(it), it])), [items]);
@@ -66,6 +70,9 @@ export default function ResourcePipelinePage() {
   const stage = (params.get('stage') ?? '') as '' | StageFilter;
   const resourceKey = params.get('resource') ?? '';
   const q = params.get('q') ?? '';              // 자원명 검색
+  // 보기 전환 — 기본은 세트(조합) 흐름 보드, 'resources' 면 기존 자원 단위 목록(무손실 유지).
+  const view = params.get('view') === 'resources' ? 'resources' : 'sets';
+  const sstage = (params.get('sstage') ?? '') as '' | SetStageFilter; // 세트 보드 단계 필터
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -109,30 +116,35 @@ export default function ResourcePipelinePage() {
   const listItems = stage ? baseItems.filter((it) => currentStage(it.stages) === stage) : baseItems;
 
   const selected = resourceKey ? items.find((it) => itemKey(it) === resourceKey) ?? null : null;
-  const activeFilterCount = [site, company, type, q].filter(Boolean).length + (stage ? 1 : 0);
+  const activeFilterCount = [site, company, type, q].filter(Boolean).length
+    + ((view === 'resources' ? stage : sstage) ? 1 : 0);
 
   // 개별 자원 선택 시 = 1대 뷰(상세 패널).
   if (selected) {
     return (
-      <AppShell breadcrumb={[{ label: '자원 파이프라인', to: '/resource-pipeline' }, { label: selected.label }]}>
+      <AppShell breadcrumb={[{ label: '자원 현황', to: '/resource-pipeline' }, { label: selected.label }]}>
         <PipelineDetail item={selected} onBack={() => setParam('resource', '')} />
       </AppShell>
     );
   }
 
   return (
-    <AppShell breadcrumb={[{ label: '자원 파이프라인' }]}>
+    <AppShell breadcrumb={[{ label: '자원 현황' }]}>
       {/* 상단 고정 필터바 */}
       <div className="sticky top-[68px] z-20 bg-slate-50 pb-3 pt-1">
         <PageHeader
-          title="자원 파이프라인"
-          subtitle="장비·인력의 서류 → 검사 → 투입대기 → 투입 → 작업 → 정산 진행 상태. 단계를 눌러 그 단계만, 자원을 눌러 상세를 봅니다."
+          title="자원 현황"
+          subtitle={view === 'sets'
+            ? '장비+조종원 세트별 서류 → 심사 → 검사 → 투입 대기 → 투입 중 → 정산 흐름. 카드의 버튼으로 다음 할 일로 이동합니다.'
+            : '장비·인력의 서류 → 검사 → 투입대기 → 투입 → 작업 → 정산 진행 상태. 단계를 눌러 그 단계만, 자원을 눌러 상세를 봅니다.'}
           actions={
             <>
-              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                {listItems.length}
-                {listItems.length !== items.length && <span className="text-slate-400"> / {items.length}</span>}
-              </span>
+              {view === 'resources' && (
+                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                  {listItems.length}
+                  {listItems.length !== items.length && <span className="text-slate-400"> / {items.length}</span>}
+                </span>
+              )}
               <button onClick={() => setFiltersOpen((o) => !o)} className="btn-ghost md:hidden">
                 필터{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
               </button>
@@ -140,12 +152,28 @@ export default function ResourcePipelinePage() {
           }
         />
 
+        {/* 보기 전환 — 세트(조합) 보드(기본) ↔ 자원별 목록 */}
+        <div className="mt-1 inline-flex overflow-hidden rounded-lg border border-slate-300 bg-white">
+          {([['sets', '세트 보드'], ['resources', '자원별 보기']] as const).map(([v, label]) => (
+            <button key={v} type="button" onClick={() => setParam('view', v === 'sets' ? '' : v)}
+              className={`px-3 py-1.5 text-xs font-semibold ${
+                view === v ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* 필터 컨트롤 — 모바일 접힘 */}
         <div className={`${filtersOpen ? 'block' : 'hidden'} md:block`}>
           <FilterBar
             search={{ value: q, onChange: (v) => setParam('q', v), placeholder: '자원명 검색' }}
             activeFilterCount={activeFilterCount}
-            onReset={() => setParams(resourceKey ? new URLSearchParams({ resource: resourceKey }) : new URLSearchParams(), { replace: true })}
+            onReset={() => {
+              const next = new URLSearchParams();
+              if (resourceKey) next.set('resource', resourceKey);
+              if (view === 'resources') next.set('view', 'resources');
+              setParams(next, { replace: true });
+            }}
           >
             <FilterSelect value={type} onChange={(v) => setParam('type', v)} placeholder="유형 전체"
               options={[{ value: 'EQUIPMENT', label: '장비' }, { value: 'PERSON', label: '인원' }]} />
@@ -163,61 +191,82 @@ export default function ResourcePipelinePage() {
           </FilterBar>
         </div>
 
-        {/* 단계 집계 칩 = 드릴다운(클릭 시 그 단계만, 다시 클릭 해제) */}
-        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
-          {STAGE_FILTERS.map((k) => {
-            const active = stage === k;
-            const count = stageCounts[k];
-            return (
-              <button
-                key={k}
-                onClick={() => setParam('stage', active ? '' : k)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  active
-                    ? 'border-brand-500 bg-brand-600 text-white'
-                    : count === 0
-                      ? 'border-slate-200 bg-white text-slate-300'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700'}`}
-              >
-                {STAGE_FILTER_LABEL[k]}
-                <span className={`rounded-full px-1.5 text-[10px] font-bold ${
-                  active ? 'bg-white/20 text-white' : count === 0 ? 'bg-slate-100 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        {/* 단계 집계 칩 = 드릴다운(자원별 보기 전용 — 세트 보드는 자체 칩 사용) */}
+        {view === 'resources' && (
+          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+            {STAGE_FILTERS.map((k) => {
+              const active = stage === k;
+              const count = stageCounts[k];
+              return (
+                <button
+                  key={k}
+                  onClick={() => setParam('stage', active ? '' : k)}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    active
+                      ? 'border-brand-500 bg-brand-600 text-white'
+                      : count === 0
+                        ? 'border-slate-200 bg-white text-slate-300'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700'}`}
+                >
+                  {STAGE_FILTER_LABEL[k]}
+                  <span className={`rounded-full px-1.5 text-[10px] font-bold ${
+                    active ? 'bg-white/20 text-white' : count === 0 ? 'bg-slate-100 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <Legend />
 
-      <div className="mt-3">
-        {loading ? (
-          <p className="text-sm text-slate-400">불러오는 중…</p>
-        ) : items.length === 0 ? (
+      {loading ? (
+        <p className="mt-3 text-sm text-slate-400">불러오는 중…</p>
+      ) : items.length === 0 ? (
+        <div className="mt-3">
           <EmptyState title="표시할 자원이 없습니다" text="장비·인력을 등록하면 파이프라인에 나타납니다." />
-        ) : listItems.length === 0 ? (
-          <EmptyState
-            title="조건에 맞는 자원이 없습니다"
-            text="필터를 바꾸거나 초기화하세요."
-            action={<button onClick={() => setParams(new URLSearchParams(), { replace: true })} className="btn-ghost">필터 초기화</button>}
-          />
-        ) : (
-          <div className="space-y-3">
-            {listItems.map((it) => (
-              <PipelineRow
-                key={itemKey(it)}
-                item={it}
-                operators={it.resource_type === 'EQUIPMENT' ? operatorsByEquip[it.resource_id] ?? [] : []}
-                itemsByKey={itemsByKey}
-                showSupplier={showCompanyFilter}
-                onSelect={() => setParam('resource', itemKey(it))}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        </div>
+      ) : view === 'sets' ? (
+        <SetBoard
+          items={items}
+          operatorsByEquip={operatorsByEquip}
+          itemsByKey={itemsByKey}
+          q={q}
+          type={type}
+          site={site}
+          company={company}
+          showSupplier={showCompanyFilter}
+          stage={sstage}
+          onStageChange={(v) => setParam('sstage', v)}
+          onSelectResource={(k) => setParam('resource', k)}
+          onIssued={() => setReloadKey((k) => k + 1)}
+        />
+      ) : (
+        <div className="mt-3">
+          {listItems.length === 0 ? (
+            <EmptyState
+              title="조건에 맞는 자원이 없습니다"
+              text="필터를 바꾸거나 초기화하세요."
+              action={<button onClick={() => setParams(new URLSearchParams({ view: 'resources' }), { replace: true })} className="btn-ghost">필터 초기화</button>}
+            />
+          ) : (
+            <div className="space-y-3">
+              {listItems.map((it) => (
+                <PipelineRow
+                  key={itemKey(it)}
+                  item={it}
+                  operators={it.resource_type === 'EQUIPMENT' ? operatorsByEquip[it.resource_id] ?? [] : []}
+                  itemsByKey={itemsByKey}
+                  showSupplier={showCompanyFilter}
+                  onSelect={() => setParam('resource', itemKey(it))}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </AppShell>
   );
 }

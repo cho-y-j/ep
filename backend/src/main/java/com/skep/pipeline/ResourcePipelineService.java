@@ -5,6 +5,10 @@ import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyService;
 import com.skep.compliance.ComplianceService;
 import com.skep.compliance.dto.ResourceCompliance;
+import com.skep.document.DocumentReview;
+import com.skep.document.DocumentReviewItem;
+import com.skep.document.DocumentReviewItemRepository;
+import com.skep.document.DocumentReviewRepository;
 import com.skep.document.OwnerType;
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentRepository;
@@ -83,6 +87,8 @@ public class ResourcePipelineService {
     private final CompanyService companyService;
     private final CompanyRepository companyRepo;
     private final SiteRepository siteRepo;
+    private final DocumentReviewRepository documentReviews;
+    private final DocumentReviewItemRepository documentReviewItems;
 
     /** 공급사/협력사 본인+직속 자식 소유 자원의 파이프라인 상태. 그 외 역할/회사미상은 빈 목록(readiness 와 동일). */
     @Transactional(readOnly = true)
@@ -142,6 +148,21 @@ public class ResourcePipelineService {
             }
         }
 
+        // 심사 — 공급사가 보낸 DocumentReview(봉투) 중 이 자원이 담긴 최신 봉투 상태(표시용, 게이트 아님).
+        Map<String, DocumentReview> latestReviewByOwner = new HashMap<>();
+        List<DocumentReview> reviews = documentReviews.findBySupplierCompanyIdInOrderByIdDesc(scope);
+        if (!reviews.isEmpty()) {
+            Map<Long, DocumentReview> reviewById = reviews.stream()
+                    .collect(Collectors.toMap(DocumentReview::getId, r -> r));
+            for (DocumentReviewItem item : documentReviewItems.findByReviewIdInOrderByIdAsc(
+                    reviews.stream().map(DocumentReview::getId).toList())) {
+                String k = key(item.getOwnerType().name(), item.getOwnerId());
+                DocumentReview cand = reviewById.get(item.getReviewId());
+                DocumentReview cur = latestReviewByOwner.get(k);
+                if (cur == null || cand.getId() > cur.getId()) latestReviewByOwner.put(k, cand);
+            }
+        }
+
         List<ResourcePipelineResponse> out = new ArrayList<>();
         for (Equipment e : equipment) {
             Long id = e.getId();
@@ -152,9 +173,11 @@ public class ResourcePipelineService {
                     deployedStage(dispatchedEquipIds.contains(id), activeEquipIds.contains(id)),
                     workStage(false, null),
                     settlementStage(dispatchedEquipIds.contains(id)));
+            DocumentReview rv = latestReviewByOwner.get(key("EQUIPMENT", id));
             out.add(new ResourcePipelineResponse("EQUIPMENT", id, equipmentLabel(e),
                     e.getSupplierId(), supplierNames.get(e.getSupplierId()),
-                    e.getCurrentSiteId(), siteNames.get(e.getCurrentSiteId()), stages));
+                    e.getCurrentSiteId(), siteNames.get(e.getCurrentSiteId()),
+                    reviewStatusOf(rv), reviewReasonOf(rv), stages));
         }
         for (Person p : persons) {
             Long id = p.getId();
@@ -165,9 +188,11 @@ public class ResourcePipelineService {
                     deployedStage(dispatchedPersonIds.contains(id), activePersonIds.contains(id)),
                     workStage(true, latestWork.get(id)),
                     settlementStage(dispatchedPersonIds.contains(id)));
+            DocumentReview rv = latestReviewByOwner.get(key("PERSON", id));
             out.add(new ResourcePipelineResponse("PERSON", id, personLabel(p),
                     p.getSupplierId(), supplierNames.get(p.getSupplierId()),
-                    p.getCurrentSiteId(), siteNames.get(p.getCurrentSiteId()), stages));
+                    p.getCurrentSiteId(), siteNames.get(p.getCurrentSiteId()),
+                    reviewStatusOf(rv), reviewReasonOf(rv), stages));
         }
         return out;
     }
@@ -257,5 +282,13 @@ public class ResourcePipelineService {
 
     private static String key(String type, Long id) {
         return type + ":" + id;
+    }
+
+    private static String reviewStatusOf(DocumentReview r) {
+        return r == null ? null : r.getStatus().name();
+    }
+
+    private static String reviewReasonOf(DocumentReview r) {
+        return r == null ? null : r.getRejectedReason();
     }
 }

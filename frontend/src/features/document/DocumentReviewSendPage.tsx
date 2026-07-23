@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
 import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
@@ -23,6 +24,11 @@ type ResourceGroup = {
 };
 
 export default function DocumentReviewSendPage() {
+  // 프리필 — 자원 현황 세트 보드의 "심사 보내기"에서 ?equipment=<id>(장비묶음) 또는 ?person=<id>(zip)로 진입.
+  const [searchParams] = useSearchParams();
+  const prefillEquipment = searchParams.get('equipment');
+  const prefillPerson = searchParams.get('person');
+  const prefillApplied = useRef(false);
   const [rows, setRows] = useState<DocRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -35,7 +41,7 @@ export default function DocumentReviewSendPage() {
   const [bpId, setBpId] = useState('');
   const [bpUsers, setBpUsers] = useState<Array<{ id: number; name: string; email: string }>>([]);
   // 출력형식: zip(기존, 자원별 압축) | bundle(장비묶음 병합 PDF)
-  const [mode, setMode] = useState<'zip' | 'bundle'>('zip');
+  const [mode, setMode] = useState<'zip' | 'bundle'>(prefillEquipment ? 'bundle' : 'zip');
   const [operators, setOperators] = useState<Record<number, Array<{ person_id: number; person_name?: string | null }>>>({});
   const [opSel, setOpSel] = useState<Record<number, Set<number>>>({});
   const [separatorPage, setSeparatorPage] = useState(true);
@@ -82,6 +88,15 @@ export default function DocumentReviewSendPage() {
     () => (mode === 'bundle' ? groups.filter((g) => g.owner_type === 'EQUIPMENT') : groups),
     [groups, mode],
   );
+
+  // 프리필 자원 자동 선택 — 목록 로드 후 1회만(해당 자원에 보낼 서류가 있을 때).
+  useEffect(() => {
+    if (prefillApplied.current || groups.length === 0) return;
+    prefillApplied.current = true;
+    const key = prefillEquipment ? `EQUIPMENT:${prefillEquipment}`
+      : prefillPerson ? `PERSON:${prefillPerson}` : null;
+    if (key && groups.some((g) => g.key === key)) setSelected(new Set([key]));
+  }, [groups, prefillEquipment, prefillPerson]);
 
   // 종류 필터 옵션 — 현재 보이는 자원의 owner_sub_label(장비 카테고리/인력 역할)을 distinct.
   const subOptions = useMemo(() => {
