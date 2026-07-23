@@ -149,22 +149,47 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
     ];
   } else if (role === 'EQUIPMENT_SUPPLIER' || role === 'MANPOWER_SUPPLIER') {
     const isEquip = role === 'EQUIPMENT_SUPPLIER';
-    // 서류 5채널을 2단으로 직접 노출(구 "서류 허브" 해체). 각 채널 배지 개별 표기.
+    // 작업 흐름 순 재편: 자원 현황(세트 보드) → 서류 관리 → 심사·검사 → 투입·정산 → 안전 → 견적·계약 → 회사 관리.
+    // 기존 라우트·항목 전수 보존(재배치만) — 각 채널 배지(supplierCounts)도 해당 항목에 그대로.
     const resourceItems: NavItem[] = isEquip
       ? [
-          { label: '장비', to: '/equipment', icon: <IconTruck />, section: '자원' },
-          { label: '조종원', to: '/persons', icon: <IconUsers />, section: '자원' },
+          { label: '장비', to: '/equipment', icon: <IconTruck />, section: '자원 등록' },
+          { label: '조종원', to: '/persons', icon: <IconUsers />, section: '자원 등록' },
         ]
       : [
-          { label: '인원', to: '/persons', icon: <IconUsers />, section: '자원' },
+          { label: '인원', to: '/persons', icon: <IconUsers />, section: '자원 등록' },
         ];
-    const settlementItems: NavItem[] = [
-      { label: '정산', to: '/settlements', icon: <IconClipboard /> },
-      { label: '월별 확인서(폰 서명분)', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
-      ...(isEquip ? [{ label: '장비 투입 통계', to: '/equipment-stats', icon: <IconTruck /> }] : []),
-    ];
     groups = [
       ...standalone,
+      // 흐름 보드 — 단독 대분류(1클릭 진입). 세트(장비+조종원) 단계 현황 = /resource-pipeline.
+      { label: '자원 현황', to: '/resource-pipeline', icon: <IconClipboard /> },
+      { label: '서류 관리', icon: <IconDoc />, items: [
+        ...resourceItems,
+        { label: '기투입 등록', to: '/resource-onboardings', icon: <IconClipboard />, section: '자원 등록' },
+        { label: '업체변경 신청서', to: '/resource-change-requests', icon: <IconClipboard />, section: '자원 등록' },
+        { label: '서류 관리(만료·검증)', to: '/document-management', icon: <IconDoc />, badge: supplierCounts.supplements || undefined, section: '서류' },
+        { label: '서류수집', to: '/document-collections', icon: <IconDoc />, badge: supplierCounts.collections || undefined, section: '서류' },
+      ]},
+      { label: '심사·검사', icon: <IconShield />, items: [
+        { label: '서류심사 보내기', to: '/document-review-send', icon: <IconDoc />, section: '심사' },
+        { label: '검사 관리', to: '/resource-checks/bp', icon: <IconShield />, section: '검사' },
+        { label: '자원점검', to: '/resource-checks/supplier', icon: <IconShield />, badge: supplierCounts.checks || undefined, section: '검사' },
+        { label: '이행지시', to: '/compliance-orders', icon: <IconShield />, badge: supplierCounts.compliance || undefined, section: '검사' },
+      ]},
+      { label: '투입·정산', icon: <IconMoney />, items: [
+        { label: '투입 요청', to: '/field-deployments/supplier', icon: <IconClipboard />, section: '투입' },
+        { label: '작업 일정', to: '/work-plans', icon: <IconClipboard />, section: '투입' },
+        { label: '현장 관리', to: '/sites', icon: <IconBuilding />, section: '투입' },
+        { label: '일일 확인서', to: '/daily-work-logs', icon: <IconClipboard />, section: '정산' },
+        { label: '정산', to: '/settlements', icon: <IconClipboard />, section: '정산' },
+        { label: '월별 확인서(폰 서명분)', to: '/work-confirmations/monthly', icon: <IconClipboard />, section: '정산' },
+        ...(isEquip ? [{ label: '장비 투입 통계', to: '/equipment-stats', icon: <IconTruck />, section: '정산' }] : []),
+      ]},
+      { label: '안전', icon: <IconShield />, items: [
+        { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
+        { label: '안전점검', to: '/safety-inspections', icon: <IconShield /> },
+        { label: '혈압 체크인', to: '/bp-checkins', icon: <IconShield /> },
+      ]},
       { label: '견적·계약', icon: <IconBriefcase />, items: [
         { label: '공개 입찰', to: '/quotations/open-bids', icon: <IconClipboard /> },
         { label: '내 제안', to: '/my-proposals', icon: <IconClipboard /> },
@@ -173,33 +198,9 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         { label: '견적 템플릿', to: '/quote-templates', icon: <IconClipboard /> },
         { label: '계약 관리', to: '/contracts', icon: <IconBriefcase /> },
       ]},
-      { label: '서류', icon: <IconDoc />, items: [
-        { label: '서류 관리(만료·검증)', to: '/document-management', icon: <IconDoc />, badge: supplierCounts.supplements || undefined },
-        { label: '서류심사', to: '/document-review-send', icon: <IconDoc /> },
-        { label: '서류수집', to: '/document-collections', icon: <IconDoc />, badge: supplierCounts.collections || undefined },
-        { label: '자원점검', to: '/resource-checks/supplier', icon: <IconShield />, badge: supplierCounts.checks || undefined },
-        { label: '검사 관리', to: '/resource-checks/bp', icon: <IconShield /> },
-        { label: '이행지시', to: '/compliance-orders', icon: <IconShield />, badge: supplierCounts.compliance || undefined },
-      ]},
-      { label: '현장 운영', icon: <IconBuilding />, items: [
-        ...resourceItems,
-        { label: '기투입 등록', to: '/resource-onboardings', icon: <IconClipboard />, section: '자원' },
-        { label: '업체변경 신청서', to: '/resource-change-requests', icon: <IconClipboard />, section: '자원' },
-        { label: '투입 요청', to: '/field-deployments/supplier', icon: <IconClipboard />, section: '투입' },
-        { label: '자원 파이프라인', to: '/resource-pipeline', icon: <IconClipboard />, section: '투입' },
-        { label: '작업 일정', to: '/work-plans', icon: <IconClipboard />, section: '투입' },
-        { label: '현장 관리', to: '/sites', icon: <IconBuilding />, section: '투입' },
-        { label: '일일 확인서', to: '/daily-work-logs', icon: <IconClipboard />, section: '기록' },
-        { label: '인원 공지', to: '/announcements', icon: <IconBell />, section: '소통' },
-      ]},
-      { label: '정산', icon: <IconMoney />, items: settlementItems },
-      { label: '안전', icon: <IconShield />, items: [
-        { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
-        { label: '안전점검', to: '/safety-inspections', icon: <IconShield /> },
-        { label: '혈압 체크인', to: '/bp-checkins', icon: <IconShield /> },
-      ]},
       { label: '회사 관리', icon: <IconBuilding />, items: [
         { label: '내 회사', to: '/my-company', icon: <IconBuilding /> },
+        { label: '인원 공지', to: '/announcements', icon: <IconBell /> },
         ...(isMaster ? [{ label: '직원 관리', to: '/company/users', icon: <IconUsers /> }] : []),
         ...(isEquip && isMaster ? [{ label: '협력업체 관리', to: '/sub-suppliers', icon: <IconTruck /> }] : []),
         ...(isEquip && isMaster ? [{ label: '취급 장비종류', to: '/settings/equipment-types', icon: <IconTruck /> }] : []),
