@@ -246,13 +246,29 @@ function deployedStage(members: BpMember[], idx: BpIndexes): Stage {
 
 function stagesOf(members: BpMember[], review: ReceivedReview | null,
                   planStatus: WorkPlanStatus | null, idx: BpIndexes): Record<BpStageKey, Stage> {
-  return {
+  return backfillDeployed({
     review: reviewStage(review, planStatus != null),
     plan: planStage(planStatus),
     inspection: inspectionStage(members, idx),
     ready: readyStage(members, idx),
     deployed: deployedStage(members, idx),
-  };
+  });
+}
+
+/**
+ * 비선형 트랙 표시 보정 — 이미 '투입 대기/투입 중'(후행 4·5단계)에 도달한 세트는 그 앞의
+ * '미완(PENDING)' 단계(심사·계획서·검사)를 '생략'(완료로 간주)으로 표시한다.
+ * FieldDeployment 가 계획서·검사에 미연결인 기존 모델에서 '투입 완료인데 앞단계 미완'으로
+ * 보이던 비선형 오해를 없앤다. NA(구두·해당없음)는 그대로 둔다.
+ * 각 단계 판정(gate) 자체는 무변경 — 순수 표시 변환.
+ */
+function backfillDeployed(stages: Record<BpStageKey, Stage>): Record<BpStageKey, Stage> {
+  if (stages.ready.state !== 'DONE' && stages.deployed.state !== 'DONE') return stages;
+  const out = { ...stages };
+  for (const key of ['review', 'plan', 'inspection'] as BpStageKey[]) {
+    if (out[key].state === 'PENDING') out[key] = { state: 'DONE', summary: '생략' };
+  }
+  return out;
 }
 
 /** 세트 구성원이 담긴 최신 심사 봉투(구성원 간 최대 id). */
