@@ -4,7 +4,7 @@ import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import AppShell from '../../components/layout/AppShell';
-import { FilterSelect, PageHeader, SearchInput } from '../../components/ui';
+import { FilterBar, FilterSelect, PageHeader } from '../../components/ui';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PersonTable from './PersonTable';
 import PersonCreateForm from './PersonCreateForm';
@@ -37,7 +37,6 @@ export default function PersonPage() {
   const [filterTeam, setFilterTeam] = useState('');
   const [filterRole, setFilterRole] = useState<PersonRole | ''>('');
   const [filterStatus, setFilterStatus] = useState<PersonStatus | ''>('');
-  const [searchInput, setSearchInput] = useState('');
   const [searchQ, setSearchQ] = useState('');
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(10);
@@ -83,7 +82,7 @@ export default function PersonPage() {
     try {
       const params: Record<string, string> = { page: String(page), size: String(size) };
       if (filterRole) params.role = filterRole;
-      if (searchQ) params.q = searchQ;
+      if (searchQ.trim()) params.q = searchQ.trim();
 
       const [pRes, cRes] = await Promise.all([
         api.get<Page<PersonResponse>>('/api/persons', { params }),
@@ -240,43 +239,40 @@ export default function PersonPage() {
           />
         )}
 
-        {/* 검색 + 필터 행 */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <form
-              onSubmit={(e) => { e.preventDefault(); setPage(0); setSearchQ(searchInput.trim()); }}
-              className="flex-1 min-w-[240px]"
-            >
-              <SearchInput
-                value={searchInput}
-                onChange={setSearchInput}
-                placeholder="이름, 연락처, 자격증으로 검색"
-              />
-            </form>
-            <FilterSelect
-              value={filterTeam}
-              onChange={setFilterTeam}
-              placeholder="소속 전체"
-              options={teams.map((t) => ({ value: t, label: t }))}
-            />
-            <FilterSelect
-              value={filterRole}
-              onChange={(v) => { setPage(0); setFilterRole(v as PersonRole | ''); }}
-              placeholder="직종 전체"
-              options={filterRoles.map((r) => ({ value: r, label: PERSON_ROLE_LABEL[r] }))}
-            />
-            <FilterSelect
-              value={filterStatus}
-              onChange={(v) => setFilterStatus(v as PersonStatus | '')}
-              placeholder="상태 전체"
-              options={[
-                { value: 'WORKING', label: PERSON_STATUS_LABEL.WORKING },
-                { value: 'VACATION', label: PERSON_STATUS_LABEL.VACATION },
-                { value: 'RETIRED', label: PERSON_STATUS_LABEL.RETIRED },
-              ]}
-            />
-          </div>
-        </div>
+        {/* 검색 + 필터 행 — 타이핑 즉시(디바운스) 서버 검색 */}
+        <FilterBar
+          search={{
+            value: searchQ,
+            onChange: (v) => { setPage(0); setSearchQ(v); },
+            placeholder: '이름, 연락처, 자격증으로 검색',
+            debounceMs: 250,
+          }}
+          activeFilterCount={[searchQ, filterTeam, filterRole, filterStatus].filter(Boolean).length}
+          onReset={() => { setPage(0); setSearchQ(''); setFilterTeam(''); setFilterRole(''); setFilterStatus(''); }}
+        >
+          <FilterSelect
+            value={filterTeam}
+            onChange={setFilterTeam}
+            placeholder="소속 전체"
+            options={teams.map((t) => ({ value: t, label: t }))}
+          />
+          <FilterSelect
+            value={filterRole}
+            onChange={(v) => { setPage(0); setFilterRole(v as PersonRole | ''); }}
+            placeholder="직종 전체"
+            options={filterRoles.map((r) => ({ value: r, label: PERSON_ROLE_LABEL[r] }))}
+          />
+          <FilterSelect
+            value={filterStatus}
+            onChange={(v) => setFilterStatus(v as PersonStatus | '')}
+            placeholder="상태 전체"
+            options={[
+              { value: 'WORKING', label: PERSON_STATUS_LABEL.WORKING },
+              { value: 'VACATION', label: PERSON_STATUS_LABEL.VACATION },
+              { value: 'RETIRED', label: PERSON_STATUS_LABEL.RETIRED },
+            ]}
+          />
+        </FilterBar>
 
         {/* 일괄 작업 */}
         {canEdit && selectedIds.size > 0 && (

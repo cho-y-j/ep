@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
 import { equipmentCategoryLabel, type EquipmentResponse } from '../../types/equipment';
 import type { CompanyResponse } from '../../types/auth';
 import Avatar from '../../components/Avatar';
+import { useTableSort } from '../../components/ui';
 
 type Props = {
   equipment: EquipmentResponse[];
@@ -23,77 +23,33 @@ function statusOf(e: EquipmentResponse): { label: string; cls: string; rank: num
 }
 
 type SortKey = 'name' | 'category' | 'site' | 'status' | 'util' | 'expiring' | 'supplier';
-type SortDir = 'asc' | 'desc';
-
-function compareBy(
-  a: EquipmentResponse, b: EquipmentResponse, key: SortKey,
-  companiesById: Map<number, CompanyResponse>
-): number {
-  const cmp = (x: string | number | null | undefined, y: string | number | null | undefined): number => {
-    if (x == null && y == null) return 0;
-    if (x == null) return 1;
-    if (y == null) return -1;
-    if (typeof x === 'number' && typeof y === 'number') return x - y;
-    return String(x).localeCompare(String(y), 'ko');
-  };
-  switch (key) {
-    case 'name': return cmp(a.vehicle_no || a.model || '', b.vehicle_no || b.model || '');
-    case 'category': return cmp(equipmentCategoryLabel(a.category), equipmentCategoryLabel(b.category));
-    case 'site': return cmp(a.current_site_name ?? '', b.current_site_name ?? '');
-    case 'status': return cmp(statusOf(a).rank, statusOf(b).rank);
-    case 'util': return cmp(a.utilization_pct ?? 0, b.utilization_pct ?? 0);
-    case 'expiring': return cmp(a.expiring_count ?? 0, b.expiring_count ?? 0);
-    case 'supplier': return cmp(
-      a.supplier_name ?? companiesById.get(a.supplier_id)?.name ?? '',
-      b.supplier_name ?? companiesById.get(b.supplier_id)?.name ?? ''
-    );
-  }
-}
 
 export default function EquipmentTable({ equipment, companiesById, showSupplierColumn, onRowClick, selfCompanyId }: Props) {
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
-
-  const sortedEquipment = useMemo(() => {
-    if (!sortKey) return equipment;
-    const arr = equipment.slice();
-    arr.sort((a, b) => {
-      const r = compareBy(a, b, sortKey, companiesById);
-      return sortDir === 'asc' ? r : -r;
-    });
-    return arr;
-  }, [equipment, sortKey, sortDir, companiesById]);
-
-  const toggleSort = (key: SortKey) => {
-    if (sortKey !== key) { setSortKey(key); setSortDir('asc'); return; }
-    if (sortDir === 'asc') { setSortDir('desc'); return; }
-    setSortKey(null);
-  };
-
-  const SortHeader = ({ k, label }: { k: SortKey; label: string }) => {
-    const active = sortKey === k;
-    const arrow = !active ? '↕' : sortDir === 'asc' ? '↑' : '↓';
-    return (
-      <button type="button" onClick={() => toggleSort(k)}
-        className={`inline-flex items-center gap-1 font-medium ${active ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
-        <span>{label}</span>
-        <span className={`text-[10px] ${active ? 'text-brand-600' : 'text-slate-300'}`}>{arrow}</span>
-      </button>
-    );
-  };
+  const sort = useTableSort<SortKey>();
+  const sortedEquipment = sort.apply(equipment, (e, key) => {
+    switch (key) {
+      case 'name': return e.vehicle_no || e.model || '';
+      case 'category': return equipmentCategoryLabel(e.category);
+      case 'site': return e.current_site_name ?? '';
+      case 'status': return statusOf(e).rank;
+      case 'util': return e.utilization_pct ?? 0;
+      case 'expiring': return e.expiring_count ?? 0;
+      case 'supplier': return e.supplier_name ?? companiesById.get(e.supplier_id)?.name ?? '';
+    }
+  });
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 border-b border-slate-200">
           <tr className="text-left text-slate-500">
-            <th className="px-4 py-3"><SortHeader k="name" label="장비명 / 장비코드" /></th>
-            <th className="px-4 py-3"><SortHeader k="category" label="종류" /></th>
-            <th className="px-4 py-3"><SortHeader k="site" label="현장(위치)" /></th>
-            <th className="px-4 py-3"><SortHeader k="status" label="상태" /></th>
-            <th className="px-4 py-3"><SortHeader k="util" label="가동률" /></th>
-            <th className="px-4 py-3 text-center"><SortHeader k="expiring" label="서류 위험" /></th>
-            {showSupplierColumn && <th className="px-4 py-3"><SortHeader k="supplier" label="공급사" /></th>}
+            <th className="px-4 py-3">{sort.header('name', '장비명 / 장비코드')}</th>
+            <th className="px-4 py-3">{sort.header('category', '종류')}</th>
+            <th className="px-4 py-3">{sort.header('site', '현장(위치)')}</th>
+            <th className="px-4 py-3">{sort.header('status', '상태')}</th>
+            <th className="px-4 py-3">{sort.header('util', '가동률')}</th>
+            <th className="px-4 py-3 text-center">{sort.header('expiring', '서류 위험')}</th>
+            {showSupplierColumn && <th className="px-4 py-3">{sort.header('supplier', '공급사')}</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">

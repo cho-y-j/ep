@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import AppShell from '../../components/layout/AppShell';
-import { PageHeader, FilterBar } from '../../components/ui';
+import { PageHeader, FilterBar, useTableSort } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import type { SiteResponse } from '../../types/site';
@@ -225,9 +225,8 @@ function MyDocsExpiryView() {
   const [docTypeId, setDocTypeId] = useState<number>(Number(searchParams.get('doc')) || 0);
   const [q, setQ] = useState(searchParams.get('q') || '');
   const [addDialog, setAddDialog] = useState<null | 'EQUIPMENT' | 'PERSON'>(null);
-  type GroupSortKey = 'type' | 'name' | 'docs' | 'status';
-  const [sortKey, setSortKey] = useState<GroupSortKey | null>(null);
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  type GroupSortKey = 'type' | 'biz' | 'name' | 'docs' | 'status';
+  const groupSort = useTableSort<GroupSortKey>();
   const [previewDoc, setPreviewDoc] = useState<DocRow | null>(null);
   // "만료일 입력" 진입이면 다이얼로그가 만료일 입력에 바로 포커스.
   const [previewFocusExpiry, setPreviewFocusExpiry] = useState(false);
@@ -437,37 +436,16 @@ function MyDocsExpiryView() {
     return 1;
   };
 
-  const sortedGroups = (() => {
-    if (!sortKey) return grouped;
-    const arr = [...grouped];
-    arr.sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === 'type') cmp = typeLabelOf(a).localeCompare(typeLabelOf(b), 'ko');
-      else if (sortKey === 'name') cmp = (a.owner_name ?? '').localeCompare(b.owner_name ?? '', 'ko');
-      else if (sortKey === 'docs') cmp = a.rows.length - b.rows.length;
-      else cmp = severityOf(a.rows) - severityOf(b.rows);
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-    return arr;
-  })();
-
-  const toggleSort = (key: GroupSortKey) => {
-    if (sortKey !== key) { setSortKey(key); setSortDir('asc'); return; }
-    if (sortDir === 'asc') { setSortDir('desc'); return; }
-    setSortKey(null);
-  };
-
-  const SortHead = ({ k, label }: { k: GroupSortKey; label: string }) => {
-    const active = sortKey === k;
-    const arrow = !active ? '↕' : sortDir === 'asc' ? '↑' : '↓';
-    return (
-      <button type="button" onClick={() => toggleSort(k)}
-        className={`inline-flex items-center gap-1 font-semibold ${active ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
-        <span>{label}</span>
-        <span className={`text-[10px] ${active ? 'text-brand-600' : 'text-slate-300'}`}>{arrow}</span>
-      </button>
-    );
-  };
+  const sortedGroups = groupSort.apply(grouped, (g, key) => {
+    switch (key) {
+      case 'type': return typeLabelOf(g);
+      case 'biz': return g.owner_type === 'EQUIPMENT'
+        ? (g.owner_external ? (g.owner_business_name ?? '협력사') : '내부') : null;
+      case 'name': return g.owner_name ?? '';
+      case 'docs': return g.rows.length;
+      case 'status': return severityOf(g.rows);
+    }
+  });
 
   const docFilterCount =
     (filter !== 'all' ? 1 : 0) + (equipType ? 1 : 0) + (docTypeId ? 1 : 0) +
@@ -611,12 +589,12 @@ function MyDocsExpiryView() {
         <div className="card p-0 overflow-hidden">
           <div className="flex items-center gap-3 px-4 sm:px-5 py-2.5 bg-slate-50 border-b border-slate-200 text-xs">
             <span className="w-4 shrink-0" />
-            <span className="w-28 shrink-0"><SortHead k="type" label="종류" /></span>
-            <span className="w-24 shrink-0 font-semibold text-slate-500">사업자</span>
-            <span className="flex-1 min-w-0"><SortHead k="name" label="이름" /></span>
+            <span className="w-28 shrink-0">{groupSort.header('type', '종류')}</span>
+            <span className="w-24 shrink-0">{groupSort.header('biz', '사업자')}</span>
+            <span className="flex-1 min-w-0">{groupSort.header('name', '이름')}</span>
             <div className="flex items-center gap-3 shrink-0">
-              <span className="w-20 flex justify-end"><SortHead k="docs" label="서류" /></span>
-              <span className="w-28 flex justify-center"><SortHead k="status" label="상태" /></span>
+              <span className="w-20 flex justify-end">{groupSort.header('docs', '서류')}</span>
+              <span className="w-28 flex justify-center">{groupSort.header('status', '상태')}</span>
               <span className="w-20" />
             </div>
           </div>
@@ -1274,25 +1252,37 @@ function SupplementListTable({
   canCancel: (s: SupplementResponse) => boolean;
   showFix?: boolean;
 }) {
+  type Key = 'resource' | 'doc' | 'supplier' | 'reason' | 'status' | 'created';
+  const sort = useTableSort<Key>();
   if (rows.length === 0) {
     return <div className="card p-6 text-center text-sm text-slate-400">{emptyMsg}</div>;
   }
+  const sorted = sort.apply(rows, (s, key) => {
+    switch (key) {
+      case 'resource': return s.target_owner_name ?? `#${s.target_owner_id}`;
+      case 'doc': return s.document_type_name ?? `#${s.document_type_id}`;
+      case 'supplier': return s.target_supplier_company_name;
+      case 'reason': return s.reason || null;
+      case 'status': return SUPPLEMENT_STATUS_LABEL[s.status];
+      case 'created': return s.created_at;
+    }
+  });
   return (
     <div className="card overflow-x-auto p-0">
       <table className="w-full text-sm">
         <thead className="border-b border-slate-200 bg-slate-50 text-left text-slate-500">
           <tr>
-            <th className="px-4 py-3 font-semibold">자원</th>
-            <th className="px-4 py-3 font-semibold">서류</th>
-            <th className="px-4 py-3 font-semibold">공급사</th>
-            <th className="px-4 py-3 font-semibold">사유</th>
-            <th className="px-4 py-3 font-semibold">상태</th>
-            <th className="px-4 py-3 font-semibold">생성</th>
+            <th className="px-4 py-3">{sort.header('resource', '자원')}</th>
+            <th className="px-4 py-3">{sort.header('doc', '서류')}</th>
+            <th className="px-4 py-3">{sort.header('supplier', '공급사')}</th>
+            <th className="px-4 py-3">{sort.header('reason', '사유')}</th>
+            <th className="px-4 py-3">{sort.header('status', '상태')}</th>
+            <th className="px-4 py-3">{sort.header('created', '생성')}</th>
             <th className="px-4 py-3 font-semibold">액션</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {rows.map((s) => (
+          {sorted.map((s) => (
             <tr key={s.id}>
               <td className="px-4 py-3 text-slate-900">{s.target_owner_name ?? `#${s.target_owner_id}`}</td>
               <td className="px-4 py-3 text-slate-700">{s.document_type_name ?? `#${s.document_type_id}`}</td>

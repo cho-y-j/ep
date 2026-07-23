@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
-import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
+import { PageHeader, FilterBar, FilterSelect, useTableSort } from '../../components/ui';
 import MoneyInput from '../../components/MoneyInput';
 import { useAuth } from '../auth/AuthContext';
 import { FD_STATUS_LABEL, type FieldDeploymentResponse, type ResourceType } from '../../types/fieldDeployment';
@@ -99,6 +99,28 @@ export default function FieldDeploymentSupplierPage() {
   const activeFilterCount = [search, bpFilter].filter(Boolean).length;
   const resetFilters = () => { setSearch(''); setBpFilter(''); };
 
+  const candSort = useTableSort<'resource' | 'bp' | 'daily' | 'monthly' | 'sentAt' | 'quote'>();
+  const sortedCandidates = candSort.apply(filtered, (r, key) => {
+    switch (key) {
+      case 'resource': return r.resource_label;
+      case 'bp': return r.bp_company_name;
+      case 'daily': return r.daily_price;
+      case 'monthly': return r.monthly_price;
+      case 'sentAt': return r.sent_at;
+      case 'quote': return r.quotation_request_id;
+    }
+  });
+  const sentSort = useTableSort<'resource' | 'bp' | 'start' | 'rate' | 'status'>();
+  const sortedSent = sentSort.apply(sent, (r, key) => {
+    switch (key) {
+      case 'resource': return r.resource_label;
+      case 'bp': return r.bp_company_name;
+      case 'start': return r.start_date;
+      case 'rate': return r.daily_price ?? r.monthly_price ?? r.ot_price ?? r.night_price;
+      case 'status': return FD_STATUS_LABEL[r.status];
+    }
+  });
+
   const selectedRows = useMemo(() => candidates.filter((c) => selected.has(c.id)), [candidates, selected]);
 
   const toggle = (id: number) => setSelected((prev) => {
@@ -157,16 +179,16 @@ export default function FieldDeploymentSupplierPage() {
                     <th className="px-3 py-2 w-9">
                       <input type="checkbox" checked={allFilteredSelected} onChange={toggleAllFiltered} />
                     </th>
-                    <th className="px-3 py-2 font-semibold">자원</th>
-                    <th className="px-3 py-2 font-semibold">받은 BP사</th>
-                    <th className="px-3 py-2 font-semibold text-right">일대</th>
-                    <th className="px-3 py-2 font-semibold text-right">월대</th>
-                    <th className="px-3 py-2 font-semibold">발송 시점</th>
-                    <th className="px-3 py-2 font-semibold">견적</th>
+                    <th className="px-3 py-2">{candSort.header('resource', '자원')}</th>
+                    <th className="px-3 py-2">{candSort.header('bp', '받은 BP사')}</th>
+                    <th className="px-3 py-2 text-right">{candSort.header('daily', '일대')}</th>
+                    <th className="px-3 py-2 text-right">{candSort.header('monthly', '월대')}</th>
+                    <th className="px-3 py-2">{candSort.header('sentAt', '발송 시점')}</th>
+                    <th className="px-3 py-2">{candSort.header('quote', '견적')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filtered.map((r) => (
+                  {sortedCandidates.map((r) => (
                     <tr key={r.id} className={selected.has(r.id) ? 'bg-brand-50/40' : 'cursor-pointer'}
                         onClick={() => toggle(r.id)}>
                       <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
@@ -213,16 +235,16 @@ export default function FieldDeploymentSupplierPage() {
               <table className="w-full text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-left text-slate-500">
                   <tr>
-                    <th className="px-3 py-2 font-semibold">자원</th>
-                    <th className="px-3 py-2 font-semibold">BP사</th>
-                    <th className="px-3 py-2 font-semibold">시작일</th>
-                    <th className="px-3 py-2 font-semibold">단가 (일/월/OT/야)</th>
-                    <th className="px-3 py-2 font-semibold">상태</th>
+                    <th className="px-3 py-2">{sentSort.header('resource', '자원')}</th>
+                    <th className="px-3 py-2">{sentSort.header('bp', 'BP사')}</th>
+                    <th className="px-3 py-2">{sentSort.header('start', '시작일')}</th>
+                    <th className="px-3 py-2">{sentSort.header('rate', '단가 (일/월/OT/야)')}</th>
+                    <th className="px-3 py-2">{sentSort.header('status', '상태')}</th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {sent.map((r) => (
+                  {sortedSent.map((r) => (
                     <tr key={r.id}>
                       <td className="px-3 py-2 font-semibold">
                         <span className="text-[10px] text-slate-500 mr-1">{r.resource_type === 'EQUIPMENT' ? '장비' : '인원'}</span>

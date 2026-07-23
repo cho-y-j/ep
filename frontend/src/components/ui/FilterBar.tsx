@@ -6,6 +6,8 @@ type Props = {
     value: string;
     placeholder?: string;
     onChange: (v: string) => void;
+    /** 서버 검색 등 비용 큰 필터용 지연(SearchInput debounceMs 전달). */
+    debounceMs?: number;
   };
   /** 필터 컨트롤(FilterSelect·select 등). */
   children?: ReactNode;
@@ -37,6 +39,7 @@ export default function FilterBar({ search, children, sort, trailing, activeFilt
           value={search.value}
           onChange={search.onChange}
           placeholder={search.placeholder}
+          debounceMs={search.debounceMs}
           className="flex-1 min-w-[200px]"
         />
       )}

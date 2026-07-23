@@ -219,6 +219,8 @@ export default function EquipmentPage() {
             placeholder: '장비명, 차량번호, 모델로 검색',
             onChange: setSearchInput,
           }}
+          activeFilterCount={[searchInput, filterCategory].filter(Boolean).length}
+          onReset={() => { setSearchInput(''); setFilterCategory(''); }}
         >
           <select
             value={filterCategory}

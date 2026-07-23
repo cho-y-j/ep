@@ -10,3 +10,5 @@ export { default as DataTable } from './DataTable';
 export { default as StatusBadge } from './StatusBadge';
 export { default as EmptyState } from './EmptyState';
 export type { Column } from './DataTable';
+export { useTableSort, compareValues } from './tableSort';
+export type { SortDir } from './tableSort';

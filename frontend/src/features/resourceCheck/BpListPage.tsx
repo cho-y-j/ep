@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
-import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
+import { PageHeader, FilterBar, FilterSelect, compareValues } from '../../components/ui';
 import { useAuth } from '../auth/AuthContext';
 import IssueResourceCheckDialog from './IssueResourceCheckDialog';
 import SupplierResourcePickerDialog, { type PickedResource } from './SupplierResourcePickerDialog';
@@ -27,6 +27,8 @@ export default function ResourceCheckBpList() {
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  // 카드 목록이라 헤더 정렬 대신 정렬 셀렉트(기본 = 서버 순서).
+  const [sortSel, setSortSel] = useState<'' | 'due' | 'type' | 'status' | 'owner'>('');
   // 공급사 발행: 자원 선택 → IssueResourceCheckDialog (계획서 없이 발행 — BpReceivedReviewsPage 경로 재사용).
   // 재검사 통보는 initialTypes 로 반려 건의 종류만 프리필해 같은 다이얼로그를 연다.
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -154,6 +156,14 @@ export default function ResourceCheckBpList() {
     }
     return true;
   });
+  if (sortSel) {
+    filtered.sort((a, b) => compareValues(
+      sortSel === 'due' ? a.due_date : sortSel === 'type' ? CHECK_TYPE_LABEL[a.check_type]
+        : sortSel === 'status' ? CHECK_STATUS_LABEL[a.status] : a.owner_label,
+      sortSel === 'due' ? b.due_date : sortSel === 'type' ? CHECK_TYPE_LABEL[b.check_type]
+        : sortSel === 'status' ? CHECK_STATUS_LABEL[b.status] : b.owner_label,
+    ));
+  }
   const activeFilterCount = [q, statusFilter, typeFilter].filter(Boolean).length;
   const resetFilters = () => { setQ(''); setStatusFilter(''); setTypeFilter(''); };
 
@@ -268,6 +278,16 @@ export default function ResourceCheckBpList() {
         search={{ value: q, onChange: setQ, placeholder: '종류·자원·공급사 검색' }}
         activeFilterCount={activeFilterCount}
         onReset={resetFilters}
+        sort={
+          <select value={sortSel} onChange={(e) => setSortSel(e.target.value as typeof sortSel)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+            <option value="">기본 순서</option>
+            <option value="due">마감일순</option>
+            <option value="type">종류순</option>
+            <option value="status">상태순</option>
+            <option value="owner">자원명순</option>
+          </select>
+        }
       >
         <FilterSelect value={typeFilter} onChange={setTypeFilter} placeholder="종류 전체" options={TYPE_OPTIONS} />
         <FilterSelect value={statusFilter} onChange={setStatusFilter} placeholder="상태 전체" options={STATUS_OPTIONS} />

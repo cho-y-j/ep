@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import AppShell from '../../components/layout/AppShell';
-import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
+import { PageHeader, FilterBar, FilterSelect, compareValues } from '../../components/ui';
 import { api } from '../../lib/api';
 import type { CollectionSummary } from '../../types/collection';
 import type { DocumentTypeResponse } from '../../types/document';
@@ -37,6 +37,8 @@ export default function DocumentCollectionPage() {
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('');
+  // 카드 목록이라 헤더 정렬 대신 정렬 셀렉트(기본 = 서버 순서).
+  const [sortSel, setSortSel] = useState<'' | 'status' | 'progressAsc' | 'progressDesc'>('');
 
   async function reload() {
     setLoading(true);
@@ -100,6 +102,12 @@ export default function DocumentCollectionPage() {
     if (qLower && !`${r.owner_summary ?? ''} ${r.title ?? ''} ${r.recipient_name ?? ''} ${(r.supplier_names ?? []).join(' ')}`.toLowerCase().includes(qLower)) return false;
     return true;
   });
+  if (sortSel) {
+    const progress = (r: CollectionSummary) => (r.item_count > 0 ? r.uploaded_count / r.item_count : 0);
+    shownRequests.sort((a, b) => sortSel === 'status'
+      ? compareValues(a.status, b.status)
+      : (sortSel === 'progressAsc' ? 1 : -1) * compareValues(progress(a), progress(b)));
+  }
 
   function resetForm() {
     setShowNew(false); setMode('renew'); setStep('pick'); setTargets([]); setSel({}); setSuggested({});
@@ -233,6 +241,15 @@ export default function DocumentCollectionPage() {
               search={{ value: q, onChange: setQ, placeholder: '대상·제목·받는사람·협력업체 검색' }}
               activeFilterCount={[q, statusFilter, supplierFilter].filter(Boolean).length}
               onReset={() => { setQ(''); setStatusFilter(''); setSupplierFilter(''); }}
+              sort={
+                <select value={sortSel} onChange={(e) => setSortSel(e.target.value as typeof sortSel)}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  <option value="">기본 순서</option>
+                  <option value="status">상태순</option>
+                  <option value="progressAsc">진행률 낮은순</option>
+                  <option value="progressDesc">진행률 높은순</option>
+                </select>
+              }
             >
               {supplierOptions.length > 0 && (
                 <FilterSelect value={supplierFilter} onChange={setSupplierFilter} placeholder="협력업체 전체" options={supplierOptions} />

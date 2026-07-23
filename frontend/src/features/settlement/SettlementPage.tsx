@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import AppShell from '../../components/layout/AppShell';
 import CollapsibleSection from '../../components/ui/CollapsibleSection';
-import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
+import { PageHeader, FilterBar, FilterSelect, useTableSort } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatWon } from '../../lib/format';
 
@@ -296,18 +296,29 @@ function OwnerTable({ owner, onSave }: {
   owner: OwnerSettlement;
   onSave: (it: SettlementItem, wd: number | null, od: number | null) => Promise<void>;
 }) {
-  const rows = groupCombo(owner.items);
+  const sort = useTableSort<'resource' | 'site' | 'period' | 'price' | 'days' | 'amount'>();
+  // 정렬 후 조합 재묶음 — 조종원 행은 어느 순서든 매칭 장비 행 아래로 붙는다(금액·소계 불변).
+  const rows = groupCombo(sort.apply(owner.items, (it, key) => {
+    switch (key) {
+      case 'resource': return it.resource_label;
+      case 'site': return it.site_name;
+      case 'period': return it.work_period_start;
+      case 'price': return it.amount_basis === 'MONTHLY' ? it.monthly_price : it.daily_price;
+      case 'days': return it.settlement_work_days ?? it.derived_work_days;
+      case 'amount': return it.amount;
+    }
+  }));
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
           <tr>
-            <th className="px-3 py-2.5 font-semibold">자원</th>
-            <th className="px-3 py-2.5 font-semibold">현장 · 발주</th>
-            <th className="px-3 py-2.5 font-semibold">계약기간</th>
-            <th className="px-3 py-2.5 font-semibold text-right">단가</th>
-            <th className="px-3 py-2.5 font-semibold text-center">근무 / OT일수</th>
-            <th className="px-3 py-2.5 font-semibold text-right">금액</th>
+            <th className="px-3 py-2.5">{sort.header('resource', '자원')}</th>
+            <th className="px-3 py-2.5">{sort.header('site', '현장 · 발주')}</th>
+            <th className="px-3 py-2.5">{sort.header('period', '계약기간')}</th>
+            <th className="px-3 py-2.5 text-right">{sort.header('price', '단가')}</th>
+            <th className="px-3 py-2.5 text-center">{sort.header('days', '근무 / OT일수')}</th>
+            <th className="px-3 py-2.5 text-right">{sort.header('amount', '금액')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">

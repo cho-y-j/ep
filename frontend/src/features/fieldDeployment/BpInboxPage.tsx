@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
-import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
+import { PageHeader, FilterBar, FilterSelect, useTableSort } from '../../components/ui';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import type { FieldDeploymentResponse } from '../../types/fieldDeployment';
 
@@ -71,6 +71,16 @@ export default function FieldDeploymentBpInbox() {
     return groups;
   }, [filtered]);
   const singles = useMemo(() => filtered.filter((r) => r.combo_equipment_id == null), [filtered]);
+  const sort = useTableSort<'resource' | 'supplier' | 'site' | 'start' | 'note'>();
+  const sortedSingles = sort.apply(singles, (r, key) => {
+    switch (key) {
+      case 'resource': return r.resource_label;
+      case 'supplier': return r.supplier_company_name;
+      case 'site': return r.target_site_name;
+      case 'start': return r.start_date;
+      case 'note': return r.note;
+    }
+  });
 
   // 선택/일괄수락은 보이는(필터된) 단독 행 기준으로만 동작 — 조합 행은 [조합 일괄 수락] 이 담당.
   const allSelected = singles.length > 0 && singles.every((r) => selected.has(r.id));
@@ -211,16 +221,16 @@ export default function FieldDeploymentBpInbox() {
                     <input type="checkbox" checked={allSelected} onChange={toggleAll}
                            className="rounded border-slate-300" aria-label="전체 선택" />
                   </th>
-                  <th className="px-3 py-2 font-semibold">자원</th>
-                  <th className="px-3 py-2 font-semibold">공급사</th>
-                  <th className="px-3 py-2 font-semibold">희망 현장</th>
-                  <th className="px-3 py-2 font-semibold">시작</th>
-                  <th className="px-3 py-2 font-semibold">메모</th>
+                  <th className="px-3 py-2">{sort.header('resource', '자원')}</th>
+                  <th className="px-3 py-2">{sort.header('supplier', '공급사')}</th>
+                  <th className="px-3 py-2">{sort.header('site', '희망 현장')}</th>
+                  <th className="px-3 py-2">{sort.header('start', '시작')}</th>
+                  <th className="px-3 py-2">{sort.header('note', '메모')}</th>
                   <th className="px-3 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {singles.map((r) => (
+                {sortedSingles.map((r) => (
                   <tr key={r.id}>
                     <td className="px-3 py-2">
                       <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)}

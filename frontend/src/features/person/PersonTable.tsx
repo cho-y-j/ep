@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
 import { PERSON_ROLE_LABEL, PERSON_STATUS_LABEL, type PersonResponse, type PersonRole, type PersonStatus } from '../../types/person';
 import type { CompanyType } from '../../types/auth';
 import Avatar from '../../components/Avatar';
+import { useTableSort } from '../../components/ui';
 
 const SUPPLIER_TYPE_CHIP: Record<CompanyType, string> = {
   BP: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -36,32 +36,8 @@ const STATUS_CLS: Record<PersonStatus, string> = {
 };
 
 type SortKey = 'name' | 'roles' | 'supplier' | 'phone' | 'registered' | 'status' | 'docs';
-type SortDir = 'asc' | 'desc';
 
 const STATUS_ORDER: Record<PersonStatus, number> = { WORKING: 0, VACATION: 1, RETIRED: 2 };
-
-function compareBy(a: PersonResponse, b: PersonResponse, key: SortKey): number {
-  const cmp = (x: string | number | null | undefined, y: string | number | null | undefined): number => {
-    if (x == null && y == null) return 0;
-    if (x == null) return 1;
-    if (y == null) return -1;
-    if (typeof x === 'number' && typeof y === 'number') return x - y;
-    return String(x).localeCompare(String(y), 'ko');
-  };
-  switch (key) {
-    case 'name': return cmp(a.name, b.name);
-    case 'roles': {
-      const ax = a.roles?.[0] ? PERSON_ROLE_LABEL[a.roles[0] as PersonRole] : null;
-      const bx = b.roles?.[0] ? PERSON_ROLE_LABEL[b.roles[0] as PersonRole] : null;
-      return cmp(ax, bx);
-    }
-    case 'supplier': return cmp(a.supplier_name, b.supplier_name);
-    case 'phone': return cmp(a.phone, b.phone);
-    case 'registered': return cmp(a.created_at, b.created_at);
-    case 'status': return cmp(STATUS_ORDER[a.status] ?? 99, STATUS_ORDER[b.status] ?? 99);
-    case 'docs': return cmp(a.document_count ?? 0, b.document_count ?? 0);
-  }
-}
 
 export default function PersonTable({
   persons, onRowClick,
@@ -71,36 +47,18 @@ export default function PersonTable({
   const selectable = !!onToggleSelect;
   const colCount = (selectable ? 1 : 0) + 8;
 
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
-
-  const sortedPersons = useMemo(() => {
-    if (!sortKey) return persons;
-    const arr = persons.slice();
-    arr.sort((a, b) => {
-      const r = compareBy(a, b, sortKey);
-      return sortDir === 'asc' ? r : -r;
-    });
-    return arr;
-  }, [persons, sortKey, sortDir]);
-
-  const toggleSort = (key: SortKey) => {
-    if (sortKey !== key) { setSortKey(key); setSortDir('asc'); return; }
-    if (sortDir === 'asc') { setSortDir('desc'); return; }
-    setSortKey(null);
-  };
-
-  const SortHeader = ({ k, label }: { k: SortKey; label: string }) => {
-    const active = sortKey === k;
-    const arrow = !active ? '↕' : sortDir === 'asc' ? '↑' : '↓';
-    return (
-      <button type="button" onClick={() => toggleSort(k)}
-        className={`inline-flex items-center gap-1 font-medium ${active ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
-        <span>{label}</span>
-        <span className={`text-[10px] ${active ? 'text-brand-600' : 'text-slate-300'}`}>{arrow}</span>
-      </button>
-    );
-  };
+  const sort = useTableSort<SortKey>();
+  const sortedPersons = sort.apply(persons, (p, key) => {
+    switch (key) {
+      case 'name': return p.name;
+      case 'roles': return p.roles?.[0] ? PERSON_ROLE_LABEL[p.roles[0] as PersonRole] : null;
+      case 'supplier': return p.supplier_name;
+      case 'phone': return p.phone;
+      case 'registered': return p.created_at;
+      case 'status': return STATUS_ORDER[p.status] ?? 99;
+      case 'docs': return p.document_count ?? 0;
+    }
+  });
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
@@ -117,13 +75,13 @@ export default function PersonTable({
                 />
               </th>
             )}
-            <th className="px-4 py-3"><SortHeader k="name" label="이름" /></th>
-            <th className="px-4 py-3"><SortHeader k="roles" label="직종" /></th>
-            <th className="px-4 py-3"><SortHeader k="supplier" label="소속" /></th>
-            <th className="px-4 py-3"><SortHeader k="phone" label="연락처" /></th>
-            <th className="px-4 py-3"><SortHeader k="registered" label="등록일" /></th>
-            <th className="px-4 py-3"><SortHeader k="status" label="상태" /></th>
-            <th className="px-4 py-3"><SortHeader k="docs" label="첨부 서류" /></th>
+            <th className="px-4 py-3">{sort.header('name', '이름')}</th>
+            <th className="px-4 py-3">{sort.header('roles', '직종')}</th>
+            <th className="px-4 py-3">{sort.header('supplier', '소속')}</th>
+            <th className="px-4 py-3">{sort.header('phone', '연락처')}</th>
+            <th className="px-4 py-3">{sort.header('registered', '등록일')}</th>
+            <th className="px-4 py-3">{sort.header('status', '상태')}</th>
+            <th className="px-4 py-3">{sort.header('docs', '첨부 서류')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
