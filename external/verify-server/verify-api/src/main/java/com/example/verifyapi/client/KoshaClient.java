@@ -60,8 +60,8 @@ public class KoshaClient {
         log.debug("[{}] KOSHA 포털 조회 시작", requestId);
 
         if (!qrData.isReadyForVerification()) {
-            log.warn("[{}] QR 데이터 불완전: q 또는 ptSignature 누락", requestId);
-            throw new VerifyException("QR_INCOMPLETE", "QR 데이터가 불완전합니다 (q 또는 ptSignature 누락)");
+            log.warn("[{}] QR 데이터 불완전: q 누락", requestId);
+            throw new VerifyException("QR_INCOMPLETE", "QR 데이터가 불완전합니다 (q 누락)");
         }
 
         try {
@@ -71,10 +71,10 @@ public class KoshaClient {
                     .build(true)
                     .toUri();
 
-            // 요청 본문 생성
+            // 요청 본문 생성 (ptSignature 없는 q 단독 QR 은 빈 문자열 — 실측상 조회 성공)
             Map<String, String> requestBody = new HashMap<>();
             requestBody.put("q", qrData.getQ());
-            requestBody.put("ptSignature", qrData.getPtSignature());
+            requestBody.put("ptSignature", qrData.getPtSignature() != null ? qrData.getPtSignature() : "");
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);

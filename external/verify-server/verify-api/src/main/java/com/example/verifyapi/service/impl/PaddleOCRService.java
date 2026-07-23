@@ -43,10 +43,19 @@ public class PaddleOCRService implements OCRService {
     private final ObjectMapper objectMapper;
     private final String baseUrl;
 
-    // GoogleVisionOCRService 와 동일한 파싱 규칙 (KOSHA 비교 필드: name/birthDate/registrationNumber)
-    private static final Pattern NAME_PATTERN = Pattern.compile("(?:성명|이름|성 명)[:\\s]*([가-힣]{2,4}|[A-Za-z\\s]+)");
-    private static final Pattern BIRTH_PATTERN = Pattern.compile("(?:생년월일|생년|생일)[:\\s]*(\\d{4})[.\\-/]?(\\d{2})[.\\-/]?(\\d{2})");
+    // GoogleVisionOCRService 의 파싱 규칙 + paddle 저해상 오인식 내성 (KOSHA 비교 필드: name/birthDate/registrationNumber)
+    // - 이름 라벨: 이수증 카드 실서식 "이 름" 포함
+    // - 생년월일 라벨: 저해상 실측 오인식 "병년월일" 등 첫 글자 변형 허용
+    private static final Pattern NAME_PATTERN = Pattern.compile("(?:성\\s?명|이\\s?름)[:\\s]*([가-힣]{2,4}|[A-Za-z\\s]+)");
+    private static final Pattern BIRTH_PATTERN = Pattern.compile("(?:[생병][년넌]월일|생년|생일)[:\\s]*(\\d{4})[.\\-/]?(\\d{2})[.\\-/]?(\\d{2})");
     private static final Pattern REG_NUM_PATTERN = Pattern.compile("(?:등록번호|이수번호|증서번호|번호)[:\\s]*([A-Z0-9\\-]+)");
+
+    // 라벨 유실(오인식) 대비 값 패턴 폴백 — 후보가 1개로 유일할 때만 채택 (모호하면 미추출, 오탐 금지)
+    private static final Pattern DATE_VALUE_PATTERN = Pattern.compile("(\\d{4})[.\\-/](\\d{1,2})[.\\-/](\\d{1,2})");
+    // KOSHA 등록번호 서식: 연도-기관-일련 (예: 2023-171-01629). 끝 일련 4~6자리라 날짜(일 1~2자리)와 구분됨
+    private static final Pattern REG_NUM_VALUE_PATTERN = Pattern.compile("\\b(\\d{4}-\\d{1,4}-\\d{4,6})\\b");
+    /** 값 패턴 폴백에서 생년월일로 인정할 최소 경과 연수 (교육일자/발급일자와 구분) */
+    private static final int MIN_BIRTH_YEARS_AGO = 14;
 
     public PaddleOCRService(RestTemplate restTemplate, String baseUrl) {
         this.restTemplate = restTemplate;
@@ -141,15 +150,70 @@ public class PaddleOCRService implements OCRService {
             String birthDate = birthMatcher.group(1) + birthMatcher.group(2) + birthMatcher.group(3);
             data.setBirthDate(birthDate);
             log.debug("[{}] 생년월일 추출: {}", requestId, data.getBirthDate());
+        } else {
+            String fallback = findBirthDateByValuePattern(fullText);
+            if (fallback != null) {
+                data.setBirthDate(fallback);
+                log.debug("[{}] 생년월일 추출 (값 패턴 폴백): {}", requestId, fallback);
+            }
         }
 
         Matcher regMatcher = REG_NUM_PATTERN.matcher(fullText);
         if (regMatcher.find()) {
             data.setRegistrationNumber(regMatcher.group(1).trim());
             log.debug("[{}] 등록번호 추출: {}", requestId, data.getRegistrationNumber());
+        } else {
+            String fallback = findRegistrationNumberByValuePattern(fullText);
+            if (fallback != null) {
+                data.setRegistrationNumber(fallback);
+                log.debug("[{}] 등록번호 추출 (값 패턴 폴백): {}", requestId, fallback);
+            }
         }
 
         log.info("[{}] Paddle OCR 파싱 결과: {}", requestId, data);
         return data;
+    }
+
+    /**
+     * 라벨 없이 날짜 값 패턴만으로 생년월일 후보 탐색.
+     * 최소 {@value #MIN_BIRTH_YEARS_AGO}년 이전 연도만 인정해 교육일자/발급일자를 배제하고,
+     * 유일 후보일 때만 반환한다 (모호하면 null — 오탐 금지).
+     */
+    private String findBirthDateByValuePattern(String fullText) {
+        int maxBirthYear = java.time.LocalDate.now().getYear() - MIN_BIRTH_YEARS_AGO;
+        String candidate = null;
+        Matcher m = DATE_VALUE_PATTERN.matcher(fullText);
+        while (m.find()) {
+            int year = Integer.parseInt(m.group(1));
+            int month = Integer.parseInt(m.group(2));
+            int day = Integer.parseInt(m.group(3));
+            if (year < 1900 || year > maxBirthYear || month < 1 || month > 12 || day < 1 || day > 31) {
+                continue;
+            }
+            String normalized = String.format("%04d%02d%02d", year, month, day);
+            if (candidate == null) {
+                candidate = normalized;
+            } else if (!candidate.equals(normalized)) {
+                return null; // 후보 복수 → 모호 → 미추출
+            }
+        }
+        return candidate;
+    }
+
+    /**
+     * 라벨 없이 KOSHA 등록번호 값 패턴만으로 후보 탐색. 유일 후보일 때만 반환 (모호하면 null).
+     */
+    private String findRegistrationNumberByValuePattern(String fullText) {
+        String candidate = null;
+        Matcher m = REG_NUM_VALUE_PATTERN.matcher(fullText);
+        while (m.find()) {
+            String value = m.group(1);
+            if (candidate == null) {
+                candidate = value;
+            } else if (!candidate.equals(value)) {
+                return null; // 후보 복수 → 모호 → 미추출
+            }
+        }
+        return candidate;
     }
 }

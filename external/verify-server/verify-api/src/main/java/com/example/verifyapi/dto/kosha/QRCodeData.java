@@ -41,8 +41,13 @@ public class QRCodeData {
         this.url = url;
     }
 
+    /**
+     * KOSHA 조회 가능 여부.
+     * 2026-07 실측: 신규 포털(cobedu) selectTrneInfo 는 q 단독으로 조회 성공 —
+     * QR 랜딩이 SPA 로 바뀌어 ptSignature 를 HTML 에서 얻을 수 없는 경우가 있어 q 만 필수로 한다.
+     */
     public boolean isReadyForVerification() {
-        return q != null && !q.isBlank() && ptSignature != null && !ptSignature.isBlank();
+        return q != null && !q.isBlank();
     }
 
     @Override

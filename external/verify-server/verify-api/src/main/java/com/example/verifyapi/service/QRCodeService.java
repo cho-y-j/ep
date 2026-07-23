@@ -12,7 +12,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.awt.image.WritableRaster;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -32,6 +35,11 @@ import java.util.*;
 public class QRCodeService {
 
     private static final Logger log = LoggerFactory.getLogger(QRCodeService.class);
+
+    /** 업스케일 폴백 시 결과 이미지 한 변 최대 크기 (메모리 보호 — 큰 사진은 업스케일 불필요) */
+    private static final int MAX_UPSCALE_SIDE = 4096;
+    /** 이진화 고정 임계값 (562x820 저해상 실측: 128 성공, Otsu 자동값 164 실패) */
+    private static final int BINARIZE_THRESHOLD = 128;
 
     private final Map<DecodeHintType, Object> hints;
 
@@ -110,7 +118,84 @@ public class QRCodeService {
             return result;
         }
 
+        // 7. 전처리 폴백 체인 (저해상/저품질 업로드 대응)
+        result = tryPreprocessedQR(image, requestId);
+        if (result != null) {
+            return result;
+        }
+
         return null;
+    }
+
+    /**
+     * 전처리 폴백 체인: 원본/영역 시도에서 QR을 못 찾은 경우
+     * (a) 2배/3배 바이큐빅 업스케일 → (b) 그레이스케일+이진화(±2배 업스케일) 순으로 재시도
+     *
+     * 562x820 저해상 저장본 실측: 원본 미검출 → 업스케일 x2 즉시 검출.
+     * 더 열화된 사본(x0.7)은 x3에서만 검출되어 x3까지 시도한다.
+     */
+    private String tryPreprocessedQR(BufferedImage image, String requestId) {
+        int maxSide = Math.max(image.getWidth(), image.getHeight());
+
+        // (a) 업스케일 — 저해상 이미지의 QR 모듈 해상도 확보
+        for (double factor : new double[]{2.0, 3.0}) {
+            if (maxSide * factor > MAX_UPSCALE_SIDE) {
+                continue;
+            }
+            String result = decodeQR(upscale(image, factor));
+            if (result != null) {
+                log.debug("[{}] 업스케일 x{} 후 QR 발견", requestId, factor);
+                return result;
+            }
+        }
+
+        // (b) 그레이스케일+고정 임계 이진화 — 흐릿한 회색 모듈/저대비 대응
+        BufferedImage binarized = binarize(image, BINARIZE_THRESHOLD);
+        String result = decodeQR(binarized);
+        if (result != null) {
+            log.debug("[{}] 이진화 후 QR 발견", requestId);
+            return result;
+        }
+        if (maxSide * 2.0 <= MAX_UPSCALE_SIDE) {
+            result = decodeQR(upscale(binarized, 2.0));
+            if (result != null) {
+                log.debug("[{}] 이진화+업스케일 x2 후 QR 발견", requestId);
+                return result;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 바이큐빅 보간 업스케일
+     */
+    private BufferedImage upscale(BufferedImage src, double factor) {
+        int newWidth = (int) Math.round(src.getWidth() * factor);
+        int newHeight = (int) Math.round(src.getHeight() * factor);
+        BufferedImage out = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = out.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.drawImage(src, 0, 0, newWidth, newHeight, null);
+        g.dispose();
+        return out;
+    }
+
+    /**
+     * 그레이스케일 변환 후 고정 임계값 이진화
+     */
+    private BufferedImage binarize(BufferedImage src, int threshold) {
+        BufferedImage gray = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D g = gray.createGraphics();
+        g.drawImage(src, 0, 0, null);
+        g.dispose();
+        WritableRaster raster = gray.getRaster();
+        for (int y = 0; y < gray.getHeight(); y++) {
+            for (int x = 0; x < gray.getWidth(); x++) {
+                raster.setSample(x, y, 0, raster.getSample(x, y, 0) < threshold ? 0 : 255);
+            }
+        }
+        return gray;
     }
 
     /**
