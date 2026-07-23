@@ -4,8 +4,10 @@ import com.skep.common.ApiException;
 import com.skep.compliance.ComplianceOrder;
 import com.skep.compliance.ComplianceOrderService;
 import com.skep.compliance.ComplianceTargetType;
+import com.skep.document.DocumentReviewItemRepository;
 import com.skep.document.OwnerType;
 import com.skep.equipment.Equipment;
+import com.skep.equipment.EquipmentRepository;
 import com.skep.equipment.EquipmentService;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
@@ -20,6 +22,7 @@ import com.skep.safety.InspectionStatus;
 import com.skep.safety.InspectionTarget;
 import com.skep.safety.SafetyInspectionRepository;
 import com.skep.security.AuthenticatedUser;
+import com.skep.user.Role;
 import com.skep.workplan.WorkPlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -47,18 +50,29 @@ import java.util.stream.Collectors;
 public class DeployCheckService {
 
     private final EquipmentService equipmentService;
+    private final EquipmentRepository equipmentRepo;
     private final PersonService personService;
     private final PersonRepository personRepo;
     private final WorkPlanService workPlanService;
     private final ResourceCheckRequestRepository resourceChecks;
     private final SafetyInspectionRepository safetyInspections;
     private final ComplianceOrderService complianceOrders;
+    private final DocumentReviewItemRepository reviewItemRepo;
 
     @Transactional(readOnly = true)
     public DeployCheckResponse check(String ownerTypeRaw, Long ownerId, Long siteId, AuthenticatedUser actor) {
         OwnerType ownerType = parseOwnerType(ownerTypeRaw);
         // 접근권한 + 존재 검증 — 기존 자원 스코프 그대로.
-        if (ownerType == OwnerType.EQUIPMENT) {
+        // V96 미러(DocumentService.ensureCanAccess): 사이트 참여 전이라도 BP 앞 심사 봉투에 담긴 자원은
+        // 서류 열람이 허용됨 — 같은 근거로 파생 판정(deploy-check)도 허용. 그 외(크로스테넌트·404)는 기존 그대로.
+        // (get() 의 403 을 잡아 우회하면 조인된 트랜잭션이 rollback-only 로 오염되므로 grant 를 먼저 판정한다.)
+        boolean bpReviewGrant = actor.role() == Role.BP && actor.companyId() != null
+                && reviewItemRepo.existsForBpAndOwner(actor.companyId(), ownerType, ownerId);
+        if (bpReviewGrant) {
+            boolean exists = ownerType == OwnerType.EQUIPMENT
+                    ? equipmentRepo.existsById(ownerId) : personRepo.existsById(ownerId);
+            if (!exists) throw ApiException.notFound("RESOURCE_NOT_FOUND", "대상 자원 없음");
+        } else if (ownerType == OwnerType.EQUIPMENT) {
             equipmentService.get(ownerId, actor);
         } else {
             personService.get(ownerId, actor);

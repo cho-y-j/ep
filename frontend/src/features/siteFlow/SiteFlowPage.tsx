@@ -57,6 +57,8 @@ export default function SiteFlowPage() {
   const [checkTarget, setCheckTarget] = useState<CheckTarget | null>(null);
   // 투입 준비 뱃지 — 요청 대기 세트 head 의 deploy-check(기존 판정 그대로). key = set.key.
   const [deployCheckBySet, setDeployCheckBySet] = useState<Map<string, DeployCheckResult>>(new Map());
+  // 검사 게이트 보강 — '검사 미통보' 세트 구성원의 deploy-check CHECK 게이트(공급사 발행·승인분 포함). key = ownerKey.
+  const [checkGates, setCheckGates] = useState<Map<string, boolean>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -78,21 +80,63 @@ export default function SiteFlowPage() {
     return () => { cancelled = true; };
   }, [reloadKey]);
 
-  const idx: BpIndexes = useMemo(
+  const baseIdx: BpIndexes = useMemo(
     () => buildIndexes(reviews, checks, deployments),
     [reviews, checks, deployments],
   );
+  // 검사 게이트(deploy-check) 보강본 — 게이트 로드 전엔 baseIdx 그대로(순수 BP 발행분 판정).
+  const idx: BpIndexes = useMemo(
+    () => ({ ...baseIdx, checkGateByOwner: checkGates }),
+    [baseIdx, checkGates],
+  );
 
-  // 계획서 세트 + 심사만 수신(계획서 없음) 세트 합성 — 전부 클라이언트 조합.
-  const planSets = useMemo(() => plans.flatMap((p) => buildPlanSets(p, idx)), [plans, idx]);
-  const reviewSets = useMemo(() => {
+  const plannedOwnerKeys = useMemo(() => {
     const planned = new Set<string>();
     for (const p of plans) {
       p.equipment.forEach((e) => planned.add(ownerKey('EQUIPMENT', e.equipment_id)));
       p.persons.forEach((x) => planned.add(ownerKey('PERSON', x.person_id)));
     }
-    return buildReviewSets(reviews, planned, idx);
-  }, [plans, reviews, idx]);
+    return planned;
+  }, [plans]);
+
+  // 계획서 세트 + 심사만 수신(계획서 없음) 세트 합성 — 전부 클라이언트 조합.
+  const planSets = useMemo(() => plans.flatMap((p) => buildPlanSets(p, idx)), [plans, idx]);
+  const reviewSets = useMemo(
+    () => buildReviewSets(reviews, plannedOwnerKeys, idx),
+    [reviews, plannedOwnerKeys, idx],
+  );
+
+  // '검사 미통보' 세트 구성원만 deploy-check 조회 — CHECK 게이트(반입검사·검진·교육 승인) 통과 여부.
+  // V122: 공급사가 발행·승인한 검사는 bp-list 에 없어 미통보로 오표시 — 자원 스코프 403/404 는 생략(보강 안 함).
+  useEffect(() => {
+    const baseSets = [
+      ...plans.flatMap((p) => buildPlanSets(p, baseIdx)),
+      ...buildReviewSets(reviews, plannedOwnerKeys, baseIdx),
+    ];
+    const targets = new Map<string, { path: 'equipment' | 'person'; id: number }>();
+    for (const s of baseSets) {
+      if (s.stages.inspection.summary !== '검사 미통보') continue;
+      for (const m of s.members) {
+        targets.set(ownerKey(m.owner_type, m.owner_id), {
+          path: m.owner_type === 'EQUIPMENT' ? 'equipment' : 'person',
+          id: m.owner_id,
+        });
+      }
+    }
+    if (targets.size === 0) { setCheckGates(new Map()); return; }
+    let cancelled = false;
+    void Promise.all(Array.from(targets.entries()).map(([key, t]) =>
+      api.get<DeployCheckResult>(`/api/resources/${t.path}/${t.id}/deploy-check`)
+        .then((res) => [key, !res.data.blocks.some((b) => b.kind === 'CHECK')] as const)
+        .catch(() => null),
+    )).then((results) => {
+      if (cancelled) return;
+      const map = new Map<string, boolean>();
+      for (const row of results) if (row) map.set(row[0], row[1]);
+      setCheckGates(map);
+    });
+    return () => { cancelled = true; };
+  }, [plans, reviews, plannedOwnerKeys, baseIdx]);
 
   // URL 쿼리 = 필터 상태(공유 가능한 링크) — 자원 현황(공급사) 보드와 동일 패턴.
   const q = params.get('q') ?? '';

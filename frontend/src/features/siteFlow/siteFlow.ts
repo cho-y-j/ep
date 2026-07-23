@@ -89,6 +89,12 @@ export type BpIndexes = {
   checksByOwner: Map<string, ResourceCheckResponse[]>;
   /** ownerKey → 최신 투입 요청 행. */
   deployByOwner: Map<string, FieldDeploymentResponse>;
+  /**
+   * ownerKey → deploy-check(4게이트)의 CHECK 게이트 통과 여부(true = 반입검사·검진·교육 전부 APPROVED).
+   * V122 이후 공급사도 검사를 발행·승인하는데 그 행은 BP 발행 목록(bp-list)에 없어 "미통보"로 오표시 —
+   * 자원 스코프를 지키는 deploy-check(BP 는 자기 현장 참여 자원만 200, 그 외 403)로 보강한다. 페이지가 채움.
+   */
+  checkGateByOwner?: Map<string, boolean>;
 };
 
 export function buildIndexes(
@@ -194,7 +200,15 @@ function planStage(status: WorkPlanStatus | null): Stage {
 /** 검사 — BP 가 발행한 점검(자기 발행분, 종류별 최신 건) 합성. */
 function inspectionStage(members: BpMember[], idx: BpIndexes): Stage {
   const rows = members.flatMap((m) => idx.checksByOwner.get(ownerKey(m.owner_type, m.owner_id)) ?? []);
-  if (rows.length === 0) return { state: 'PENDING', summary: '검사 미통보' };
+  if (rows.length === 0) {
+    // BP 발행분이 없어도 공급사 발행·승인으로 CHECK 게이트가 전 구성원 통과면 완료(발행 주체 무관 실판정).
+    const gates = idx.checkGateByOwner;
+    if (gates && members.length > 0
+        && members.every((m) => gates.get(ownerKey(m.owner_type, m.owner_id)) === true)) {
+      return { state: 'DONE', summary: '검사 완료' };
+    }
+    return { state: 'PENDING', summary: '검사 미통보' };
+  }
   if (rows.some((r) => r.status === 'SUBMITTED')) return { state: 'PENDING', summary: '회신 검토 필요' };
   if (rows.some((r) => r.status === 'REQUESTED')) return { state: 'PENDING', summary: '검사 회신 대기' };
   if (rows.some((r) => r.status === 'REJECTED')) return { state: 'PENDING', summary: '점검 반려 — 재통보 필요' };
