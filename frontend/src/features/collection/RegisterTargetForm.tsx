@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
+import { useAuth } from '../auth/AuthContext';
 import type { CompanyResponse } from '../../types/auth';
 import type { OwnerType, DocumentTypeResponse } from '../../types/document';
 import { PERSON_ROLE_LABEL, rolesAllowedFor, type PersonRole } from '../../types/person';
@@ -36,6 +37,7 @@ export default function RegisterTargetForm({ typesEq, typesPe, onDone }: {
   typesPe: DocumentTypeResponse[];
   onDone: () => void;
 }) {
+  const { company: myCompany } = useAuth();
   const [companies, setCompanies] = useState<CompanyResponse[]>([]);
   const [companyId, setCompanyId] = useState('');
   const [rows, setRows] = useState<RegRow[]>([]);
@@ -53,7 +55,13 @@ export default function RegisterTargetForm({ typesEq, typesPe, onDone }: {
       .catch(() => setCompanies([]));
   }, []);
 
-  const company = companies.find((c) => String(c.id) === companyId) ?? null;
+  // 본인 회사도 선택 가능 — 자기 명의 신규 등록형 링크(백엔드 selfAndChildren 검증이 본인 허용).
+  const companyOptions = useMemo(() => {
+    if (!myCompany || companies.some((c) => c.id === myCompany.id)) return companies;
+    return [myCompany, ...companies];
+  }, [myCompany, companies]);
+
+  const company = companyOptions.find((c) => String(c.id) === companyId) ?? null;
   const companyType = company?.type ?? null;
   // 장비 등록은 장비공급사 협력업체만. 역할은 회사유형이 허용하는 것만(인력사는 조종원 제외).
   const canEquipment = companyType === 'EQUIPMENT';
@@ -128,8 +136,11 @@ export default function RegisterTargetForm({ typesEq, typesPe, onDone }: {
         <div className="text-sm font-medium text-slate-700">협력업체 <span className="text-xs font-normal text-slate-400">— 신규 자원을 이 회사 명의로 등록</span></div>
         <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} className="input w-full">
           <option value="">협력업체 선택</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.name} ({c.type === 'EQUIPMENT' ? '장비' : c.type === 'MANPOWER' ? '인력' : c.type})</option>
+          {companyOptions.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} ({c.type === 'EQUIPMENT' ? '장비' : c.type === 'MANPOWER' ? '인력' : c.type})
+              {c.id === myCompany?.id ? ' — 본인 회사' : ''}
+            </option>
           ))}
         </select>
       </div>
