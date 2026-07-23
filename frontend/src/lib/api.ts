@@ -11,12 +11,18 @@ export const api = axios.create({
 // 기본 10초 타임아웃이면 abort 된다. 해당 엔드포인트만 넉넉히(60초) 늘린다.
 const OCR_SLOW_ENDPOINTS = /\/(detect-corners|ocr-region-preview|ocr-preview|region-extract|mask-pii)/;
 
+// 서버가 동기 PII 마스킹을 수행하는 업로드(공개 수집 업로드·검사 회신 파일)는 대형 이미지 실측 90초+.
+// 서버는 성공 저장했는데 FE 타임아웃으로 "업로드 실패" 오표시 → 중복 업로드를 유발하므로 180초로 늘린다.
+const PII_UPLOAD_ENDPOINTS = /\/api\/collect\/[^/]+\/documents$|\/api\/resource-checks\/[^/]+\/submit-file$/;
+
 api.interceptors.request.use((config) => {
   const token = tokenStorage.access;
   if (token) {
     config.headers.set('Authorization', `Bearer ${token}`);
   }
-  if (config.url && OCR_SLOW_ENDPOINTS.test(config.url)) {
+  if (config.url && PII_UPLOAD_ENDPOINTS.test(config.url)) {
+    config.timeout = 180_000;
+  } else if (config.url && OCR_SLOW_ENDPOINTS.test(config.url)) {
     config.timeout = 60_000;
   }
   return config;

@@ -530,6 +530,12 @@ function ItemRow({ item, disabled, uploading, staged, expiry, onExpiryChange, on
           </button>
         )}
       </div>
+      {/* 서버가 개인정보(주민번호 등) 자동 가림 처리를 동기로 수행 — 대형 사진은 수십 초 걸린다(실패 아님). */}
+      {uploading && (
+        <p className="mt-1.5 text-[11px] font-semibold text-brand-700">
+          업로드·개인정보 보호 처리 중… (수십 초 걸릴 수 있어요)
+        </p>
+      )}
       {count > 0 && (
         <p className="mt-1.5 text-[11px] text-slate-400">사진을 계속 추가한 뒤 <b className="text-slate-500">업로드</b>를 누르면 {count}장이 1개로 합쳐 제출됩니다.</p>
       )}
