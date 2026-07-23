@@ -16,8 +16,12 @@ import PersonCredentialCard from './PersonCredentialCard';
 import DeployCheckCard from '../readiness/DeployCheckCard';
 import OnboardingBadge from '../onboarding/OnboardingBadge';
 import {
-  EMPLOYMENT_TYPE_LABEL, PERSON_STATUS_LABEL, type PersonResponse, type PersonStatus,
+  EMPLOYMENT_TYPE_LABEL, PERSON_STATUS_LABEL, HEALTH_RISK_LABEL, HEALTH_RISK_CHIP_CLS,
+  type PersonResponse, type PersonStatus,
 } from '../../types/person';
+import {
+  CHECK_TYPE_LABEL, CHECK_STATUS_LABEL, CHECK_STATUS_CHIP_CLS, type ResourceCheckResponse,
+} from '../../types/resourceCheck';
 
 const STATUS_BADGE: Record<PersonStatus, string> = {
   WORKING: 'bg-emerald-100 text-emerald-700',
@@ -301,6 +305,18 @@ export default function PersonDetailPage() {
                   <AssignmentBadge status={person.assignment_status} />
                 )}
                 <OnboardingBadge ownerType="PERSON" ownerId={person.id} />
+                {/* P5-W4: 건강 위험군(표시만) — NORMAL 은 배지 생략. */}
+                {person.health_risk_level && person.health_risk_level !== 'NORMAL' && (
+                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${HEALTH_RISK_CHIP_CLS[person.health_risk_level]}`}>
+                    {HEALTH_RISK_LABEL[person.health_risk_level]}
+                  </span>
+                )}
+                {/* 자격/면허 만료 요약 — 기존 person.expiring_count 재사용(신규 조회 없음). */}
+                {person.expiring_count > 0 && (
+                  <span className="inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">
+                    만료 임박 {person.expiring_count}건
+                  </span>
+                )}
               </div>
               <div className="text-slate-500 mb-6 flex items-center gap-2 flex-wrap">
                 {editMode ? (
@@ -422,6 +438,9 @@ export default function PersonDetailPage() {
           </p>
         </div>
 
+        {/* 검진·교육 이력 — 자원별 점검 요청/승인 이력 */}
+        <PersonCheckHistory personId={person.id} />
+
         {/* 앱 로그인 계정 */}
         {canEdit && <PersonCredentialCard person={person} onUpdated={setPerson} />}
 
@@ -495,6 +514,46 @@ function PersonPhoto({ personId, hasPhoto, name, nonce }: { personId: number; ha
           <span className="text-sm">{name.charAt(0)}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 검진·교육 이력 — GET /api/resource-checks/by-owner (권한=자원 조회 스코프). 실패/없음 시 조용히 숨김. */
+function PersonCheckHistory({ personId }: { personId: number }) {
+  const [items, setItems] = useState<ResourceCheckResponse[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get<ResourceCheckResponse[]>('/api/resource-checks/by-owner', {
+      params: { owner_type: 'PERSON', owner_id: personId },
+    })
+      .then((r) => { if (!cancelled) setItems(r.data); })
+      .catch(() => { if (!cancelled) setItems([]); });
+    return () => { cancelled = true; };
+  }, [personId]);
+
+  if (items === null || items.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <h2 className="mb-4 text-lg font-bold text-slate-900">검진 · 교육 이력</h2>
+      <ul className="divide-y divide-slate-100">
+        {items.map((c) => (
+          <li key={c.id} className="flex items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-slate-800">{CHECK_TYPE_LABEL[c.check_type]}</div>
+              <div className="mt-0.5 text-xs text-slate-500">
+                요청일 {c.issued_at.slice(0, 10)}
+                {c.due_date ? ` · 마감 ${c.due_date}` : ''}
+                {c.supplier_company_name ? ` · ${c.supplier_company_name}` : ''}
+              </div>
+            </div>
+            <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${CHECK_STATUS_CHIP_CLS[c.status]}`}>
+              {CHECK_STATUS_LABEL[c.status]}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

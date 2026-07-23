@@ -65,6 +65,8 @@ public class ResourceCheckService {
     private final WorkPlanRepository workPlans;
     private final SiteRepository sites;
     private final UserRepository users;
+    private final com.skep.person.PersonService personService;
+    private final com.skep.equipment.EquipmentService equipmentService;
 
     /** BP·공급사·ADMIN 이 자원 점검을 발행. bp_company_id = 발행사(BP 발행이면 BP사, 공급사 발행이면 자기 회사). */
     @Transactional
@@ -401,6 +403,21 @@ public class ResourceCheckService {
         var rows = repo.findByWorkPlanIdOrderByIdDesc(workPlanId);
         return rows.stream()
                 .filter(r -> canView(r, actor))
+                .map(this::toResponse).toList();
+    }
+
+    /**
+     * 자원별(인원/장비) 점검 이력 — 인원/장비 상세의 검진·교육 이력 블록용.
+     * 권한 = 자원 조회 스코프: 해당 자원을 조회할 수 없으면(PersonService/EquipmentService.get) 403.
+     */
+    @Transactional(readOnly = true)
+    public List<ResourceCheckResponse> listByOwner(OwnerType ownerType, Long ownerId, AuthenticatedUser actor) {
+        switch (ownerType) {
+            case PERSON -> personService.get(ownerId, actor);
+            case EQUIPMENT -> equipmentService.get(ownerId, actor);
+            default -> throw ApiException.badRequest("UNSUPPORTED_OWNER", "장비/인원 자원만 조회 가능");
+        }
+        return repo.findByOwnerTypeAndOwnerIdOrderByIdDesc(ownerType, ownerId).stream()
                 .map(this::toResponse).toList();
     }
 

@@ -2,6 +2,7 @@ package com.skep.person.dto;
 
 import com.skep.company.CompanyType;
 import com.skep.person.EmploymentType;
+import com.skep.person.HealthRiskLevel;
 import com.skep.person.Person;
 import com.skep.person.PersonAssignmentStatus;
 import com.skep.person.PersonRole;
@@ -30,6 +31,8 @@ public record PersonResponse(
         LocalDate hiredAt,
         PersonStatus status,
         EmploymentType employmentType,
+        // P5-W4: 건강 위험군(표시용).
+        HealthRiskLevel healthRiskLevel,
         // V11 배치 정보
         Long currentSiteId,
         String currentSiteName,
@@ -82,6 +85,7 @@ public record PersonResponse(
                 p.getHiredAt(),
                 p.getStatus(),
                 p.getEmploymentType(),
+                p.getHealthRiskLevel(),
                 p.getCurrentSiteId(),
                 currentSiteName,
                 p.getAssignmentStatus(),

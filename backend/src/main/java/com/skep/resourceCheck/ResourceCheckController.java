@@ -1,5 +1,6 @@
 package com.skep.resourceCheck;
 
+import com.skep.document.OwnerType;
 import com.skep.resourceCheck.dto.IssueComboRequest;
 import com.skep.resourceCheck.dto.IssueRequest;
 import com.skep.resourceCheck.dto.ResourceCheckResponse;
@@ -94,5 +95,13 @@ public class ResourceCheckController {
     public List<ResourceCheckResponse> listForWorkPlan(@PathVariable Long workPlanId,
                                                        @CurrentUser AuthenticatedUser actor) {
         return service.listForWorkPlan(workPlanId, actor);
+    }
+
+    /** 자원별 점검 이력 — 인원/장비 상세의 검진·교육 이력 블록용. 권한 = 자원 조회 스코프. */
+    @GetMapping("/by-owner")
+    public List<ResourceCheckResponse> listByOwner(@RequestParam("owner_type") OwnerType ownerType,
+                                                   @RequestParam("owner_id") Long ownerId,
+                                                   @CurrentUser AuthenticatedUser actor) {
+        return service.listByOwner(ownerType, ownerId, actor);
     }
 }

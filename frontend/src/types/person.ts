@@ -12,6 +12,7 @@ export type PersonRole =
 
 export type PersonStatus = 'WORKING' | 'VACATION' | 'RETIRED';
 export type EmploymentType = 'DIRECT' | 'SUBCONTRACT';
+export type HealthRiskLevel = 'NORMAL' | 'CAUTION' | 'HIGH';
 
 export type PersonResponse = {
   id: number;
@@ -33,6 +34,8 @@ export type PersonResponse = {
   username?: string | null;
   status: PersonStatus;
   employment_type: EmploymentType;
+  // P5-W4: 건강 위험군(표시용)
+  health_risk_level?: HealthRiskLevel;
   // ---
   // V11 배치 정보
   current_site_id?: number | null;
@@ -70,6 +73,18 @@ export const PERSON_STATUS_LABEL: Record<PersonStatus, string> = {
 export const EMPLOYMENT_TYPE_LABEL: Record<EmploymentType, string> = {
   DIRECT: '직영',
   SUBCONTRACT: '외주',
+};
+
+export const HEALTH_RISK_LABEL: Record<HealthRiskLevel, string> = {
+  NORMAL: '건강 양호',
+  CAUTION: '건강 주의',
+  HIGH: '건강 고위험군',
+};
+
+export const HEALTH_RISK_CHIP_CLS: Record<HealthRiskLevel, string> = {
+  NORMAL: 'bg-emerald-100 text-emerald-700',
+  CAUTION: 'bg-amber-100 text-amber-800',
+  HIGH: 'bg-rose-100 text-rose-700',
 };
 
 export function rolesAllowedFor(companyType: CompanyType): PersonRole[] {
