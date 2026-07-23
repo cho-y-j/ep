@@ -153,7 +153,7 @@ public class DocumentReviewMailService {
             }
             // BP사 지정 시 그 회사 소속 사용자 이메일을 자동 CC.
             List<String> ccEmails = hasBp ? bpCcEmails(req.bpCompanyId(), emails) : List.of();
-            sendEmail(mailSender, emails, ccEmails, req.message(), resources, totalDocs);
+            sendEmail(mailSender, emails, ccEmails, req.message(), resources, totalDocs, actor.email());
         }
 
         return new ReviewMailResult(emails.size(), resources.size(), totalDocs, bpDelivered);
@@ -172,7 +172,7 @@ public class DocumentReviewMailService {
     }
 
     private void sendEmail(JavaMailSender mailSender, List<String> emails, List<String> ccEmails, String message,
-                           List<Resource> resources, int totalDocs) {
+                           List<Resource> resources, int totalDocs, String replyTo) {
         record Attachment(String name, byte[] bytes) {}
         List<Attachment> attachments = new ArrayList<>();
         for (Resource r : resources) {
@@ -187,6 +187,10 @@ public class DocumentReviewMailService {
             MimeMessage msg = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
             if (defaultFrom != null && !defaultFrom.isBlank()) helper.setFrom(defaultFrom);
+            // 답장은 발송자(로그인 이메일)에게 — SMTP From 은 인증 계정 고정이라 Reply-To 로 회신 경로 지정.
+            if (replyTo != null && isSafeHeader(replyTo) && !replyTo.equalsIgnoreCase(defaultFrom)) {
+                helper.setReplyTo(replyTo);
+            }
             helper.setTo(emails.toArray(new String[0]));
             if (ccEmails != null && !ccEmails.isEmpty()) helper.setCc(ccEmails.toArray(new String[0]));
             helper.setSubject("[서류 검토] 자원 " + attachments.size() + "건 / 서류 " + totalDocs + "건");

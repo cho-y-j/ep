@@ -62,6 +62,7 @@ public class DocumentBundlePdfService {
     private final DocumentTypeRepository docTypes;
     private final FileStorage storage;
     private final PdfMergeService pdfMerge;
+    private final DocumentZipService zipService;
     private final EquipmentService equipmentService;
     private final PersonRepository personRepo;
     private final CompanyRepository companyRepo;
@@ -83,9 +84,13 @@ public class DocumentBundlePdfService {
 
     public record BundlePdfResult(int bundles, int recipients, boolean bpDelivered, int totalDocs, int skippedEmpty) {}
 
-    private record BuiltBundle(String label, byte[] pdf, List<EnvelopeItem> resources, int docCount) {}
+    /** fileName = "차량번호_조종원이름(들)" — 첨부 PDF 파일명용(label 은 본문 목록용 차량번호). */
+    private record BuiltBundle(String label, String fileName, byte[] pdf, List<EnvelopeItem> resources, int docCount) {}
 
     private record EnvelopeItem(OwnerType type, Long ownerId, String label, int docCount) {}
+
+    /** includeZip 시 같은 메일에 함께 첨부하는 자원별 압축. */
+    private record ZipFile(String name, byte[] bytes) {}
 
     @Transactional
     public BundlePdfResult send(ReviewBundlePdfRequest req, AuthenticatedUser actor) {
@@ -169,7 +174,12 @@ public class DocumentBundlePdfService {
 
             if (bundleDocs == 0) continue; // 이 묶음은 유효 서류 전무 → 첨부 생성 안 함
             byte[] pdf = pdfMerge.merge(parts);
-            built.add(new BuiltBundle(eqLabel, pdf, resources, bundleDocs));
+            // 파일명 = "차량번호_조종원이름(들)" — PDF 에 실제 포함된 조종원만.
+            StringBuilder fileName = new StringBuilder(eqLabel);
+            for (EnvelopeItem it : resources) {
+                if (it.type() == OwnerType.PERSON) fileName.append('_').append(it.label());
+            }
+            built.add(new BuiltBundle(eqLabel, fileName.toString(), pdf, resources, bundleDocs));
         }
 
         if (built.isEmpty()) {
@@ -202,7 +212,9 @@ public class DocumentBundlePdfService {
             JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
             if (mailSender == null) throw ApiException.badRequest("MAIL_DISABLED", "메일 발송이 설정되지 않았습니다");
             List<String> cc = hasBp ? bpCcEmails(req.bpCompanyId(), emails) : List.of();
-            sendEmail(mailSender, emails, cc, req.message(), built, totalDocs);
+            // ZIP 동시 발송 — 같은 메일에 자원별 압축도 첨부(자원 중복 제거).
+            List<ZipFile> zips = Boolean.TRUE.equals(req.includeZip()) ? buildZips(built) : List.of();
+            sendEmail(mailSender, emails, cc, req.message(), built, zips, totalDocs, actor.email());
         }
 
         return new BundlePdfResult(built.size(), emails.size(), bpDelivered, totalDocs, skippedEmpty);
@@ -277,12 +289,30 @@ public class DocumentBundlePdfService {
                 .toList();
     }
 
+    /** includeZip 첨부용 — 묶음의 자원별 zip(여러 묶음에 겹치는 자원은 1회만). 서류 없는 자원은 zip null 로 제외. */
+    private List<ZipFile> buildZips(List<BuiltBundle> built) {
+        List<ZipFile> zips = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (BuiltBundle x : built) {
+            for (EnvelopeItem it : x.resources()) {
+                if (!seen.add(it.type() + ":" + it.ownerId())) continue;
+                DocumentZipService.ZipResult zip = zipService.zipSingleResource(it.type(), it.ownerId());
+                if (zip != null) zips.add(new ZipFile(safeFileName(it.label()) + ".zip", zip.bytes()));
+            }
+        }
+        return zips;
+    }
+
     private void sendEmail(JavaMailSender mailSender, List<String> emails, List<String> cc, String message,
-                           List<BuiltBundle> built, int totalDocs) {
+                           List<BuiltBundle> built, List<ZipFile> zips, int totalDocs, String replyTo) {
         try {
             MimeMessage msg = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
             if (defaultFrom != null && !defaultFrom.isBlank()) helper.setFrom(defaultFrom);
+            // 답장은 발송자(로그인 이메일)에게 — SMTP From 은 인증 계정 고정이라 Reply-To 로 회신 경로 지정.
+            if (replyTo != null && isSafeHeader(replyTo) && !replyTo.equalsIgnoreCase(defaultFrom)) {
+                helper.setReplyTo(replyTo);
+            }
             helper.setTo(emails.toArray(new String[0]));
             if (cc != null && !cc.isEmpty()) helper.setCc(cc.toArray(new String[0]));
             helper.setSubject("[서류 검토] 장비 묶음 " + built.size() + "건 / 서류 " + totalDocs + "건");
@@ -292,10 +322,14 @@ public class DocumentBundlePdfService {
             for (BuiltBundle x : built) {
                 body.append(" - ").append(x.label()).append(" (서류 ").append(x.docCount()).append("건)\n");
             }
+            if (!zips.isEmpty()) body.append("\n자원별 압축(ZIP)도 함께 첨부합니다.\n");
             body.append("\n웹에서 바로 확인: ").append(publicBaseUrl).append("/document-reviews/received\n");
             helper.setText(body.toString());
             for (BuiltBundle x : built) {
-                helper.addAttachment(safeFileName(x.label()) + ".pdf", new ByteArrayResource(x.pdf()));
+                helper.addAttachment(safeFileName(x.fileName()) + ".pdf", new ByteArrayResource(x.pdf()));
+            }
+            for (ZipFile z : zips) {
+                helper.addAttachment(z.name(), new ByteArrayResource(z.bytes()));
             }
             mailSender.send(msg);
         } catch (Exception e) {

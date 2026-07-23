@@ -12,7 +12,9 @@ public record ReviewBundlePdfRequest(
         List<String> emails,
         Long bpCompanyId,
         String message,
-        Boolean separatorPage
+        Boolean separatorPage,
+        /** true 면 같은 메일에 자원별 압축(ZIP)도 함께 첨부(ZIP+병합 PDF 동시 발송). */
+        Boolean includeZip
 ) {
     public record Bundle(Long equipmentId, List<Long> operatorPersonIds) {}
 }

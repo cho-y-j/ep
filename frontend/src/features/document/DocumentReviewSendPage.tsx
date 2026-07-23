@@ -5,6 +5,7 @@ import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatOwnerSubLabel } from '../../lib/format';
 import { toast } from '../../lib/toast';
+import { useAuth } from '../auth/AuthContext';
 
 type DocRow = {
   id: number;
@@ -24,6 +25,7 @@ type ResourceGroup = {
 };
 
 export default function DocumentReviewSendPage() {
+  const { user } = useAuth();
   // 프리필 — 자원 현황 세트 보드의 "심사 보내기"에서 ?equipment=<id>(장비묶음) 또는 ?person=<id>(zip)로 진입.
   const [searchParams] = useSearchParams();
   const prefillEquipment = searchParams.get('equipment');
@@ -40,8 +42,13 @@ export default function DocumentReviewSendPage() {
   const [bpCompanies, setBpCompanies] = useState<Array<{ id: number; name: string }>>([]);
   const [bpId, setBpId] = useState('');
   const [bpUsers, setBpUsers] = useState<Array<{ id: number; name: string; email: string }>>([]);
-  // 출력형식: zip(기존, 자원별 압축) | bundle(장비묶음 병합 PDF)
-  const [mode, setMode] = useState<'zip' | 'bundle'>(prefillEquipment ? 'bundle' : 'zip');
+  // 출력형식 다중 선택: bundle(장비묶음 병합 PDF, 기본) + zip(자원별 압축) — 둘 다 켜면 한 메일에 함께 첨부.
+  // 인원 프리필은 병합 PDF(장비 앵커) 대상이 아니라 zip 만.
+  const [formats, setFormats] = useState<Set<'zip' | 'bundle'>>(
+    () => new Set([prefillPerson ? 'zip' : 'bundle'] as const),
+  );
+  // 자원 선택 UI 모드 — 병합 PDF 가 켜져 있으면 장비묶음 피커(조종원 개별 선택 포함), zip 만이면 기존 자원 카드.
+  const mode: 'zip' | 'bundle' = formats.has('bundle') ? 'bundle' : 'zip';
   const [operators, setOperators] = useState<Record<number, Array<{ person_id: number; person_name?: string | null }>>>({});
   const [opSel, setOpSel] = useState<Record<number, Set<number>>>({});
   const [separatorPage, setSeparatorPage] = useState(true);
@@ -150,11 +157,21 @@ export default function DocumentReviewSendPage() {
       return { ...prev, [eqId]: next };
     });
   }
-  function switchMode(m: 'zip' | 'bundle') {
-    if (m === mode) return;
-    setMode(m);
-    setSelected(new Set());
-    setOpSel({});
+  function toggleFormat(f: 'zip' | 'bundle') {
+    const next = new Set(formats);
+    if (next.has(f)) {
+      if (next.size === 1) { toast.error('출력 형식을 최소 1개 선택하세요'); return; }
+      next.delete(f);
+    } else {
+      next.add(f);
+    }
+    // 피커 모드(장비묶음 ↔ 자원 카드)가 바뀌면 선택 초기화 — 기존 switchMode 동작 유지.
+    const after: 'zip' | 'bundle' = next.has('bundle') ? 'bundle' : 'zip';
+    if (after !== mode) {
+      setSelected(new Set());
+      setOpSel({});
+    }
+    setFormats(next);
   }
 
   function toggle(key: string) {
@@ -203,6 +220,7 @@ export default function DocumentReviewSendPage() {
         message: message.trim() || undefined,
         bp_company_id: bpId ? Number(bpId) : undefined,
         separator_page: separatorPage,
+        include_zip: formats.has('zip'), // 둘 다 선택 시 같은 메일에 자원별 ZIP 도 첨부
       }, { timeout: 120_000 }); // 서류 병합 PDF 생성 + 메일 첨부라 전역 10초로는 부족
       const d = res.data as { bundles: number; recipients: number; bp_delivered: boolean; total_docs: number; skipped_empty: number };
       const parts: string[] = [];
@@ -222,7 +240,7 @@ export default function DocumentReviewSendPage() {
 
   async function send() {
     if (emails.length === 0 && !bpId) { toast.error('받는 사람 이메일 또는 BP사를 선택하세요'); return; }
-    if (mode === 'bundle') { await sendBundle(); return; }
+    if (formats.has('bundle')) { await sendBundle(); return; }
     const eqIds: number[] = [], pIds: number[] = [];
     for (const g of groups) {
       if (!selected.has(g.key)) continue;
@@ -261,17 +279,20 @@ export default function DocumentReviewSendPage() {
             : '보낼 자원(장비·인원)을 고르면 각 자원의 서류를 자원별 압축파일(zip)로 묶어 입력한 이메일로 발송합니다. 받는 분이 시스템에 가입되어 있지 않아도 됩니다.'}
         />
 
-        {/* 출력형식 */}
+        {/* 출력형식 — 다중 선택(둘 다 켜면 한 메일에 병합 PDF + ZIP 함께 첨부). 기본 = 장비묶음 병합 PDF. */}
         <section className="card p-4 space-y-3">
-          <div className="text-sm font-semibold text-slate-700">출력 형식</div>
+          <div className="text-sm font-semibold text-slate-700">출력 형식 <span className="font-normal text-xs text-slate-400">(복수 선택 가능)</span></div>
           <div className="inline-flex overflow-hidden rounded-lg border border-slate-300">
-            {([['zip', '자원별 압축(ZIP)'], ['bundle', '장비묶음 병합 PDF']] as const).map(([m, label]) => (
-              <button key={m} type="button" onClick={() => switchMode(m)}
-                      className={`px-4 py-2 text-sm font-semibold ${mode === m ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
-                {label}
+            {([['bundle', '장비묶음 병합 PDF'], ['zip', '자원별 압축(ZIP)']] as const).map(([m, label]) => (
+              <button key={m} type="button" onClick={() => toggleFormat(m)}
+                      className={`px-4 py-2 text-sm font-semibold ${formats.has(m) ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                {formats.has(m) ? '✓ ' : ''}{label}
               </button>
             ))}
           </div>
+          {formats.has('bundle') && formats.has('zip') && (
+            <div className="text-xs text-slate-500">병합 PDF와 자원별 ZIP 을 한 메일에 함께 첨부해 발송합니다.</div>
+          )}
           {mode === 'bundle' && (
             <label className="flex w-fit items-center gap-2 text-sm text-slate-600 cursor-pointer">
               <input type="checkbox" checked={separatorPage} onChange={(e) => setSeparatorPage(e.target.checked)}
@@ -342,6 +363,19 @@ export default function DocumentReviewSendPage() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Reply-To 안내 — 심사 메일은 발송자(로그인 이메일)로 답장이 오게 설정됨. */}
+          <div className="pt-2 border-t border-slate-100 text-xs text-slate-500">
+            <div>답장은 내 메일{user?.email ? <>(<b className="text-slate-700">{user.email}</b>)</> : null}로 와요.</div>
+            <details className="mt-1">
+              <summary className="cursor-pointer text-slate-400 hover:text-slate-600">답장 확인 방법 (네이버 메일 등)</summary>
+              <div className="mt-1 space-y-0.5">
+                <p>· 받는 분이 메일에서 '답장'을 누르면 회신이 내 로그인 이메일로 도착합니다.</p>
+                <p>· 네이버 메일이면: 네이버 메일 → 받은메일함에서 회신을 확인하세요.</p>
+                <p>· 시스템 발송 계정이 아니라 위 내 메일 주소로 회신됩니다.</p>
+              </div>
+            </details>
           </div>
         </section>
 
