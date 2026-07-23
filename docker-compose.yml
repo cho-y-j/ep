@@ -62,6 +62,8 @@ services:
       VERIFY_MAIN_API_URL: ${VERIFY_MAIN_API_URL:-http://main-api:8080}
       VERIFY_INNER_API_URL: ${VERIFY_INNER_API_URL:-http://verify-api:8081}
       VERIFY_API_KEY: ${VERIFY_API_KEY:-}
+      # 로컬 PaddleOCR(호스트 8100) — 컨테이너에서는 도커 게이트웨이(172.17.0.1)로 접근 (127.0.0.1은 컨테이너 자신)
+      PADDLE_OCR_URL: ${PADDLE_OCR_URL:-http://172.17.0.1:8100}
       # S-9-G: skep-v2 backend 자체 NTS 클라이언트 (verify-api 우회 옵션) — 사업자번호만으로 즉시 검증
       NTS_SERVICE_KEY: ${NTS_SERVICE_KEY:-}
       # Heat: 기상청 API Hub 초단기실황 — 폭염/휴식 알림용 체감온도 조회

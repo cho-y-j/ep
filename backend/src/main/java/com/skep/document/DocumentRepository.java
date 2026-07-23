@@ -16,8 +16,9 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
     /** 공급사 자기+직속 자식(협력사) 회사 자원(장비+인원) + 회사 documents — head 만. 만료 관리 페이지용. */
     @Query("""
-            SELECT d FROM Document d
-            WHERE (
+            SELECT d FROM Document d, DocumentType dt
+            WHERE dt.id = d.documentTypeId
+            AND (
                 (d.ownerType = com.skep.document.OwnerType.EQUIPMENT
                     AND d.ownerId IN (SELECT e.id FROM com.skep.equipment.Equipment e WHERE e.supplierId IN :companyIds))
                 OR (d.ownerType = com.skep.document.OwnerType.PERSON
@@ -25,6 +26,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
                 OR (d.ownerType = com.skep.document.OwnerType.COMPANY AND d.ownerId IN :companyIds)
             )
             AND NOT EXISTS (SELECT 1 FROM Document d2 WHERE d2.previousDocumentId = d.id)
+            ORDER BY d.ownerType ASC, d.ownerId ASC, dt.sortOrder ASC, d.id DESC
             """)
     List<Document> findMySupplierDocuments(@Param("companyIds") List<Long> companyIds);
 
@@ -47,12 +49,13 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
      * 같은 type 에 옛 버전이 있어도 표시는 최신 1개만.
      */
     @Query("""
-            SELECT d FROM Document d
-            WHERE d.ownerType = :ownerType AND d.ownerId = :ownerId
+            SELECT d FROM Document d, DocumentType dt
+            WHERE dt.id = d.documentTypeId
+              AND d.ownerType = :ownerType AND d.ownerId = :ownerId
               AND NOT EXISTS (
                 SELECT 1 FROM Document d2 WHERE d2.previousDocumentId = d.id
               )
-            ORDER BY d.id DESC
+            ORDER BY dt.sortOrder ASC, d.id DESC
             """)
     List<Document> findActiveHeadByOwner(@Param("ownerType") OwnerType ownerType,
                                          @Param("ownerId") Long ownerId);
