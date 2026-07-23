@@ -106,14 +106,19 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       ]},
     ];
   } else if (role === 'BP') {
+    // BP 하루 흐름 순 재편: 현장 생성 → 견적·계약 → 서류 심사 → 계획서·검사 → 투입·정산.
+    // 기존 라우트·항목 전수 보존(재배치만) — 배지(bpReviewCount)도 해당 항목에 그대로.
     groups = [
       ...standalone,
-      { label: '견적·계약', icon: <IconBriefcase />, items: [
-        { label: '견적', to: '/quotations', icon: <IconClipboard />, end: true },
-        { label: '수신함', to: '/inbox', icon: <IconClipboard /> },
-        { label: '계약 조회', to: '/contracts', icon: <IconBriefcase /> },
+      // 흐름 보드 — 단독 대분류(1클릭 진입). 현장별 세트 단계 현황 = /site-board.
+      { label: '현장 보드', to: '/site-board', icon: <IconClipboard /> },
+      { label: '현장·견적·계약', icon: <IconBriefcase />, items: [
+        { label: '현장 관리', to: '/sites', icon: <IconBuilding />, section: '현장' },
+        { label: '견적', to: '/quotations', icon: <IconClipboard />, end: true, section: '견적·계약' },
+        { label: '수신함', to: '/inbox', icon: <IconClipboard />, section: '견적·계약' },
+        { label: '계약 조회', to: '/contracts', icon: <IconBriefcase />, section: '견적·계약' },
       ]},
-      { label: '서류', icon: <IconDoc />, items: [
+      { label: '서류·심사', icon: <IconDoc />, items: [
         { label: '서류 심사', to: '/document-reviews/received', icon: <IconShield />,
           badge: bpReviewCount || undefined },
         { label: '소급 승인', to: '/resource-onboardings/bp', icon: <IconUserCheck /> },
@@ -121,22 +126,21 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         { label: '수집 요청', to: '/document-collections', icon: <IconDoc /> },
         { label: '이행지시', to: '/compliance-orders', icon: <IconShield /> },
       ]},
-      { label: '현장 운영', icon: <IconBuilding />, items: [
-        { label: '작업 계획서', to: '/work-plans', icon: <IconClipboard />, end: true, section: '작업·현장' },
-        { label: '현장 관리', to: '/sites', icon: <IconBuilding />, section: '작업·현장' },
+      { label: '계획서·검사', icon: <IconClipboard />, items: [
+        { label: '작업 계획서', to: '/work-plans', icon: <IconClipboard />, end: true, section: '계획서' },
+        { label: '보낸 점검 요청', to: '/resource-checks/bp', icon: <IconShield />, section: '검사' },
+        { label: '장비', to: '/equipment', icon: <IconTruck />, section: '자원 조회' },
+        { label: '인원', to: '/persons', icon: <IconUsers />, section: '자원 조회' },
+      ]},
+      { label: '투입·정산', icon: <IconMoney />, items: [
         { label: '투입 대기', to: '/work-plans/pending', icon: <IconClipboard />, section: '투입' },
         { label: '투입 현황', to: '/work-plans/active', icon: <IconClipboard />, section: '투입' },
         { label: '투입 장비', to: '/dispatched-equipment', icon: <IconTruck />, section: '투입' },
         { label: '투입 인원', to: '/dispatched-persons', icon: <IconUsers />, section: '투입' },
         { label: '받은 투입 요청', to: '/field-deployments/bp', icon: <IconClipboard />, section: '투입' },
-        { label: '보낸 점검 요청', to: '/resource-checks/bp', icon: <IconShield />, section: '자원' },
-        { label: '장비', to: '/equipment', icon: <IconTruck />, section: '자원' },
-        { label: '인원', to: '/persons', icon: <IconUsers />, section: '자원' },
-        { label: '업체변경 신청서', to: '/resource-change-requests', icon: <IconClipboard />, section: '자원' },
-      ]},
-      { label: '정산', icon: <IconMoney />, items: [
-        { label: '작업확인 원장', to: '/daily-work-logs/bp', icon: <IconClipboard /> },
-        { label: '월별 확인서(폰 서명분)', to: '/work-confirmations/monthly', icon: <IconClipboard /> },
+        { label: '업체변경 신청서', to: '/resource-change-requests', icon: <IconClipboard />, section: '투입' },
+        { label: '작업확인 원장', to: '/daily-work-logs/bp', icon: <IconClipboard />, section: '정산' },
+        { label: '월별 확인서(폰 서명분)', to: '/work-confirmations/monthly', icon: <IconClipboard />, section: '정산' },
       ]},
       { label: '안전', icon: <IconShield />, items: [
         { label: '안전 상황판', to: '/safety-board', icon: <IconShield /> },
