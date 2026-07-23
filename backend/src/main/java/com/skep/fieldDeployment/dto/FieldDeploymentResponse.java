@@ -29,11 +29,15 @@ public record FieldDeploymentResponse(
         Long dailyPrice,
         Long monthlyPrice,
         Long otPrice,
-        Long nightPrice
+        Long nightPrice,
+        /** R3 조합 스냅샷 — 같은 값 행을 목록에서 조합 묶음으로 그룹핑(단독 요청=null). */
+        Long comboEquipmentId,
+        String comboEquipmentLabel
 ) {
     public static FieldDeploymentResponse from(FieldDeploymentRequest r,
                                                 String supplierName, String bpName,
-                                                String resourceLabel, String siteName) {
+                                                String resourceLabel, String siteName,
+                                                String comboEquipmentLabel) {
         return new FieldDeploymentResponse(
                 r.getId(), r.getSupplierCompanyId(), supplierName,
                 r.getBpCompanyId(), bpName,
@@ -42,7 +46,8 @@ public record FieldDeploymentResponse(
                 r.getStartDate(), r.getNote(), r.getStatus(),
                 r.getRequestedAt(), r.getReviewedAt(), r.getReviewNote(),
                 r.getActivatedAt(), r.getCompletedAt(),
-                r.getDailyPrice(), r.getMonthlyPrice(), r.getOtPrice(), r.getNightPrice()
+                r.getDailyPrice(), r.getMonthlyPrice(), r.getOtPrice(), r.getNightPrice(),
+                r.getComboEquipmentId(), comboEquipmentLabel
         );
     }
 }

@@ -33,4 +33,7 @@ export type FieldDeploymentResponse = {
   monthly_price?: number | null;
   ot_price?: number | null;
   night_price?: number | null;
+  /** R3 조합 스냅샷 — 같은 값 행을 목록에서 조합 묶음으로 그룹핑(단독 요청=null). */
+  combo_equipment_id?: number | null;
+  combo_equipment_label?: string | null;
 };

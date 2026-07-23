@@ -253,7 +253,7 @@ export default function FieldDeploymentSupplierPage() {
         </section>
 
         {dialogOpen && (
-          <BatchRequestDialog rows={selectedRows} onClose={() => setDialogOpen(false)}
+          <BatchRequestDialog rows={selectedRows} sentRows={sent} onClose={() => setDialogOpen(false)}
                               onSaved={() => { setDialogOpen(false); void load(); }} />
         )}
       </div>
@@ -267,12 +267,18 @@ function rateSummary(r: FieldDeploymentResponse): string {
   return vals.map((v) => (v != null ? v.toLocaleString() : '-')).join(' / ');
 }
 
-function BatchRequestDialog({ rows, onClose, onSaved }:
-  { rows: DispatchedRow[]; onClose: () => void; onSaved: () => void }) {
+function BatchRequestDialog({ rows, sentRows, onClose, onSaved }:
+  { rows: DispatchedRow[]; sentRows: FieldDeploymentResponse[]; onClose: () => void; onSaved: () => void }) {
   const [startDate, setStartDate] = useState('');
   const [note, setNote] = useState('');
   const [targetSiteId, setTargetSiteId] = useState<number | ''>('');
   const [sites, setSites] = useState<Array<{ id: number; name: string }>>([]);
+  // R3 조합 모드(장비 1건 선택 시): 교대조 조종원 자동 로드 → combo API 1회 호출. 끄면 단건 발송 기존 그대로.
+  const comboEligible = rows.length === 1 && rows[0].resource_type === 'EQUIPMENT';
+  const [comboMode, setComboMode] = useState(false);
+  const [comboOperators, setComboOperators] = useState<{ person_id: number; person_name?: string | null }[]>([]);
+  const [comboChecked, setComboChecked] = useState<Set<number>>(new Set());
+  const [opRates, setOpRates] = useState<Record<number, RateRow>>({});
   const [rates, setRates] = useState<Record<number, RateRow>>(() => {
     const init: Record<number, RateRow> = {};
     for (const r of rows) {
@@ -294,10 +300,59 @@ function BatchRequestDialog({ rows, onClose, onSaved }:
       .catch(() => setSites([]));
   }, []);
 
+  // R3: 조합 모드 켜면 그 장비의 교대조 조종원 로드(기존 배치 API) — 전원 기본 선택, 개별 해제 가능.
+  useEffect(() => {
+    if (!comboMode || !comboEligible) return;
+    const equipmentId = rows[0].resource_id;
+    let alive = true;
+    api.post<{ results: Array<{ equipment_id: number; operators: Array<{ person_id: number; person_name?: string | null }> }> }>(
+      '/api/equipment/default-operators', { equipment_ids: [equipmentId] })
+      .then((res) => {
+        if (!alive) return;
+        const ops = res.data.results.find((x) => x.equipment_id === equipmentId)?.operators ?? [];
+        setComboOperators(ops);
+        setComboChecked(new Set(ops.map((o) => o.person_id)));
+      })
+      .catch(() => { if (alive) { setComboOperators([]); setComboChecked(new Set()); } });
+    return () => { alive = false; };
+  }, [comboMode, comboEligible, rows]);
+
   const setRate = (id: number, key: keyof RateRow, val: string) =>
     setRates((prev) => ({ ...prev, [id]: { ...prev[id], [key]: val } }));
 
+  const setOpRate = (personId: number, key: keyof RateRow, val: string) =>
+    setOpRates((prev) => ({
+      ...prev,
+      [personId]: { ...(prev[personId] ?? { daily: '', monthly: '', ot: '', night: '' }), [key]: val },
+    }));
+
+  const toggleOperator = (personId: number) => setComboChecked((prev) => {
+    const next = new Set(prev);
+    if (next.has(personId)) next.delete(personId); else next.add(personId);
+    return next;
+  });
+
   const num = (s: string) => (s && Number(s) > 0 ? Number(s) : null);
+
+  // 기배차 경고(차단 아님) — 이미 진행 중(수락 대기/현장 운영) 투입 요청이 있는 선택 자원.
+  // 판단은 이미 로드된 보낸 요청 목록(/api/field-deployments/supplier) 재사용 — 추가 API 없음.
+  const inProgressKeys = useMemo(() => new Set(
+    sentRows.filter((s) => s.status === 'REQUESTED' || s.status === 'ACTIVE')
+      .map((s) => `${s.resource_type}:${s.resource_id}`)), [sentRows]);
+  const inProgressLabels = useMemo(() => {
+    const labels: string[] = [];
+    for (const r of rows) {
+      if (inProgressKeys.has(`${r.resource_type}:${r.resource_id}`)) labels.push(r.resource_label);
+    }
+    if (comboMode) {
+      for (const o of comboOperators) {
+        if (comboChecked.has(o.person_id) && inProgressKeys.has(`PERSON:${o.person_id}`)) {
+          labels.push(o.person_name ?? `인원 #${o.person_id}`);
+        }
+      }
+    }
+    return labels;
+  }, [rows, comboMode, comboOperators, comboChecked, inProgressKeys]);
 
   // 통계 — 일대/월대 건수 + 합계
   const stats = useMemo(() => {
@@ -312,6 +367,41 @@ function BatchRequestDialog({ rows, onClose, onSaved }:
   }, [rows, rates]);
 
   const missingBp = rows.filter((r) => !r.bp_company_id);
+
+  // R3 조합 발송 — combo API 1회 호출(단일 트랜잭션·전 행 combo_equipment_id 스냅샷).
+  const submitCombo = async () => {
+    const r = rows[0];
+    if (!r?.bp_company_id) { toast.error('BP사 정보가 없어 발송할 수 없습니다'); return; }
+    const opIds = comboOperators.filter((o) => comboChecked.has(o.person_id)).map((o) => o.person_id);
+    const rt = rates[r.id] ?? { daily: '', monthly: '', ot: '', night: '' };
+    setBusy(true);
+    try {
+      const res = await api.post<FieldDeploymentResponse[]>('/api/field-deployments/combo', {
+        bp_company_id: r.bp_company_id,
+        equipment_id: r.resource_id,
+        operator_person_ids: opIds,
+        target_site_id: targetSiteId === '' ? null : targetSiteId,
+        start_date: startDate || null,
+        note: note || null,
+        equipment_prices: {
+          daily_price: num(rt.daily), monthly_price: num(rt.monthly),
+          ot_price: num(rt.ot), night_price: num(rt.night),
+        },
+        operator_prices: opIds.map((pid) => {
+          const or = opRates[pid] ?? { daily: '', monthly: '', ot: '', night: '' };
+          return {
+            person_id: pid,
+            daily_price: num(or.daily), monthly_price: num(or.monthly),
+            ot_price: num(or.ot), night_price: num(or.night),
+          };
+        }),
+      });
+      toast.success(`조합 투입 요청 ${res.data.length}건 발송`);
+      onSaved();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? '발송 실패');
+    } finally { setBusy(false); }
+  };
 
   const submit = async () => {
     if (rows.length === 0) return;
@@ -355,6 +445,23 @@ function BatchRequestDialog({ rows, onClose, onSaved }:
           <h3 className="font-bold text-slate-900">현장 투입 요청 — {rows.length}건</h3>
         </div>
         <div className="px-5 py-4 space-y-4 text-sm overflow-y-auto">
+          {/* R3 조합 모드 — 장비 1건 선택 시에만 노출 */}
+          {comboEligible && (
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-800 cursor-pointer">
+              <input type="checkbox" checked={comboMode} onChange={(e) => setComboMode(e.target.checked)} />
+              <span>조합으로 요청</span>
+              <span className="font-normal text-xs text-slate-500">장비+교대조 조종원 일괄</span>
+            </label>
+          )}
+
+          {/* 기배차 경고 — 차단 없음(이중 계상 노출 완화) */}
+          {inProgressLabels.length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              이미 진행 중(수락 대기·현장 운영)인 투입 요청이 있는 자원입니다: {inProgressLabels.join(', ')}.
+              이중 요청 여부를 확인하세요.
+            </div>
+          )}
+
           {/* 공통 */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
@@ -404,11 +511,43 @@ function BatchRequestDialog({ rows, onClose, onSaved }:
               );
             })}
           </div>
+
+          {/* R3 조합(교대조) 조종원 — 요청 대상 개별 해제 + 행별 단가 */}
+          {comboMode && (
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 px-3 py-2 space-y-2">
+              <span className="text-xs font-semibold text-slate-500">조합(교대조) 조종원 — 요청 대상 선택 · 행별 단가</span>
+              {comboOperators.length === 0 ? (
+                <div className="text-xs text-slate-400">이 장비에 등록된 조종원이 없습니다 (장비만 요청).</div>
+              ) : comboOperators.map((o) => {
+                const or = opRates[o.person_id] ?? { daily: '', monthly: '', ot: '', night: '' };
+                const checked = comboChecked.has(o.person_id);
+                return (
+                  <div key={o.person_id} className="rounded-lg border border-slate-200 bg-white p-2.5">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-800 cursor-pointer">
+                      <input type="checkbox" checked={checked} onChange={() => toggleOperator(o.person_id)} />
+                      <span className="text-[10px] font-normal text-slate-500">인원</span>
+                      <span>{o.person_name ?? `인원 #${o.person_id}`}</span>
+                    </label>
+                    {checked && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1.5">
+                        <RateField label="일대" value={or.daily} onChange={(v) => setOpRate(o.person_id, 'daily', v)} />
+                        <RateField label="월대" value={or.monthly} onChange={(v) => setOpRate(o.person_id, 'monthly', v)} />
+                        <RateField label="OT" value={or.ot} onChange={(v) => setOpRate(o.person_id, 'ot', v)} />
+                        <RateField label="야간" value={or.night} onChange={(v) => setOpRate(o.person_id, 'night', v)} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="px-5 py-3 border-t flex justify-end gap-2">
           <button onClick={onClose} className="px-3 py-1.5 text-sm hover:bg-slate-100 rounded">취소</button>
-          <button onClick={submit} disabled={busy} className="btn-primary disabled:opacity-50">
-            {busy ? '발송 중…' : `${rows.length}건 발송`}
+          <button onClick={comboMode ? submitCombo : submit} disabled={busy} className="btn-primary disabled:opacity-50">
+            {busy ? '발송 중…'
+              : comboMode ? `조합 발송 (장비 1 + 조종원 ${comboChecked.size})`
+              : `${rows.length}건 발송`}
           </button>
         </div>
       </div>

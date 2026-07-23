@@ -63,6 +63,10 @@ public class FieldDeploymentRequest {
     @Column(nullable = false, length = 20)
     private FieldDeploymentStatus status;
 
+    /** R3 조합 스냅샷 — 장비 행=자기 equipment id, 조종원 행=그 장비 id, 단독 요청=NULL. 요청 시점 고정. */
+    @Column(name = "combo_equipment_id")
+    private Long comboEquipmentId;
+
     @Column(name = "requested_by_user_id", nullable = false)
     private Long requestedByUserId;
 
@@ -89,7 +93,7 @@ public class FieldDeploymentRequest {
                                     OwnerType resourceType, Long resourceId,
                                     Long targetSiteId, LocalDate startDate, String note,
                                     Long dailyPrice, Long monthlyPrice, Long otPrice, Long nightPrice,
-                                    Long requestedByUserId) {
+                                    Long comboEquipmentId, Long requestedByUserId) {
         this.supplierCompanyId = supplierCompanyId;
         this.bpCompanyId = bpCompanyId;
         this.resourceType = resourceType;
@@ -101,6 +105,7 @@ public class FieldDeploymentRequest {
         this.monthlyPrice = monthlyPrice;
         this.otPrice = otPrice;
         this.nightPrice = nightPrice;
+        this.comboEquipmentId = comboEquipmentId;
         this.status = FieldDeploymentStatus.REQUESTED;
         this.requestedByUserId = requestedByUserId;
         this.requestedAt = LocalDateTime.now();

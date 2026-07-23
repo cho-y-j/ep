@@ -11,6 +11,8 @@ export default function FieldDeploymentBpInbox() {
   const [loading, setLoading] = useState(true);
   const [acceptingFor, setAcceptingFor] = useState<FieldDeploymentResponse | null>(null);
   const [rejectingFor, setRejectingFor] = useState<FieldDeploymentResponse | null>(null);
+  // R3: [조합 일괄 수락] 대상 그룹(같은 combo_equipment_id 행들).
+  const [comboAccepting, setComboAccepting] = useState<FieldDeploymentResponse[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -56,19 +58,33 @@ export default function FieldDeploymentBpInbox() {
   const activeFilterCount = [q, typeFilter, siteFilter].filter(Boolean).length;
   const resetFilters = () => { setQ(''); setTypeFilter(''); setSiteFilter(''); };
 
-  // 선택/일괄수락은 보이는(필터된) 행 기준으로만 동작 — 숨겨진 선택은 처리 대상에서 제외.
-  const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
+  // R3 조합 묶음 — 같은 combo_equipment_id 행을 장비 라벨 헤더 카드로 묶음(첫 등장 순).
+  // combo_equipment_id 없는 행(singles)은 기존 테이블 렌더 그대로(무회귀).
+  const comboGroups = useMemo(() => {
+    const groups: FieldDeploymentResponse[][] = [];
+    const seen = new Set<number>();
+    for (const r of filtered) {
+      if (r.combo_equipment_id == null || seen.has(r.combo_equipment_id)) continue;
+      seen.add(r.combo_equipment_id);
+      groups.push(filtered.filter((x) => x.combo_equipment_id === r.combo_equipment_id));
+    }
+    return groups;
+  }, [filtered]);
+  const singles = useMemo(() => filtered.filter((r) => r.combo_equipment_id == null), [filtered]);
+
+  // 선택/일괄수락은 보이는(필터된) 단독 행 기준으로만 동작 — 조합 행은 [조합 일괄 수락] 이 담당.
+  const allSelected = singles.length > 0 && singles.every((r) => selected.has(r.id));
   const toggleAll = () => {
     setSelected((prev) => {
-      const allSel = filtered.length > 0 && filtered.every((r) => prev.has(r.id));
+      const allSel = singles.length > 0 && singles.every((r) => prev.has(r.id));
       const next = new Set(prev);
-      if (allSel) filtered.forEach((r) => next.delete(r.id)); else filtered.forEach((r) => next.add(r.id));
+      if (allSel) singles.forEach((r) => next.delete(r.id)); else singles.forEach((r) => next.add(r.id));
       return next;
     });
   };
 
   // 희망 현장(target_site_id)이 있는 선택 건만 일괄 수락 대상. 없는 건은 개별 "수락 + 배치" 필요.
-  const selectedRows = filtered.filter((r) => selected.has(r.id));
+  const selectedRows = singles.filter((r) => selected.has(r.id));
   const bulkAcceptable = selectedRows.filter((r) => r.target_site_id != null);
   const bulkExcluded = selectedRows.filter((r) => r.target_site_id == null);
 
@@ -139,7 +155,55 @@ export default function FieldDeploymentBpInbox() {
         ) : filtered.length === 0 ? (
           <div className="card p-8 text-center text-slate-400">조건에 맞는 요청이 없습니다.</div>
         ) : (
-          <div className="card overflow-x-auto p-0">
+          <>
+            {/* R3 조합 묶음 카드 — 장비 라벨 헤더 + 행별 단가 + [조합 일괄 수락]. 개별 수락/반려 병존. */}
+            {comboGroups.map((group) => {
+              const head = group[0];
+              return (
+                <div key={`combo-${head.combo_equipment_id}`}
+                     className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-2 space-y-2">
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="px-1.5 py-0.5 text-[10px] rounded-full font-semibold bg-indigo-600 text-white">조합</span>
+                    <span className="text-sm font-bold text-slate-900 truncate">
+                      {head.combo_equipment_label ?? `장비 #${head.combo_equipment_id}`}
+                    </span>
+                    <span className="text-xs text-slate-500">투입 {group.length}건</span>
+                    <span className="text-xs text-slate-500">· {head.supplier_company_name ?? '#' + head.supplier_company_id}</span>
+                    <div className="ml-auto">
+                      <button disabled={bulkBusy} onClick={() => setComboAccepting(group)}
+                              className="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
+                        조합 일괄 수락
+                      </button>
+                    </div>
+                  </div>
+                  {group.map((r) => (
+                    <div key={r.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                      <span className="font-semibold">
+                        <span className="text-[10px] text-slate-500 mr-1">{r.resource_type === 'EQUIPMENT' ? '장비' : '인원'}</span>
+                        {r.resource_label}
+                      </span>
+                      <span className="text-[11px] tabular-nums text-slate-500">단가(일/월/OT/야) {rateSummary(r)}</span>
+                      <span className="text-xs text-slate-600">희망 현장 {r.target_site_name ?? '미지정'}</span>
+                      <span className="text-xs tabular-nums text-slate-600">시작 {r.start_date ?? '-'}</span>
+                      {r.note && <span className="text-xs text-slate-500 max-w-[200px] truncate">{r.note}</span>}
+                      <div className="ml-auto flex gap-1">
+                        <button disabled={bulkBusy} onClick={() => setAcceptingFor(r)}
+                                className="px-2 py-1 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
+                          수락 + 배치
+                        </button>
+                        <button disabled={bulkBusy} onClick={() => setRejectingFor(r)}
+                                className="px-2 py-1 text-xs rounded border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-50">
+                          반려
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+
+            {singles.length > 0 && (
+            <div className="card overflow-x-auto p-0">
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-left text-slate-500">
                 <tr>
@@ -156,7 +220,7 @@ export default function FieldDeploymentBpInbox() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map((r) => (
+                {singles.map((r) => (
                   <tr key={r.id}>
                     <td className="px-3 py-2">
                       <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)}
@@ -186,7 +250,9 @@ export default function FieldDeploymentBpInbox() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+            )}
+          </>
         )}
 
         {acceptingFor && (
@@ -197,6 +263,11 @@ export default function FieldDeploymentBpInbox() {
         {rejectingFor && (
           <RejectDialog row={rejectingFor} onClose={() => setRejectingFor(null)}
                         onSaved={() => { setRejectingFor(null); void load(); }} />
+        )}
+
+        {comboAccepting && (
+          <ComboAcceptDialog group={comboAccepting} onClose={() => setComboAccepting(null)}
+                             onSaved={() => { setComboAccepting(null); void load(); }} />
         )}
 
         <ConfirmDialog
@@ -211,6 +282,88 @@ export default function FieldDeploymentBpInbox() {
         />
       </div>
     </AppShell>
+  );
+}
+
+function rateSummary(r: FieldDeploymentResponse): string {
+  const vals = [r.daily_price, r.monthly_price, r.ot_price, r.night_price];
+  if (vals.every((v) => v == null)) return '-';
+  return vals.map((v) => (v != null ? v.toLocaleString() : '-')).join(' / ');
+}
+
+/** R3: 조합 일괄 수락 — accept-combo 1회(전건 REQUESTED·같은 combo, 위반 시 전체 롤백). */
+function ComboAcceptDialog({ group, onClose, onSaved }:
+  { group: FieldDeploymentResponse[]; onClose: () => void; onSaved: () => void }) {
+  const head = group[0];
+  const [targetSiteId, setTargetSiteId] = useState<number | ''>(head.target_site_id ?? '');
+  const [note, setNote] = useState('');
+  const [sites, setSites] = useState<Array<{ id: number; name: string }>>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.get<any[]>('/api/sites').then((r) => setSites((r.data ?? []).map((s) => ({ id: s.id, name: s.name }))))
+      .catch(() => setSites([]));
+  }, []);
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await api.post('/api/field-deployments/accept-combo', {
+        request_ids: group.map((r) => r.id),
+        note: note || null,
+        target_site_id: targetSiteId === '' ? null : targetSiteId,
+      });
+      toast.success(`조합 ${group.length}건 일괄 수락 — 현장 운영 시작`);
+      onSaved();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? '일괄 수락 실패');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div className="px-5 py-3 border-b">
+          <h3 className="font-bold text-slate-900">조합 일괄 수락 — {group.length}건</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {head.combo_equipment_label ?? `장비 #${head.combo_equipment_id}`} · {head.supplier_company_name ?? '#' + head.supplier_company_id}
+          </p>
+        </div>
+        <div className="px-5 py-4 space-y-3 text-sm">
+          <div className="card p-2 bg-slate-50 text-xs space-y-0.5">
+            {group.map((r) => (
+              <div key={r.id}>
+                <span className="text-[10px] text-slate-500 mr-1">{r.resource_type === 'EQUIPMENT' ? '장비' : '인원'}</span>
+                <span className="font-semibold">{r.resource_label}</span>
+                <span className="ml-2 tabular-nums text-slate-500">{rateSummary(r)}</span>
+              </div>
+            ))}
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500">배치 현장 (전 건 공통)</label>
+            <select value={targetSiteId} onChange={(e) => setTargetSiteId(e.target.value ? Number(e.target.value) : '')}
+                    className="input mt-1 w-full">
+              <option value="">공급사 희망 유지 (미지정 가능)</option>
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500">메모 (선택)</label>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+                      className="input mt-1 w-full" />
+          </div>
+          <p className="text-[11px] text-slate-400">
+            전 건이 함께 수락됩니다(1건이라도 이미 처리됐으면 전체 취소). 일부만 수락하려면 개별 "수락 + 배치"를 사용하세요.
+          </p>
+        </div>
+        <div className="px-5 py-3 border-t flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm hover:bg-slate-100 rounded">취소</button>
+          <button onClick={submit} disabled={busy} className="btn-primary disabled:opacity-50">
+            {busy ? '처리 중…' : `${group.length}건 일괄 수락`}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

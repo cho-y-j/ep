@@ -6,6 +6,7 @@ import com.skep.company.CompanyRepository;
 import com.skep.document.OwnerType;
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentRepository;
+import com.skep.fieldDeployment.dto.CreateComboFieldDeploymentRequest;
 import com.skep.fieldDeployment.dto.CreateFieldDeploymentRequest;
 import com.skep.fieldDeployment.dto.FieldDeploymentBoardItem;
 import com.skep.fieldDeployment.dto.FieldDeploymentResponse;
@@ -57,29 +58,8 @@ public class FieldDeploymentService {
 
     /** 공급사가 자기 자원을 BP 에 투입 요청. */
     public FieldDeploymentResponse create(CreateFieldDeploymentRequest req, AuthenticatedUser actor) {
-        if (actor.role() != Role.EQUIPMENT_SUPPLIER
-                && actor.role() != Role.MANPOWER_SUPPLIER
-                && actor.role() != Role.ADMIN) {
-            throw ApiException.forbidden("SUPPLIER_ONLY", "공급사만 요청 가능");
-        }
-        Long supplierId = actor.companyId();
-        if (supplierId == null) throw ApiException.forbidden("NO_COMPANY", "회사 정보 없음");
-
-        if (req.resourceType() == OwnerType.EQUIPMENT) {
-            Equipment e = equipments.findById(req.resourceId()).orElseThrow(() ->
-                    ApiException.notFound("EQUIPMENT_NOT_FOUND", "장비 없음"));
-            if (actor.role() != Role.ADMIN && !supplierId.equals(e.getSupplierId())) {
-                throw ApiException.forbidden("DENIED", "본인 회사 자원만 요청 가능");
-            }
-        } else if (req.resourceType() == OwnerType.PERSON) {
-            Person p = persons.findById(req.resourceId()).orElseThrow(() ->
-                    ApiException.notFound("PERSON_NOT_FOUND", "인원 없음"));
-            if (actor.role() != Role.ADMIN && !supplierId.equals(p.getSupplierId())) {
-                throw ApiException.forbidden("DENIED", "본인 회사 자원만 요청 가능");
-            }
-        } else {
-            throw ApiException.badRequest("BAD_TYPE", "장비/인원만 가능");
-        }
+        Long supplierId = requireSupplierActor(actor);
+        requireOwnResource(req.resourceType(), req.resourceId(), supplierId, actor);
 
         FieldDeploymentRequest row = FieldDeploymentRequest.builder()
                 .supplierCompanyId(supplierId)
@@ -103,6 +83,101 @@ public class FieldDeploymentService {
                 resourceLabel(row.getResourceType(), row.getResourceId()) + " 투입 요청",
                 "FIELD_DEPLOYMENT", row.getId(), req.targetSiteId(), notifications.senderLabelOf(actor));
         return toResponse(row);
+    }
+
+    /**
+     * R3: 조합(장비+교대조 조종원) 투입 요청 — 단일 트랜잭션으로 장비 1행 + 조종원 N행 생성(단가는 행 단위).
+     * 전 행에 combo_equipment_id 스냅샷. 가드는 단건 create 와 공용(requireOwnResource) —
+     * 자원 1건이라도 스코프 밖이면 403 전체 롤백. BP 수신 알림은 행당 N건 대신 묶음 1건.
+     */
+    public List<FieldDeploymentResponse> createCombo(CreateComboFieldDeploymentRequest req, AuthenticatedUser actor) {
+        Long supplierId = requireSupplierActor(actor);
+        List<Long> operatorIds = req.operatorPersonIds() == null ? List.of()
+                : req.operatorPersonIds().stream().distinct().toList();
+
+        requireOwnResource(OwnerType.EQUIPMENT, req.equipmentId(), supplierId, actor);
+        for (Long pid : operatorIds) requireOwnResource(OwnerType.PERSON, pid, supplierId, actor);
+
+        Map<Long, CreateComboFieldDeploymentRequest.OperatorPrice> priceByPerson = new HashMap<>();
+        if (req.operatorPrices() != null) {
+            for (var op : req.operatorPrices()) priceByPerson.put(op.personId(), op);
+        }
+
+        List<FieldDeploymentRequest> rows = new java.util.ArrayList<>();
+        var ep = req.equipmentPrices();
+        rows.add(comboRow(supplierId, req, OwnerType.EQUIPMENT, req.equipmentId(),
+                ep != null ? ep.dailyPrice() : null, ep != null ? ep.monthlyPrice() : null,
+                ep != null ? ep.otPrice() : null, ep != null ? ep.nightPrice() : null, actor.id()));
+        for (Long pid : operatorIds) {
+            var op = priceByPerson.get(pid);
+            rows.add(comboRow(supplierId, req, OwnerType.PERSON, pid,
+                    op != null ? op.dailyPrice() : null, op != null ? op.monthlyPrice() : null,
+                    op != null ? op.otPrice() : null, op != null ? op.nightPrice() : null, actor.id()));
+        }
+
+        // BP 알림 — 묶음 1건: 『차량번호』 조합 투입 요청 N건. 링크는 첫 행(수신함 진입용).
+        String comboLabel = resourceLabel(OwnerType.EQUIPMENT, req.equipmentId());
+        String operatorNames = persons.findAllById(operatorIds).stream()
+                .map(Person::getName).collect(java.util.stream.Collectors.joining(", "));
+        notifications.sendToCompany(req.bpCompanyId(),
+                NotificationType.FIELD_DEPLOYMENT_REQUESTED,
+                "『" + comboLabel + "』 조합 투입 요청 " + rows.size() + "건",
+                (operatorNames.isBlank() ? "" : "조종원: " + operatorNames + " — ")
+                        + "장비+조종원 조합 투입 요청",
+                "FIELD_DEPLOYMENT", rows.get(0).getId(), req.targetSiteId(), notifications.senderLabelOf(actor));
+        return rows.stream().map(this::toResponse).toList();
+    }
+
+    /** 조합 행 생성 — 공통 필드는 요청에서, 단가만 행 단위. 전 행 combo_equipment_id=equipment_id 스냅샷. */
+    private FieldDeploymentRequest comboRow(Long supplierId, CreateComboFieldDeploymentRequest req,
+                                            OwnerType type, Long resourceId,
+                                            Long daily, Long monthly, Long ot, Long night, Long actorId) {
+        return repo.save(FieldDeploymentRequest.builder()
+                .supplierCompanyId(supplierId)
+                .bpCompanyId(req.bpCompanyId())
+                .resourceType(type)
+                .resourceId(resourceId)
+                .targetSiteId(req.targetSiteId())
+                .startDate(req.startDate())
+                .note(req.note())
+                .dailyPrice(daily)
+                .monthlyPrice(monthly)
+                .otPrice(ot)
+                .nightPrice(night)
+                .comboEquipmentId(req.equipmentId())
+                .requestedByUserId(actorId)
+                .build());
+    }
+
+    /** 단건(create)·조합(createCombo) 공용 — 공급사 역할 + 회사 식별 가드. */
+    private Long requireSupplierActor(AuthenticatedUser actor) {
+        if (actor.role() != Role.EQUIPMENT_SUPPLIER
+                && actor.role() != Role.MANPOWER_SUPPLIER
+                && actor.role() != Role.ADMIN) {
+            throw ApiException.forbidden("SUPPLIER_ONLY", "공급사만 요청 가능");
+        }
+        Long supplierId = actor.companyId();
+        if (supplierId == null) throw ApiException.forbidden("NO_COMPANY", "회사 정보 없음");
+        return supplierId;
+    }
+
+    /** 단건(create)·조합(createCombo) 공용 — 본인 회사 소유 자원 가드(ADMIN 예외). */
+    private void requireOwnResource(OwnerType resourceType, Long resourceId, Long supplierId, AuthenticatedUser actor) {
+        if (resourceType == OwnerType.EQUIPMENT) {
+            Equipment e = equipments.findById(resourceId).orElseThrow(() ->
+                    ApiException.notFound("EQUIPMENT_NOT_FOUND", "장비 없음"));
+            if (actor.role() != Role.ADMIN && !supplierId.equals(e.getSupplierId())) {
+                throw ApiException.forbidden("DENIED", "본인 회사 자원만 요청 가능");
+            }
+        } else if (resourceType == OwnerType.PERSON) {
+            Person p = persons.findById(resourceId).orElseThrow(() ->
+                    ApiException.notFound("PERSON_NOT_FOUND", "인원 없음"));
+            if (actor.role() != Role.ADMIN && !supplierId.equals(p.getSupplierId())) {
+                throw ApiException.forbidden("DENIED", "본인 회사 자원만 요청 가능");
+            }
+        } else {
+            throw ApiException.badRequest("BAD_TYPE", "장비/인원만 가능");
+        }
     }
 
     public List<FieldDeploymentResponse> listForSupplier(AuthenticatedUser actor) {
@@ -135,6 +210,39 @@ public class FieldDeploymentService {
                 resourceLabel(row.getResourceType(), row.getResourceId()) + " 투입 수락 — 현장 운영 시작",
                 "FIELD_DEPLOYMENT", row.getId(), row.getTargetSiteId(), notifications.senderLabelOf(actor));
         return toResponse(row);
+    }
+
+    /**
+     * R3: 조합 일괄 수락 — 전건 REQUESTED + 같은 combo + 자기 수신분 검증(1건이라도 위반 시 예외 → 전체 롤백).
+     * 통과 후 단건 accept 재사용(루프, 단일 트랜잭션). 부분 처리는 기존 단건 API 로.
+     */
+    public List<FieldDeploymentResponse> acceptCombo(List<Long> requestIds, String note, Long overrideSiteId,
+                                                     AuthenticatedUser actor) {
+        if (actor.role() != Role.BP && actor.role() != Role.ADMIN) {
+            throw ApiException.forbidden("BP_ONLY", "BP만 수락 가능");
+        }
+        if (requestIds == null || requestIds.isEmpty()) {
+            throw ApiException.badRequest("NO_REQUESTS", "수락할 요청이 없습니다");
+        }
+        List<Long> ids = requestIds.stream().distinct().toList();
+        List<FieldDeploymentRequest> rows = ids.stream().map(this::getOrThrow).toList();
+        Long comboId = rows.get(0).getComboEquipmentId();
+        if (comboId == null) {
+            throw ApiException.badRequest("NOT_COMBO", "조합 요청 건이 아닙니다");
+        }
+        for (FieldDeploymentRequest row : rows) {
+            if (!comboId.equals(row.getComboEquipmentId())) {
+                throw ApiException.badRequest("COMBO_MISMATCH", "같은 조합의 요청만 일괄 수락 가능");
+            }
+            if (actor.role() == Role.BP && !row.getBpCompanyId().equals(actor.companyId())) {
+                throw ApiException.forbidden("DENIED", "본인 회사 요청만 처리");
+            }
+            if (row.getStatus() != FieldDeploymentStatus.REQUESTED) {
+                throw ApiException.badRequest("INVALID_STATE",
+                        "이미 처리된 건이 포함되어 있습니다 — 남은 건은 개별 수락하세요");
+            }
+        }
+        return ids.stream().map(id -> accept(id, note, overrideSiteId, actor)).toList();
     }
 
     public FieldDeploymentResponse reject(Long id, ReviewFieldDeploymentRequest req, AuthenticatedUser actor) {
@@ -356,7 +464,10 @@ public class FieldDeploymentService {
         String siteName = r.getTargetSiteId() != null
                 ? sites.findById(r.getTargetSiteId()).map(Site::getName).orElse(null)
                 : null;
-        return FieldDeploymentResponse.from(r, supName, bpName, resLabel, siteName);
+        // R3: 조합 스냅샷 행이면 목록 묶음 헤더용 장비 라벨 동봉.
+        String comboLabel = r.getComboEquipmentId() != null
+                ? resourceLabel(OwnerType.EQUIPMENT, r.getComboEquipmentId()) : null;
+        return FieldDeploymentResponse.from(r, supName, bpName, resLabel, siteName, comboLabel);
     }
 
     private String companyName(Long id, Map<Long, String> cache) {
