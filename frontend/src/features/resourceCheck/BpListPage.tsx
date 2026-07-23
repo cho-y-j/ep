@@ -126,10 +126,12 @@ export default function ResourceCheckBpList() {
     };
   };
 
-  // 재검사 판정 — 같은 자원·같은 종류의 이전(id 더 작은) 건에 REJECTED 가 있으면 재발행 건. 클라이언트 판정(백엔드 무변경).
+  // 재검사 판정 — 같은 자원·같은 종류의 이전(id 더 작은) 건이 REJECTED 또는 CANCELLED 면 재발행 건.
+  // 재검사 재발행 시 원 REJECTED 건이 자동 CANCELLED(ResourceCheckService.createRow) 되므로 둘 다 포함해야 뱃지가 뜬다.
+  // 클라이언트 판정(백엔드 무변경). CANCELLED 는 재발행 경로에서만 생성됨(수동 취소 경로 없음).
   const isRecheck = (r: ResourceCheckResponse): boolean =>
     items.some((o) => o.id < r.id && o.owner_type === r.owner_type && o.owner_id === r.owner_id
-      && o.check_type === r.check_type && o.status === 'REJECTED');
+      && o.check_type === r.check_type && (o.status === 'REJECTED' || o.status === 'CANCELLED'));
 
   // V125 통화·연락 기록 — 발행사(이 목록 = 자기 발행분)만 append 가능. "[7/24 14:00 이름] 내용" 형식은 서버가 부여.
   const addContact = async (id: number) => {
