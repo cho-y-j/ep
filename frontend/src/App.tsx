@@ -74,6 +74,7 @@ import CollectPublicPage from './features/collection/CollectPublicPage';
 import DocumentCollectionPage from './features/collection/DocumentCollectionPage';
 import SettlementPage from './features/settlement/SettlementPage';
 import ResourcePipelinePage from './features/pipeline/ResourcePipelinePage';
+import SiteFlowPage from './features/siteFlow/SiteFlowPage';
 import DashboardRedirect from './features/dashboard/DashboardRedirect';
 import AdminDashboardPage from './features/dashboard/AdminDashboardPage';
 import BpDashboardPage from './features/dashboard/BpDashboardPage';
@@ -382,6 +383,9 @@ export default function App() {
                element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER', 'ADMIN']}><SettlementPage /></ProtectedRoute>} />
         <Route path="/resource-pipeline"
                element={<ProtectedRoute roles={['EQUIPMENT_SUPPLIER', 'MANPOWER_SUPPLIER']}><ResourcePipelinePage /></ProtectedRoute>} />
+        {/* BP 현장 보드 — 현장별 세트 흐름(심사→계획서→검사→투입 대기→투입 중) */}
+        <Route path="/site-board"
+               element={<ProtectedRoute roles={['BP', 'ADMIN']}><SiteFlowPage /></ProtectedRoute>} />
         <Route
           path="/admin/docx-templates"
           element={<ProtectedRoute roles={['ADMIN', 'BP']}><DocxTemplatesPage /></ProtectedRoute>}

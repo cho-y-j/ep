@@ -30,6 +30,12 @@ public class WorkPlanController {
         return PageResponse.of(service.list(actor, page, size), wp -> wp);
     }
 
+    /** BP 현장 보드 — 자기 회사 계획서(취소 제외) + 배치 장비/인원 최소 필드 (read-only 집계). */
+    @GetMapping("/board")
+    public List<WorkPlanBoardResponse> board(@CurrentUser AuthenticatedUser actor) {
+        return service.board(actor);
+    }
+
     @GetMapping("/{id}")
     public WorkPlanResponse get(@PathVariable Long id, @CurrentUser AuthenticatedUser actor) {
         return service.get(id, actor);

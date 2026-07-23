@@ -602,6 +602,73 @@ public class WorkPlanService {
         ));
     }
 
+    /**
+     * BP 현장 보드(read-only) — 자기 회사 계획서(취소 제외) 전체를 배치(장비/인원 최소 필드)와 함께 반환.
+     * 상세 응답의 단가·컴플라이언스는 싣지 않는다(표시 전용, 게이트·금액 무접촉). ADMIN 은 전체.
+     */
+    @Transactional(readOnly = true)
+    public List<WorkPlanBoardResponse> board(AuthenticatedUser actor) {
+        List<WorkPlan> plans;
+        if (actor.role() == Role.ADMIN) {
+            plans = wpRepo.findAll();
+        } else if (actor.role() == Role.BP) {
+            requireCompany(actor);
+            plans = wpRepo.findByBpCompanyId(actor.companyId());
+        } else {
+            return List.of();
+        }
+        plans = plans.stream()
+                .filter(wp -> wp.getStatus() != WorkPlanStatus.CANCELLED)
+                .sorted(Comparator.comparing(WorkPlan::getWorkDate).thenComparing(WorkPlan::getId))
+                .toList();
+        if (plans.isEmpty()) return List.of();
+
+        List<Long> planIds = plans.stream().map(WorkPlan::getId).toList();
+        List<WorkPlanEquipment> wpeAll = wpeRepo.findByWorkPlanIdIn(planIds);
+        List<WorkPlanPerson> wppAll = wppRepo.findByWorkPlanIdIn(planIds);
+
+        Map<Long, Equipment> equipMap = mapById(
+                equipmentRepo.findAllById(wpeAll.stream().map(WorkPlanEquipment::getEquipmentId).distinct().toList()),
+                Equipment::getId);
+        Map<Long, Person> personMap = mapById(
+                personRepo.findAllById(wppAll.stream().map(WorkPlanPerson::getPersonId).distinct().toList()),
+                Person::getId);
+        Set<Long> companyIds = new HashSet<>();
+        wpeAll.forEach(x -> companyIds.add(x.getSupplierCompanyId()));
+        wppAll.forEach(x -> companyIds.add(x.getSupplierCompanyId()));
+        Map<Long, Company> companyMap = mapById(companies.findAllById(companyIds), Company::getId);
+        Map<Long, Site> siteMap = mapById(
+                sites.findAllById(plans.stream().map(WorkPlan::getSiteId).filter(Objects::nonNull).distinct().toList()),
+                Site::getId);
+
+        Map<Long, List<WorkPlanEquipment>> wpeByPlan = new HashMap<>();
+        wpeAll.forEach(x -> wpeByPlan.computeIfAbsent(x.getWorkPlanId(), k -> new ArrayList<>()).add(x));
+        Map<Long, List<WorkPlanPerson>> wppByPlan = new HashMap<>();
+        wppAll.forEach(x -> wppByPlan.computeIfAbsent(x.getWorkPlanId(), k -> new ArrayList<>()).add(x));
+
+        return plans.stream().map(wp -> {
+            var equipment = wpeByPlan.getOrDefault(wp.getId(), List.of()).stream().map(wpe -> {
+                Equipment e = equipMap.get(wpe.getEquipmentId());
+                String label = e != null ? Optional.ofNullable(e.getModel())
+                        .orElse(Optional.ofNullable(e.getVehicleNo()).orElse("(이름없음)")) : "(삭제됨)";
+                Company c = companyMap.get(wpe.getSupplierCompanyId());
+                return new WorkPlanBoardResponse.BoardEquipment(
+                        wpe.getEquipmentId(), label, wpe.getSupplierCompanyId(), c != null ? c.getName() : null);
+            }).toList();
+            var persons = wppByPlan.getOrDefault(wp.getId(), List.of()).stream().map(wpp -> {
+                Person p = personMap.get(wpp.getPersonId());
+                Company c = companyMap.get(wpp.getSupplierCompanyId());
+                return new WorkPlanBoardResponse.BoardPerson(
+                        wpp.getPersonId(), p != null ? p.getName() : "(삭제됨)", wpp.getRole(),
+                        wpp.getEquipmentId(), wpp.getSupplierCompanyId(), c != null ? c.getName() : null);
+            }).toList();
+            Site site = wp.getSiteId() != null ? siteMap.get(wp.getSiteId()) : null;
+            return new WorkPlanBoardResponse(
+                    wp.getId(), wp.getSiteId(), site != null ? site.getName() : null,
+                    wp.getStatus(), wp.getWorkDate(), wp.getTitle(), equipment, persons);
+        }).toList();
+    }
+
     // ================== 자원 추가/제거 ==================
 
     public WorkPlanResponse addEquipment(Long workPlanId, AddEquipmentRequest req, AuthenticatedUser actor) {
