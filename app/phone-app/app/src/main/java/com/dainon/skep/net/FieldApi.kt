@@ -337,9 +337,10 @@ class FieldApi(private val baseUrl: String) {
         }
     }
 
-    /** POST /api/field-auth/equipment-inspection (X-Field-Token) — 장비 일상점검 제출. items 는 체크리스트 JSON 문자열. */
+    /** POST /api/field-auth/equipment-inspection (X-Field-Token) — 장비 일상점검 제출. items 는 체크리스트 JSON 문자열. hourMeter/odometerKm 는 선택(null=미보고). */
     fun submitEquipmentInspection(token: String, equipmentId: Long, inspectDate: String?,
-                                  items: String, photoKey: String?, notes: String?, overall: String): Boolean {
+                                  items: String, photoKey: String?, notes: String?, overall: String,
+                                  hourMeter: Double?, odometerKm: Double?): Boolean {
         val payload = HashMap<String, Any?>()
         payload["equipment_id"] = equipmentId
         payload["inspect_date"] = inspectDate
@@ -347,6 +348,8 @@ class FieldApi(private val baseUrl: String) {
         payload["photo_key"] = photoKey
         payload["notes"] = notes
         payload["overall"] = overall
+        payload["hour_meter"] = hourMeter
+        payload["odometer_km"] = odometerKm
         val req = Request.Builder()
             .url("$baseUrl/api/field-auth/equipment-inspection")
             .header("X-Field-Token", token)

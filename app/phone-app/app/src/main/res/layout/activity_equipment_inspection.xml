@@ -75,6 +75,48 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:text="가동시간 · 운행거리 (선택)"
+                android:textSize="13sp"
+                android:textColor="#0F172A"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp">
+
+                <EditText
+                    android:id="@+id/etHourMeter"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:inputType="numberDecimal"
+                    android:background="#FFFFFF"
+                    android:padding="12dp"
+                    android:textSize="13sp"
+                    android:hint="아워미터 (시간)"
+                    android:textColorHint="#94A3B8" />
+
+                <EditText
+                    android:id="@+id/etOdometer"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:inputType="numberDecimal"
+                    android:background="#FFFFFF"
+                    android:padding="12dp"
+                    android:textSize="13sp"
+                    android:hint="운행거리 (km)"
+                    android:textColorHint="#94A3B8" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:text="점검 항목"
                 android:textSize="13sp"
                 android:textColor="#0F172A"

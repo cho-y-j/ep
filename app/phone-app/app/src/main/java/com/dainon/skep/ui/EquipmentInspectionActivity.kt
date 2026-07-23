@@ -49,6 +49,8 @@ class EquipmentInspectionActivity : AppCompatActivity() {
 
     private lateinit var btnSubmit: Button
     private lateinit var etNotes: EditText
+    private lateinit var etHourMeter: EditText
+    private lateinit var etOdometer: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +62,8 @@ class EquipmentInspectionActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<TextView>(R.id.tvEquip).text = label
         etNotes = findViewById(R.id.etNotes)
+        etHourMeter = findViewById(R.id.etHourMeter)
+        etOdometer = findViewById(R.id.etOdometer)
         btnSubmit = findViewById(R.id.btnSubmit)
 
         val container = findViewById<LinearLayout>(R.id.itemsContainer)
@@ -96,6 +100,9 @@ class EquipmentInspectionActivity : AppCompatActivity() {
         }
         val itemsJson = Gson().toJson(arr)
         val notes = etNotes.text.toString().trim().ifBlank { null }
+        // 가동시간·운행거리는 선택 — 비었거나 숫자가 아니면 null(fail-open).
+        val hourMeter = etHourMeter.text.toString().trim().toDoubleOrNull()
+        val odometer = etOdometer.text.toString().trim().toDoubleOrNull()
         val token = Prefs.token(this) ?: return
         btnSubmit.isEnabled = false
         btnSubmit.text = "제출 중..."
@@ -103,7 +110,7 @@ class EquipmentInspectionActivity : AppCompatActivity() {
             val r = withContext(Dispatchers.IO) {
                 runCatching {
                     FieldApi(Prefs.serverUrl(this@EquipmentInspectionActivity))
-                        .submitEquipmentInspection(token, equipmentId, null, itemsJson, null, notes, overall)
+                        .submitEquipmentInspection(token, equipmentId, null, itemsJson, null, notes, overall, hourMeter, odometer)
                 }
             }
             r.onSuccess {
