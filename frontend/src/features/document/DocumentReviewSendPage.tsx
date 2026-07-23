@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppShell from '../../components/layout/AppShell';
-import { PageHeader } from '../../components/ui';
+import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatOwnerSubLabel } from '../../lib/format';
 import { toast } from '../../lib/toast';
@@ -39,6 +39,9 @@ export default function DocumentReviewSendPage() {
   const [operators, setOperators] = useState<Record<number, Array<{ person_id: number; person_name?: string | null }>>>({});
   const [opSel, setOpSel] = useState<Record<number, Set<number>>>({});
   const [separatorPage, setSeparatorPage] = useState(true);
+  // 클라이언트 검색·필터 — 차량번호/이름 + 종류(owner_sub_label). SupplierInboxPage 패턴.
+  const [q, setQ] = useState('');
+  const [subFilter, setSubFilter] = useState('');
 
   useEffect(() => {
     api.get<DocRow[]>('/api/documents/my-supplier')
@@ -79,6 +82,27 @@ export default function DocumentReviewSendPage() {
     () => (mode === 'bundle' ? groups.filter((g) => g.owner_type === 'EQUIPMENT') : groups),
     [groups, mode],
   );
+
+  // 종류 필터 옵션 — 현재 보이는 자원의 owner_sub_label(장비 카테고리/인력 역할)을 distinct.
+  const subOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of visibleGroups) {
+      const label = formatOwnerSubLabel(g.owner_type, g.owner_sub_label);
+      if (g.owner_sub_label && label) m.set(g.owner_sub_label, label);
+    }
+    return Array.from(m.entries()).map(([value, label]) => ({ value, label }));
+  }, [visibleGroups]);
+
+  const qLower = q.trim().toLowerCase();
+  const filteredGroups = useMemo(() => visibleGroups.filter((g) => {
+    if (subFilter && g.owner_sub_label !== subFilter) return false;
+    if (qLower) {
+      const sub = formatOwnerSubLabel(g.owner_type, g.owner_sub_label) ?? '';
+      if (!`${g.owner_name} ${sub}`.toLowerCase().includes(qLower)) return false;
+    }
+    return true;
+  }), [visibleGroups, subFilter, qLower]);
+  const activeFilterCount = [q, subFilter].filter(Boolean).length;
 
   // 장비묶음 모드 — 장비 그룹의 교대조 조종원을 배치 1회로 로드(개별 체크용).
   useEffect(() => {
@@ -125,8 +149,14 @@ export default function DocumentReviewSendPage() {
       return next;
     });
   }
+  // 필터 적용된 목록 기준 전체 선택/해제 — 필터 밖 기존 선택은 유지.
+  const allFilteredSelected = filteredGroups.length > 0 && filteredGroups.every((g) => selected.has(g.key));
   function toggleAll() {
-    setSelected((prev) => prev.size === visibleGroups.length ? new Set() : new Set(visibleGroups.map((g) => g.key)));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      filteredGroups.forEach((g) => { if (allFilteredSelected) next.delete(g.key); else next.add(g.key); });
+      return next;
+    });
   }
 
   function pushEmail(raw: string) {
@@ -316,22 +346,35 @@ export default function DocumentReviewSendPage() {
         <section className="card p-0 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
             <div className="text-sm font-semibold text-slate-700">{mode === 'bundle' ? '보낼 장비 선택' : '보낼 자원 선택'}</div>
-            {visibleGroups.length > 0 && (
+            {filteredGroups.length > 0 && (
               <button type="button" onClick={toggleAll}
                       className="text-xs font-semibold text-slate-500 hover:text-slate-900">
-                {selected.size === visibleGroups.length ? '전체 해제' : '전체 선택'}
+                {allFilteredSelected ? '전체 해제' : '전체 선택'}
               </button>
             )}
           </div>
+          {visibleGroups.length > 0 && (
+            <div className="px-4 pt-3 -mb-3">
+              <FilterBar
+                search={{ value: q, onChange: setQ, placeholder: '차량번호·이름 검색' }}
+                activeFilterCount={activeFilterCount}
+                onReset={() => { setQ(''); setSubFilter(''); }}
+              >
+                <FilterSelect value={subFilter} onChange={setSubFilter} placeholder="종류 전체" options={subOptions} />
+              </FilterBar>
+            </div>
+          )}
           {loading ? (
             <div className="p-8 text-center text-sm text-slate-400">불러오는 중…</div>
           ) : visibleGroups.length === 0 ? (
             <div className="p-8 text-center text-sm text-slate-400">
               {mode === 'bundle' ? '보낼 서류가 있는 장비가 없습니다.' : '보낼 서류가 있는 자원이 없습니다.'}
             </div>
+          ) : filteredGroups.length === 0 ? (
+            <div className="p-8 text-center text-sm text-slate-400">조건에 맞는 자원이 없습니다.</div>
           ) : mode === 'bundle' ? (
             <div className="space-y-2.5 p-4">
-              {visibleGroups.map((g) => {
+              {filteredGroups.map((g) => {
                 const on = selected.has(g.key);
                 const ops = operators[g.owner_id] ?? [];
                 return (
@@ -376,7 +419,7 @@ export default function DocumentReviewSendPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-              {visibleGroups.map((g) => {
+              {filteredGroups.map((g) => {
                 const sub = formatOwnerSubLabel(g.owner_type, g.owner_sub_label);
                 const on = selected.has(g.key);
                 const typeCls = g.owner_type === 'EQUIPMENT' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700';

@@ -3,6 +3,7 @@ package com.skep.document;
 import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
+import com.skep.company.CompanyService;
 import com.skep.company.CompanyType;
 import com.skep.document.dto.SendDocumentReviewMailRequest;
 import com.skep.equipment.Equipment;
@@ -45,6 +46,7 @@ public class DocumentReviewMailService {
     private final DocumentReviewRepository reviewRepo;
     private final DocumentReviewItemRepository reviewItemRepo;
     private final CompanyRepository companyRepo;
+    private final CompanyService companyService;
     private final NotificationService notifications;
     private final UserRepository userRepo;
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
@@ -84,14 +86,17 @@ public class DocumentReviewMailService {
 
         boolean isAdmin = actor.role() == Role.ADMIN;
         Long companyId = actor.companyId();
+        // V77 대칭: 병합PDF 모드(DocumentBundlePdfService)와 동일하게 본인 + 직속 자식(협력사) 자원까지 허용.
+        // companyId null 이면 scope 빈 목록 → 비ADMIN 은 아래에서 403.
+        List<Long> scope = isAdmin ? List.of() : companyService.selfAndChildren(companyId);
 
         List<Resource> resources = new ArrayList<>();
 
         for (Long eqId : nullSafe(req.equipmentIds())) {
             Equipment e = equipmentRepo.findById(eqId).orElse(null);
             if (e == null) continue;
-            if (!isAdmin && (companyId == null || !companyId.equals(e.getSupplierId()))) {
-                throw ApiException.forbidden("NOT_MY_EQUIPMENT", "자기 회사 장비만 보낼 수 있습니다");
+            if (!isAdmin && !scope.contains(e.getSupplierId())) {
+                throw ApiException.forbidden("NOT_MY_EQUIPMENT", "자기 회사(협력사 포함) 장비만 보낼 수 있습니다");
             }
             String label = e.getVehicleNo() != null ? e.getVehicleNo()
                     : (e.getModel() != null ? e.getModel() : "장비" + eqId);
@@ -102,8 +107,8 @@ public class DocumentReviewMailService {
         for (Long pId : nullSafe(req.personIds())) {
             Person p = personRepo.findById(pId).orElse(null);
             if (p == null) continue;
-            if (!isAdmin && (companyId == null || !companyId.equals(p.getSupplierId()))) {
-                throw ApiException.forbidden("NOT_MY_PERSON", "자기 회사 인원만 보낼 수 있습니다");
+            if (!isAdmin && !scope.contains(p.getSupplierId())) {
+                throw ApiException.forbidden("NOT_MY_PERSON", "자기 회사(협력사 포함) 인원만 보낼 수 있습니다");
             }
             String label = p.getName() != null ? p.getName() : "인원" + pId;
             int n = docs.findByOwnerTypeAndOwnerIdOrderByIdDesc(OwnerType.PERSON, pId).size();
