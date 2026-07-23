@@ -5,10 +5,18 @@ import com.skep.equipment.timeline.dto.EquipmentTimelineResponse;
 import com.skep.equipment.timeline.dto.EquipmentTimelineResponse.*;
 import com.skep.security.AuthenticatedUser;
 import com.skep.security.CurrentUser;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/equipment/{id}/timeline")
@@ -48,4 +56,29 @@ public class EquipmentTimelineController {
                 notes.findByEquipmentIdOrderByCreatedAtDesc(id).stream().map(NoteItem::from).toList()
         );
     }
+
+    /** 정비 이력 1건 추가 — 수정 권한(소유 공급사+직속 자식+ADMIN)만. 기존 equipment_maintenance_history 테이블 재사용. */
+    @PostMapping("/maintenance")
+    public MaintenanceItem addMaintenance(@PathVariable Long id,
+                                          @Valid @RequestBody CreateMaintenanceRequest req,
+                                          @CurrentUser AuthenticatedUser actor) {
+        equipmentService.getForModify(id, actor);
+        EquipmentMaintenance m = maintenances.save(EquipmentMaintenance.builder()
+                .equipmentId(id)
+                .maintainedAt(req.maintainedAt())
+                .maintainer(req.maintainer())
+                .title(req.title())
+                .description(req.description())
+                .cost(req.cost())
+                .build());
+        return MaintenanceItem.from(m);
+    }
+
+    public record CreateMaintenanceRequest(
+            @NotNull LocalDate maintainedAt,
+            @Size(max = 100) String maintainer,
+            @NotBlank @Size(max = 255) String title,
+            String description,
+            Long cost
+    ) {}
 }

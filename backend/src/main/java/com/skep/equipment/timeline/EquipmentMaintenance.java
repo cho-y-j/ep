@@ -2,6 +2,7 @@ package com.skep.equipment.timeline;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -37,6 +38,17 @@ public class EquipmentMaintenance {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @Builder
+    public EquipmentMaintenance(Long equipmentId, LocalDate maintainedAt, String maintainer,
+                                String title, String description, Long cost) {
+        this.equipmentId = equipmentId;
+        this.maintainedAt = maintainedAt;
+        this.maintainer = maintainer;
+        this.title = title;
+        this.description = description;
+        this.cost = cost;
+    }
 
     @PrePersist
     void onCreate() { this.createdAt = LocalDateTime.now(); }

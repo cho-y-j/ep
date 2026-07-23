@@ -241,6 +241,15 @@ public class EquipmentService {
         return e;
     }
 
+    /** 정비 이력 등 하위 리소스 쓰기 전 수정 권한 확인(소유 공급사+직속 자식+ADMIN). */
+    @Transactional(readOnly = true)
+    public Equipment getForModify(Long id, AuthenticatedUser actor) {
+        Equipment e = repo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("EQUIPMENT_NOT_FOUND", "equipment " + id + " not found"));
+        ensureCanModify(actor, e.getSupplierId());
+        return e;
+    }
+
     /** Phase4: 외부 장비 기사(조종원) 등록 + 로그인 계정 발급(기존 Person 계정 시스템 재사용) + 장비 연결. */
     public Equipment registerOperator(Long equipmentId, com.skep.equipment.dto.RegisterOperatorRequest req, AuthenticatedUser actor) {
         Equipment e = repo.findById(equipmentId)

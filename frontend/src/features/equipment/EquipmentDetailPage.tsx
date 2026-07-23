@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
@@ -19,16 +19,23 @@ import EquipmentDefaultOperators from './EquipmentDefaultOperators';
 import EquipmentDuePanel from './EquipmentDuePanel';
 import DeployCheckCard from '../readiness/DeployCheckCard';
 import OnboardingBadge from '../onboarding/OnboardingBadge';
+import { useEquipmentTypes } from './useEquipmentTypes';
 
-type TabId = 'overview' | 'inspection' | 'operation' | 'location' | 'maintenance' | 'note';
+type TabId = 'overview' | 'inspection' | 'operation' | 'maintenance' | 'note';
 
 type Timeline = {
   inspections: Array<{ id: number; inspected_at: string; inspector?: string | null; title: string; result: string; note?: string | null; next_inspection_at?: string | null }>;
   operations: Array<{ id: number; started_at: string; ended_at?: string | null; site_name?: string | null; description?: string | null; utilization_pct?: number | null; status: string }>;
-  locations: Array<{ id: number; recorded_at: string; location_name: string; note?: string | null }>;
   maintenances: Array<{ id: number; maintained_at: string; maintainer?: string | null; title: string; description?: string | null; cost?: number | null }>;
   notes: Array<{ id: number; author_id?: number | null; content: string; created_at: string }>;
 };
+
+type EqDraft = {
+  vehicleNo: string; category: string; model: string; manufacturer: string; year: string;
+  isExternal: boolean; vehicleOwnerName: string; vehicleOwnerBusinessNo: string;
+};
+
+const EDIT_INPUT_CLS = 'border border-slate-300 rounded bg-white outline-none focus:border-brand-500 text-sm px-2 py-0.5 w-full';
 
 export default function EquipmentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,6 +46,7 @@ export default function EquipmentDetailPage() {
   const [fromCompanyName, setFromCompanyName] = useState<string | null>(null);
 
   const subSuppliers = useSubSuppliers();
+  const { options: typeOptions, labelOf: categoryLabelOf } = useEquipmentTypes();
   const [equipment, setEquipment] = useState<EquipmentResponse | null>(null);
   const [collectOpen, setCollectOpen] = useState(false);
   const [supplementOpen, setSupplementOpen] = useState(false);
@@ -48,6 +56,17 @@ export default function EquipmentDetailPage() {
   const [tab, setTab] = useState<TabId>('overview');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  // 사진 변경 (PersonDetailPage 패턴 복제)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoNonce, setPhotoNonce] = useState(0);
+  // 기본 정보 인라인 편집 (PersonDetailPage 패턴 복제)
+  const [editMode, setEditMode] = useState(false);
+  const [draft, setDraft] = useState<EqDraft>({
+    vehicleNo: '', category: '', model: '', manufacturer: '', year: '',
+    isExternal: false, vehicleOwnerName: '', vehicleOwnerBusinessNo: '',
+  });
+  const [saving, setSaving] = useState(false);
 
   const canEdit = useMemo(() => {
     if (!equipment || !user) return false;
@@ -66,7 +85,7 @@ export default function EquipmentDetailPage() {
     try {
       const [eqRes, tlRes] = await Promise.all([
         api.get<EquipmentResponse>(`/api/equipment/${id}`),
-        api.get<Timeline>(`/api/equipment/${id}/timeline`).catch(() => ({ data: { inspections: [], operations: [], locations: [], maintenances: [], notes: [] } as Timeline })),
+        api.get<Timeline>(`/api/equipment/${id}/timeline`).catch(() => ({ data: { inspections: [], operations: [], maintenances: [], notes: [] } as Timeline })),
       ]);
       setEquipment(eqRes.data);
       setTimeline(tlRes.data);
@@ -109,6 +128,64 @@ export default function EquipmentDetailPage() {
     }
   }
 
+  async function handlePhotoFile(file: File) {
+    if (!equipment) return;
+    setPhotoBusy(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post<EquipmentResponse>(`/api/equipment/${equipment.id}/photo`, formData);
+      setEquipment(res.data);
+      setPhotoNonce((n) => n + 1);
+    } catch (err) {
+      if (err instanceof AxiosError) alert(err.response?.data?.message ?? '사진 업로드 실패');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  const enterEdit = useCallback(() => {
+    if (!equipment) return;
+    setDraft({
+      vehicleNo: equipment.vehicle_no ?? '',
+      category: equipment.category ?? '',
+      model: equipment.model ?? '',
+      manufacturer: equipment.manufacturer ?? '',
+      year: equipment.year != null ? String(equipment.year) : '',
+      isExternal: !!equipment.is_external,
+      vehicleOwnerName: equipment.vehicle_owner_name ?? '',
+      vehicleOwnerBusinessNo: equipment.vehicle_owner_business_no ?? '',
+    });
+    setEditMode(true);
+  }, [equipment]);
+
+  const cancelEdit = useCallback(() => setEditMode(false), []);
+  const setField = <K extends keyof EqDraft>(key: K, val: EqDraft[K]) => setDraft((d) => ({ ...d, [key]: val }));
+
+  const saveAll = useCallback(async () => {
+    if (!equipment) return;
+    setSaving(true);
+    try {
+      // JSON 전역 SNAKE_CASE. 빈 문자열 → null (부분 수정: 백엔드는 null 을 '변경 없음'으로 처리).
+      await api.patch(`/api/equipment/${equipment.id}`, {
+        vehicle_no: draft.vehicleNo || null,
+        category: draft.category || null,
+        model: draft.model || null,
+        manufacturer: draft.manufacturer || null,
+        year: draft.year ? Number(draft.year) : null,
+        is_external: draft.isExternal,
+        vehicle_owner_name: draft.isExternal ? (draft.vehicleOwnerName || null) : null,
+        vehicle_owner_business_no: draft.isExternal ? (draft.vehicleOwnerBusinessNo || null) : null,
+      });
+      setEditMode(false);
+      void load();
+    } catch (e) {
+      if (e instanceof AxiosError) alert(e.response?.data?.message ?? '저장 실패');
+    } finally {
+      setSaving(false);
+    }
+  }, [equipment, draft, load]);
+
   if (loading) {
     return <AppShell><p className="text-slate-400">불러오는 중...</p></AppShell>;
   }
@@ -138,7 +215,6 @@ export default function EquipmentDetailPage() {
     { id: 'overview', label: '개요' },
     { id: 'inspection', label: '점검 이력', badge: timeline?.inspections.length },
     { id: 'operation', label: '가동 이력', badge: timeline?.operations.length },
-    { id: 'location', label: '위치 이력', badge: timeline?.locations.length },
     { id: 'maintenance', label: '정비 이력', badge: timeline?.maintenances.length },
     { id: 'note', label: '메모', badge: timeline?.notes.length },
   ];
@@ -168,9 +244,34 @@ export default function EquipmentDetailPage() {
         {/* 헤더 + 사진 + 스펙 */}
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <div className="flex flex-col lg:flex-row gap-6">
-            {/* 좌측 사진 갤러리 */}
-            <div className="w-full lg:w-[300px] shrink-0">
-              <EquipmentPhotoGallery equipmentId={equipment.id} hasPhoto={equipment.has_photo} category={equipment.category} />
+            {/* 좌측 사진 갤러리 + 사진 변경 */}
+            <div className="w-full lg:w-[300px] shrink-0 space-y-3">
+              <EquipmentPhotoGallery key={`gallery-${photoNonce}`} equipmentId={equipment.id} hasPhoto={equipment.has_photo} category={equipment.category} />
+              {canEdit && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void handlePhotoFile(f);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={photoBusy}
+                    className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                    {photoBusy ? '업로드 중...' : '사진 변경'}
+                  </button>
+                </>
+              )}
             </div>
             {/* 우측 정보 */}
             <div className="flex-1 min-w-0">
@@ -199,6 +300,34 @@ export default function EquipmentDetailPage() {
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-2 shrink-0">
+                    {!editMode ? (
+                      <button
+                        type="button"
+                        onClick={enterEdit}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50"
+                      >
+                        수정
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          disabled={saving}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveAll}
+                          disabled={saving}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50"
+                        >
+                          {saving ? '저장 중...' : '저장'}
+                        </button>
+                      </>
+                    )}
                     <button type="button" onClick={() => setConfirmDelete(true)} className="btn-danger">
                       삭제
                     </button>
@@ -206,10 +335,20 @@ export default function EquipmentDetailPage() {
                 )}
               </div>
 
-              {/* 4-col spec grid */}
+              {/* 4-col spec grid — 죽은 필드(구입일·구입가·보관위치·담당자) 제거, 편집 가능 필드는 인라인 input */}
               <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
-                <SpecItem label="장비 종류" value={equipmentCategoryLabel(equipment.category)} />
-                <SpecItem label="구입일" value="-" />
+                <SpecItem label="장비 종류" value={editMode ? (
+                  <select value={draft.category} disabled={saving}
+                    onChange={(e) => setField('category', e.target.value)} className={EDIT_INPUT_CLS}>
+                    {typeOptions.length > 0
+                      ? typeOptions.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)
+                      : <option value={draft.category}>{categoryLabelOf(draft.category)}</option>}
+                  </select>
+                ) : categoryLabelOf(equipment.category)} />
+                <SpecItem label="차량번호" value={editMode ? (
+                  <input value={draft.vehicleNo} disabled={saving}
+                    onChange={(e) => setField('vehicleNo', e.target.value)} className={EDIT_INPUT_CLS} />
+                ) : (equipment.vehicle_no ?? '-')} />
                 <SpecItem
                   label="소속 현장"
                   value={equipment.current_site_name
@@ -218,9 +357,18 @@ export default function EquipmentDetailPage() {
                 />
                 <SpecItem label="상태" value={<span className="inline-flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />{status}</span>} />
 
-                <SpecItem label="제조사" value={equipment.manufacturer ?? '-'} />
-                <SpecItem label="구입가" value="-" />
-                <SpecItem label="보관 위치" value="-" />
+                <SpecItem label="제조사" value={editMode ? (
+                  <input value={draft.manufacturer} disabled={saving}
+                    onChange={(e) => setField('manufacturer', e.target.value)} className={EDIT_INPUT_CLS} />
+                ) : (equipment.manufacturer ?? '-')} />
+                <SpecItem label="모델명" value={editMode ? (
+                  <input value={draft.model} disabled={saving}
+                    onChange={(e) => setField('model', e.target.value)} className={EDIT_INPUT_CLS} />
+                ) : (equipment.model ?? '-')} />
+                <SpecItem label="연식" value={editMode ? (
+                  <input type="number" value={draft.year} disabled={saving}
+                    onChange={(e) => setField('year', e.target.value)} className={EDIT_INPUT_CLS} />
+                ) : (equipment.year ?? '-')} />
                 <SpecItem label="가동률" value={
                   <div className="flex items-center gap-2">
                     <span className="font-semibold">{equipment.utilization_pct ?? 0}%</span>
@@ -230,26 +378,47 @@ export default function EquipmentDetailPage() {
                   </div>
                 } />
 
-                <SpecItem label="모델명" value={equipment.model ?? '-'} />
-                <SpecItem label="사용 시간" value={equipment.usage_hours != null ? `${equipment.usage_hours.toLocaleString()} 시간` : '-'} />
-                <SpecItem label="담당자" value="-" />
-                <SpecItem label="연료 잔량" value="-" />
-
                 <SpecItem label="제조번호" value={equipment.serial_number ?? '-'} />
                 <SpecItem label="장비 중량" value={equipment.weight_kg != null ? `${equipment.weight_kg.toLocaleString()} kg` : '-'} />
+                <SpecItem label="사용 시간" value={equipment.usage_hours != null ? `${equipment.usage_hours.toLocaleString()} 시간` : '-'} />
+                {/* 연료 잔량 — 차량 단말(OBD) 연동 후 주입 예정(현재 하드코딩 '-' 제거). */}
+                <SpecItem label="연료 잔량" value={<span className="text-slate-400">OBD 연동 예정</span>} />
+
+                <SpecItem label="버킷 용량" value={equipment.bucket_capacity != null ? `${equipment.bucket_capacity} m³` : '-'} />
                 <SpecItem label="보험 만료일" value={equipment.insurance_expiry ?? '-'} />
                 <SpecItem label="등록일" value={equipment.created_at?.slice(0, 10).replace(/-/g, '.') ?? '-'} />
-
-                <SpecItem label="연식" value={equipment.year ?? '-'} />
-                <SpecItem label="버킷 용량" value={equipment.bucket_capacity != null ? `${equipment.bucket_capacity} m³` : '-'} />
-                <SpecItem label="차량번호" value={equipment.vehicle_no ?? '-'} />
                 <SpecItem label="최근 업데이트" value={equipment.updated_at ? new Date(equipment.updated_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }).slice(0, 16) : '-'} />
               </div>
             </div>
           </div>
         </div>
 
-        {equipment.is_external && (
+        {/* 상태 대시 — 응답에 이미 있는 값 표시만(새 계산 없음) */}
+        <StatusDashboard equipment={equipment} />
+
+        {editMode ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-6">
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <input type="checkbox" checked={draft.isExternal} disabled={saving}
+                onChange={(e) => setField('isExternal', e.target.checked)} />
+              외부 조달 장비 (소유주·차주 정보 별도)
+            </label>
+            {draft.isExternal && (
+              <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                <label className="min-w-0">
+                  <span className="text-xs text-slate-500">소유주(사업자)명</span>
+                  <input value={draft.vehicleOwnerName} disabled={saving}
+                    onChange={(e) => setField('vehicleOwnerName', e.target.value)} className={`mt-0.5 ${EDIT_INPUT_CLS}`} />
+                </label>
+                <label className="min-w-0">
+                  <span className="text-xs text-slate-500">사업자등록번호</span>
+                  <input value={draft.vehicleOwnerBusinessNo} disabled={saving}
+                    onChange={(e) => setField('vehicleOwnerBusinessNo', e.target.value)} className={`mt-0.5 ${EDIT_INPUT_CLS}`} />
+                </label>
+              </div>
+            )}
+          </div>
+        ) : equipment.is_external && (
           <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-6">
             <h3 className="flex items-center gap-2 text-base font-bold text-slate-900">
               <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">외부 조달</span>
@@ -343,8 +512,7 @@ export default function EquipmentDetailPage() {
             {tab === 'overview' && <OverviewTab equipment={equipment} timeline={timeline} onTabChange={setTab} />}
             {tab === 'inspection' && <InspectionTab items={timeline?.inspections ?? []} />}
             {tab === 'operation' && <OperationTab items={timeline?.operations ?? []} />}
-            {tab === 'location' && <LocationTab items={timeline?.locations ?? []} />}
-            {tab === 'maintenance' && <MaintenanceTab items={timeline?.maintenances ?? []} />}
+            {tab === 'maintenance' && <MaintenanceTab items={timeline?.maintenances ?? []} equipmentId={equipment.id} canEdit={canEdit} onAdded={() => void load()} />}
             {tab === 'note' && <NoteTab items={timeline?.notes ?? []} />}
           </div>
         </div>
@@ -390,6 +558,37 @@ function SpecItem({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+/** 상단 상태 대시 — 응답에 이미 있는 값만 표시(새 계산 없음). */
+function StatusDashboard({ equipment }: { equipment: EquipmentResponse }) {
+  const tiles: Array<{ label: string; node: ReactNode }> = [
+    { label: '배치 상태', node: equipment.assignment_status
+        ? <AssignmentBadge status={equipment.assignment_status} />
+        : <span className="text-slate-400">미배치</span> },
+    { label: '가동률', node: `${equipment.utilization_pct ?? 0}%` },
+    { label: '누적 가동시간', node: (
+      <span>{equipment.cumulative_work_hours}h
+        {equipment.maintenance_interval_hours != null && (
+          <span className="text-xs font-normal text-slate-400"> / 주기 {equipment.maintenance_interval_hours}h</span>
+        )}
+      </span>
+    ) },
+    { label: '정비', node: equipment.maintenance_due
+        ? <span className="text-rose-600">정비 도래</span>
+        : <span className="text-slate-700">정상</span> },
+    { label: '정기검사', node: equipment.inspection_due_date ?? <span className="text-slate-400">미설정</span> },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {tiles.map((t) => (
+        <div key={t.label} className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="text-xs text-slate-500">{t.label}</div>
+          <div className="mt-1 font-semibold text-slate-900 truncate">{t.node}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function OverviewTab({ equipment, timeline, onTabChange }: {
   equipment: EquipmentResponse;
   timeline: Timeline | null;
@@ -401,7 +600,6 @@ function OverviewTab({ equipment, timeline, onTabChange }: {
   const util = equipment.utilization_pct ?? 0;
 
   const recentInspect = timeline?.inspections[0];
-  const recentLocation = timeline?.locations[0];
   const nextInspectDays = recentInspect?.next_inspection_at
     ? Math.round((new Date(recentInspect.next_inspection_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null;
@@ -445,7 +643,6 @@ function OverviewTab({ equipment, timeline, onTabChange }: {
                 </span>
               ) : '-'
             } />
-            <DlRow label="점검 주기" value="3개월" />
             <DlRow label="점검 상태" value={
               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
                 recentInspect.result === 'PASS' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
@@ -462,38 +659,13 @@ function OverviewTab({ equipment, timeline, onTabChange }: {
         </button>
       </div>
 
-      {/* 위치 정보 */}
-      <div className="rounded-xl border border-slate-100 bg-white p-5">
-        <h3 className="text-base font-bold mb-4">위치 정보</h3>
-        <div className="aspect-[5/3] rounded-lg bg-gradient-to-br from-blue-50 via-emerald-50 to-amber-50 relative mb-3 overflow-hidden">
-          <svg className="absolute inset-0 w-full h-full opacity-30" viewBox="0 0 200 120" preserveAspectRatio="none">
-            <path d="M0,60 Q50,30 100,55 T200,40" stroke="#94a3b8" strokeWidth="1" fill="none" />
-            <path d="M0,80 Q50,100 100,75 T200,90" stroke="#94a3b8" strokeWidth="1" fill="none" />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="relative">
-              <span className="absolute -inset-2 rounded-full bg-blue-500/20 animate-ping" />
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="#3b82f6" className="relative">
-                <path d="M12 0C7.6 0 4 3.6 4 8c0 5.4 6.4 13.4 7.2 14.4.4.5 1.2.5 1.6 0C13.6 21.4 20 13.4 20 8c0-4.4-3.6-8-8-8zm0 11c-1.7 0-3-1.3-3-3s1.3-3 3-3 3 1.3 3 3-1.3 3-3 3z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-        {recentLocation ? (
-          <div className="space-y-2 text-sm">
-            <div>
-              <div className="font-semibold text-slate-900">{recentLocation.location_name}</div>
-              {recentLocation.note && <div className="text-xs text-slate-500 mt-0.5">{recentLocation.note}</div>}
-            </div>
-            <DlRow label="GPS 추적" value={<span className="inline-flex px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">정상</span>} />
-            <DlRow label="최근 업데이트" value={new Date(recentLocation.recorded_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }).slice(0, 16)} />
-          </div>
-        ) : (
-          <p className="text-sm text-slate-400 py-6 text-center">위치 이력 없음</p>
-        )}
-        <button type="button" onClick={() => onTabChange('location')} className="mt-4 w-full text-center text-sm text-slate-600 hover:text-slate-900 border-t border-slate-100 pt-3">
-          위치 이력 보기 ›
-        </button>
+      {/* 위치/연료 — 차량 단말(OBD/GPS) 연동 후 표시. 허위 지도·GPS 표기 제거. */}
+      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-5 flex flex-col items-center justify-center text-center">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="mb-2">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
+        </svg>
+        <div className="text-sm font-semibold text-slate-500">위치 · 연료</div>
+        <p className="mt-1 text-xs text-slate-400">OBD/GPS 연동 예정<br />차량 단말 연동 후 실시간 표시됩니다</p>
       </div>
     </div>
   );
@@ -561,38 +733,107 @@ function OperationTab({ items }: { items: Timeline['operations'] }) {
   );
 }
 
-function LocationTab({ items }: { items: Timeline['locations'] }) {
-  if (items.length === 0) return <Empty text="위치 이력 없음" />;
-  return (
-    <ul className="divide-y divide-slate-100">
-      {items.map((it) => (
-        <li key={it.id} className="py-4 flex items-center justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold truncate">{it.location_name}</div>
-            <div className="text-xs text-slate-500 mt-0.5">{new Date(it.recorded_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }).slice(0, 16)} 업데이트</div>
-          </div>
-          {it.note && <span className="text-sm text-slate-600 shrink-0">{it.note}</span>}
-        </li>
-      ))}
-    </ul>
-  );
-}
+function MaintenanceTab({ items, equipmentId, canEdit, onAdded }: {
+  items: Timeline['maintenances']; equipmentId: number; canEdit: boolean; onAdded: () => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [maintainedAt, setMaintainedAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [maintainer, setMaintainer] = useState('');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [cost, setCost] = useState('');
+  const [saving, setSaving] = useState(false);
 
-function MaintenanceTab({ items }: { items: Timeline['maintenances'] }) {
-  if (items.length === 0) return <Empty text="정비 이력 없음" />;
+  const reset = () => { setMaintainer(''); setTitle(''); setDescription(''); setCost(''); setMaintainedAt(new Date().toISOString().slice(0, 10)); };
+
+  const submit = async () => {
+    if (!title.trim() || !maintainedAt) { alert('정비일과 제목은 필수입니다'); return; }
+    setSaving(true);
+    try {
+      await api.post(`/api/equipment/${equipmentId}/timeline/maintenance`, {
+        maintained_at: maintainedAt,
+        maintainer: maintainer.trim() || null,
+        title: title.trim(),
+        description: description.trim() || null,
+        cost: cost ? Number(cost) : null,
+      });
+      setAdding(false);
+      reset();
+      onAdded();
+    } catch (e) {
+      if (e instanceof AxiosError) alert(e.response?.data?.message ?? '정비 이력 저장 실패');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <ul className="divide-y divide-slate-100">
-      {items.map((it) => (
-        <li key={it.id} className="py-4 flex items-center justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold truncate">{it.title}</div>
-            <div className="text-xs text-slate-500 mt-0.5">{it.maintained_at}{it.maintainer ? ` · ${it.maintainer}` : ''}</div>
-            {it.description && <div className="text-xs text-slate-500 mt-1 truncate">{it.description}</div>}
-          </div>
-          {it.cost != null && <span className="text-sm font-semibold text-slate-900 shrink-0">₩ {it.cost.toLocaleString()}</span>}
-        </li>
-      ))}
-    </ul>
+    <div>
+      {canEdit && (
+        <div className="mb-4">
+          {!adding ? (
+            <button type="button" onClick={() => setAdding(true)}
+              className="rounded-lg border border-brand-100 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm hover:bg-brand-50">
+              + 정비 추가
+            </button>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="text-sm">
+                  <span className="text-xs text-slate-500">정비일 *</span>
+                  <input type="date" value={maintainedAt} disabled={saving}
+                    onChange={(e) => setMaintainedAt(e.target.value)} className={`mt-0.5 ${EDIT_INPUT_CLS}`} />
+                </label>
+                <label className="text-sm">
+                  <span className="text-xs text-slate-500">정비자</span>
+                  <input value={maintainer} disabled={saving} placeholder="예: 센터 A 정비팀"
+                    onChange={(e) => setMaintainer(e.target.value)} className={`mt-0.5 ${EDIT_INPUT_CLS}`} />
+                </label>
+              </div>
+              <label className="block text-sm">
+                <span className="text-xs text-slate-500">제목 *</span>
+                <input value={title} disabled={saving} placeholder="예: 엔진 오일 교환"
+                  onChange={(e) => setTitle(e.target.value)} className={`mt-0.5 ${EDIT_INPUT_CLS}`} />
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs text-slate-500">내용</span>
+                <textarea value={description} disabled={saving} rows={2} placeholder="정비 내용"
+                  onChange={(e) => setDescription(e.target.value)} className={`mt-0.5 ${EDIT_INPUT_CLS}`} />
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs text-slate-500">비용 (원)</span>
+                <input type="number" value={cost} disabled={saving} placeholder="예: 180000"
+                  onChange={(e) => setCost(e.target.value)} className={`mt-0.5 ${EDIT_INPUT_CLS}`} />
+              </label>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => { setAdding(false); reset(); }} disabled={saving}
+                  className="rounded px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50">취소</button>
+                <button type="button" onClick={submit} disabled={saving}
+                  className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50">
+                  {saving ? '저장 중...' : '저장'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {items.length === 0 ? (
+        <Empty text="정비 이력 없음" />
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {items.map((it) => (
+            <li key={it.id} className="py-4 flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold truncate">{it.title}</div>
+                <div className="text-xs text-slate-500 mt-0.5">{it.maintained_at}{it.maintainer ? ` · ${it.maintainer}` : ''}</div>
+                {it.description && <div className="text-xs text-slate-500 mt-1 truncate">{it.description}</div>}
+              </div>
+              {it.cost != null && <span className="text-sm font-semibold text-slate-900 shrink-0">₩ {it.cost.toLocaleString()}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -619,7 +860,6 @@ function tabIcon(id: TabId) {
     case 'overview': return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>;
     case 'inspection': return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12l2 2 4-4" /><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.66 0 3.22.45 4.56 1.24" /></svg>;
     case 'operation': return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
-    case 'location': return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>;
     case 'maintenance': return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>;
     case 'note': return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>;
   }
