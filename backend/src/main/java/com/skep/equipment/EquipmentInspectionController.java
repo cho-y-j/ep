@@ -53,6 +53,8 @@ public class EquipmentInspectionController {
         row.setPhotoKey(req.photoKey);
         row.setNotes(req.notes);
         row.setOverall(req.overall != null && !req.overall.isBlank() ? req.overall : "PASS");
+        row.setHourMeter(req.hourMeter);
+        row.setOdometerKm(req.odometerKm);
         repo.save(row);
         return map(row, p.getName());
     }
@@ -129,6 +131,8 @@ public class EquipmentInspectionController {
         m.put("photo_key", r.getPhotoKey());
         m.put("notes", r.getNotes());
         m.put("overall", r.getOverall());
+        m.put("hour_meter", r.getHourMeter());
+        m.put("odometer_km", r.getOdometerKm());
         m.put("created_at", r.getCreatedAt());
         return m;
     }
@@ -140,6 +144,8 @@ public class EquipmentInspectionController {
         public String photoKey;
         public String notes;
         public String overall;      // PASS|ATTENTION|FAIL
+        public java.math.BigDecimal hourMeter;   // 가동시간(아워미터), 선택
+        public java.math.BigDecimal odometerKm;  // 운행거리(km), 선택
     }
     public static class DueRequest {
         public String inspectionDueDate;
