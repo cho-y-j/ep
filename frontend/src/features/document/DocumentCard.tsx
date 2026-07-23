@@ -15,6 +15,8 @@ type Props = {
   onReject?: () => void;            // V14: ADMIN 수동 반려
   onHistory?: () => void;           // S-4 단계 4: 갱신 이력 보기
   onRenew: () => void;
+  /** 만료일 인라인 저장 (부모가 PATCH /expiry + 리로드). 있고 만료 관리 대상이면 만료일 클릭 수정 노출. */
+  onSaveExpiry?: (date: string) => Promise<void>;
 };
 
 const VERIFICATION_BADGE: Record<VerificationStatus, { label: string; cls: string }> = {
@@ -24,12 +26,30 @@ const VERIFICATION_BADGE: Record<VerificationStatus, { label: string; cls: strin
   OCR_REVIEW_REQUIRED: { label: 'OCR 검토 필요', cls: 'bg-amber-100 text-amber-700' },
 };
 
-export default function DocumentCard({ doc, canEdit, isAdmin, canAutoVerify, onOpen, onDelete, onToggleVerify, onAutoVerify, onReject, onHistory, onRenew }: Props) {
+export default function DocumentCard({ doc, canEdit, isAdmin, canAutoVerify, onOpen, onDelete, onToggleVerify, onAutoVerify, onReject, onHistory, onRenew, onSaveExpiry }: Props) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // 만료일 인라인 수정 (요청으로 온 서류의 잘못된/빈 만료일을 상세 진입 없이 바로 고침)
+  const [editingExpiry, setEditingExpiry] = useState(false);
+  const [expiryDraft, setExpiryDraft] = useState('');
+  const [expiryBusy, setExpiryBusy] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const isImage = doc.content_type.startsWith('image/');
   const isPdf = doc.content_type === 'application/pdf';
+  const canSetExpiry = (canEdit || isAdmin) && doc.document_type_has_expiry && !!onSaveExpiry;
+
+  async function saveExpiry() {
+    if (!onSaveExpiry || !expiryDraft || expiryBusy) return;
+    setExpiryBusy(true);
+    try {
+      await onSaveExpiry(expiryDraft);
+      setEditingExpiry(false);
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? '만료일 저장 실패');
+    } finally {
+      setExpiryBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!isImage) return;
@@ -199,7 +219,36 @@ export default function DocumentCard({ doc, canEdit, isAdmin, canAutoVerify, onO
         <div className="flex items-end justify-between gap-2">
           <div className="min-w-0">
             <div className="text-xs text-slate-500">만료일</div>
-            <div className="text-sm font-semibold text-slate-900">{doc.expiry_date ?? '-'}</div>
+            {editingExpiry ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={expiryDraft}
+                  onChange={(e) => setExpiryDraft(e.target.value)}
+                  className="rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+                />
+                <button type="button" onClick={() => void saveExpiry()} disabled={expiryBusy || !expiryDraft}
+                  className="rounded bg-slate-800 px-2 py-0.5 text-xs font-semibold text-white hover:bg-slate-900 disabled:opacity-40">
+                  {expiryBusy ? '저장…' : '저장'}
+                </button>
+                <button type="button" onClick={() => setEditingExpiry(false)} disabled={expiryBusy}
+                  className="rounded px-1.5 py-0.5 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-40">
+                  취소
+                </button>
+              </div>
+            ) : canSetExpiry ? (
+              <button
+                type="button"
+                onClick={() => { setExpiryDraft(doc.expiry_date ?? ''); setEditingExpiry(true); }}
+                title="만료일 수정"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-slate-900 hover:text-brand-700"
+              >
+                {doc.expiry_date ?? <span className="text-amber-600">만료일 입력</span>}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
+              </button>
+            ) : (
+              <div className="text-sm font-semibold text-slate-900">{doc.expiry_date ?? '-'}</div>
+            )}
           </div>
           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass}`}>
             {statusLabel}

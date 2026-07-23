@@ -11,6 +11,7 @@ import type { OwnerType } from '../../types/document';
 import QuickAddResourceDialog from './QuickAddResourceDialog';
 import DocFilePreviewDialog from './DocFilePreviewDialog';
 import OcrUploadDialog from '../document/OcrUploadDialog';
+import DocumentEditDialog from '../document/DocumentEditDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import type { DocumentTypeResponse } from '../../types/document';
 import { formatOwnerSubLabel } from '../../lib/format';
@@ -229,6 +230,7 @@ function MyDocsExpiryView() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [previewDoc, setPreviewDoc] = useState<DocRow | null>(null);
   const [reuploadDoc, setReuploadDoc] = useState<DocRow | null>(null);
+  const [editDoc, setEditDoc] = useState<DocRow | null>(null);
   const [pendingDelete, setPendingDelete] = useState<DocRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [allTypes, setAllTypes] = useState<DocumentTypeResponse[]>([]);
@@ -636,9 +638,19 @@ function MyDocsExpiryView() {
           doc={previewDoc}
           docType={allTypes.find((t) => t.id === previewDoc.document_type_id)}
           canReverify={verifyableMap.get(previewDoc.document_type_id) === true}
+          canEdit
           onClose={() => setPreviewDoc(null)}
           onReverified={() => setReloadKey((k) => k + 1)}
           onReupload={() => { const d = previewDoc; setPreviewDoc(null); setReuploadDoc(d); }}
+          onEdit={() => { const d = previewDoc; setPreviewDoc(null); setEditDoc(d); }}
+        />
+      )}
+
+      {editDoc && (
+        <DocumentEditDialog
+          doc={editDoc}
+          onClose={() => setEditDoc(null)}
+          onDone={() => { setEditDoc(null); setReloadKey((k) => k + 1); }}
         />
       )}
 

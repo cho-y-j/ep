@@ -21,9 +21,13 @@ type Props = {
   doc: DocBrief;
   docType?: DocumentTypeResponse;
   canReverify: boolean;
+  /** 수정 권한(만료일 수정·이미지 편집). 백엔드 ensureCanModify 가 최종 스코프 강제. */
+  canEdit?: boolean;
   onClose: () => void;
   onReverified: () => void;
   onReupload: () => void;
+  /** 이미지 서류 재편집(모서리·가리기) — 부모가 DocumentEditDialog 를 연다. */
+  onEdit?: () => void;
 };
 
 const REASON_LABEL: Record<string, string> = {
@@ -64,11 +68,15 @@ const FIELD_LABEL: Record<string, string> = {
   registration_no: '교육 등록번호',
 };
 
-export default function DocFilePreviewDialog({ doc, docType, canReverify, onClose, onReverified, onReupload }: Props) {
+export default function DocFilePreviewDialog({ doc, docType, canReverify, canEdit = false, onClose, onReverified, onReupload, onEdit }: Props) {
   const [src, setSrc] = useState<string | null>(null);
   const [contentType, setContentType] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // 만료일 인라인 수정 — 저장 성공값을 로컬로 들고 헤더 표시도 갱신 (부모 목록은 onReverified 로 리로드).
+  const [expiryDraft, setExpiryDraft] = useState(doc.expiry_date ?? '');
+  const [expirySaved, setExpirySaved] = useState<string | null>(doc.expiry_date ?? null);
+  const [expiryBusy, setExpiryBusy] = useState(false);
   const requiredFields = parseRequiredFields(docType?.required_fields);
 
   // extracted_data (OCR 추출 + 이전 manual 입력) 으로 inputs 초기값 prefill.
@@ -139,8 +147,25 @@ export default function DocFilePreviewDialog({ doc, docType, canReverify, onClos
     }
   }
 
+  async function saveExpiry() {
+    if (!expiryDraft || expiryBusy) return;
+    setExpiryBusy(true);
+    try {
+      await api.patch(`/api/documents/${doc.id}/expiry?expiryDate=${expiryDraft}`);
+      setExpirySaved(expiryDraft);
+      onReverified(); // 부모 목록 리로드 (재검증과 동일 콜백 재사용)
+    } catch (err) {
+      const msg = err instanceof AxiosError ? (err.response?.data?.message ?? err.message) : '만료일 저장 실패';
+      alert(msg);
+    } finally {
+      setExpiryBusy(false);
+    }
+  }
+
   const isImage = contentType?.startsWith('image/');
   const isPdf = contentType === 'application/pdf';
+  // 만료일 수정 노출: 수정 권한 + 만료 관리 대상 서류종류 (타입 정보 없으면 허용 — 백엔드가 최종 판단).
+  const canEditExpiry = canEdit && (docType?.has_expiry ?? true);
   const currentStatus = result?.status ?? doc.verification_status;
   const verifyChip = currentStatus === 'VERIFIED'
     ? <span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-600 text-white">✓ 검증 완료</span>
@@ -179,7 +204,7 @@ export default function DocFilePreviewDialog({ doc, docType, canReverify, onClos
               {verifyChip}
             </div>
             <div className="text-xs text-slate-500 mt-0.5">
-              {doc.file_name ?? '-'}{doc.expiry_date ? ` · 만료 ${doc.expiry_date}` : ''}
+              {doc.file_name ?? '-'}{expirySaved ? ` · 만료 ${expirySaved}` : ''}
             </div>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-900 text-2xl leading-none shrink-0">×</button>
@@ -203,6 +228,33 @@ export default function DocFilePreviewDialog({ doc, docType, canReverify, onClos
 
           {/* 우측: 입력 + 결과 */}
           <div className="p-4 bg-white overflow-y-auto space-y-3">
+            {canEditExpiry && (
+              <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                <div className="text-sm font-bold text-slate-900">
+                  만료일
+                  {!expirySaved && (
+                    <span className="ml-2 text-xs font-semibold text-amber-600">만료일을 입력해 주세요</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={expiryDraft}
+                    onChange={(e) => setExpiryDraft(e.target.value)}
+                    className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void saveExpiry()}
+                    disabled={expiryBusy || !expiryDraft || expiryDraft === (expirySaved ?? '')}
+                    className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-40"
+                  >
+                    {expiryBusy ? '저장 중…' : '저장'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {canReverify && requiredFields.length > 0 && (
               <>
                 <div className="text-sm font-bold text-slate-900">수동 입력 (선택)</div>
@@ -270,6 +322,13 @@ export default function DocFilePreviewDialog({ doc, docType, canReverify, onClos
 
         <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-end gap-2">
           <button onClick={onClose} className="btn-ghost text-sm" disabled={busy}>닫기</button>
+          {canEdit && isImage && onEdit && (
+            <button onClick={onEdit} disabled={busy}
+                    title="저장된 이미지 기준으로 다시 자르고 가립니다"
+                    className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+              편집 (자르기·가리기)
+            </button>
+          )}
           <button onClick={onReupload} disabled={busy}
                   className="px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
             + 재업로드

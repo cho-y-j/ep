@@ -9,6 +9,7 @@ import OcrUploadDialog from './OcrUploadDialog';
 import DocumentCard from './DocumentCard';
 import DocumentVerifyDialog from './DocumentVerifyDialog';
 import DocumentHistoryDialog from './DocumentHistoryDialog';
+import DocumentEditDialog from './DocumentEditDialog';
 import DocFilePreviewDialog from '../compliance/DocFilePreviewDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { tokenStorage } from '../../lib/tokenStorage';
@@ -38,6 +39,8 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
   const [historyOf, setHistoryOf] = useState<DocumentResponse | null>(null);
   // 파일 클릭 시 인앱 blob 모달 (window.open 팝업차단 회피).
   const [previewDoc, setPreviewDoc] = useState<DocumentResponse | null>(null);
+  // 이미지 서류 재편집(모서리·가리기) — 결과는 재업로드 교체 체인으로 저장.
+  const [editingDoc, setEditingDoc] = useState<DocumentResponse | null>(null);
   // 체크리스트에서 미등록 항목 업로드 — 종류 고정(presetTypeId) 다이얼로그.
   const [checklistTypeId, setChecklistTypeId] = useState<number | null>(null);
   const [docTypes, setDocTypes] = useState<Map<number, DocumentTypeResponse>>(new Map());
@@ -279,6 +282,10 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
               onHistory={() => setHistoryOf(d)}
               onReject={() => reject(d)}
               onRenew={() => setRenewing(d)}
+              onSaveExpiry={async (date) => {
+                await api.patch(`/api/documents/${d.id}/expiry?expiryDate=${date}`);
+                await load();
+              }}
             />
           ))}
         </div>
@@ -368,9 +375,19 @@ export default function DocumentSection({ ownerType, ownerId, canEdit, title = '
           doc={previewDoc}
           docType={docTypes.get(previewDoc.document_type_id)}
           canReverify={canEdit && !!docTypes.get(previewDoc.document_type_id)?.verify_endpoint}
+          canEdit={canEdit}
           onClose={() => setPreviewDoc(null)}
           onReverified={() => void load()}
           onReupload={() => { const d = previewDoc; setPreviewDoc(null); setRenewing(d); }}
+          onEdit={() => { const d = previewDoc; setPreviewDoc(null); setEditingDoc(d); }}
+        />
+      )}
+
+      {editingDoc && (
+        <DocumentEditDialog
+          doc={editingDoc}
+          onClose={() => setEditingDoc(null)}
+          onDone={() => { setEditingDoc(null); void load(); }}
         />
       )}
     </div>
