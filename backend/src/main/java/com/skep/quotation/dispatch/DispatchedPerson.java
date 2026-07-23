@@ -59,6 +59,11 @@ public class DispatchedPerson {
     @Column(name = "settlement_ot_days")
     private Integer settlementOtDays;
 
+    /** R4 조합 스냅샷 — 조종원 행이 같은 견적에 함께 배차된 장비를 가리킴(단독 배차=NULL). 배차 시점 고정,
+     *  원장(equipment_default_operators) 사후 변경에 불변. quotation_dispatched_equipments 는 무변경. */
+    @Column(name = "combo_equipment_id")
+    private Long comboEquipmentId;
+
     @Column(name = "sent_at", nullable = false)
     private LocalDateTime sentAt;
 
@@ -73,7 +78,8 @@ public class DispatchedPerson {
 
     @Builder
     private DispatchedPerson(Long quotationRequestId, Long supplierCompanyId, Long subSupplierCompanyId, Long personId,
-                             Long dailyPrice, Long otDailyPrice, Long monthlyPrice, Long otMonthlyPrice, String notes, Long sentBy) {
+                             Long dailyPrice, Long otDailyPrice, Long monthlyPrice, Long otMonthlyPrice, String notes,
+                             Long comboEquipmentId, Long sentBy) {
         this.quotationRequestId = quotationRequestId;
         this.supplierCompanyId = supplierCompanyId;
         this.subSupplierCompanyId = subSupplierCompanyId;
@@ -83,6 +89,7 @@ public class DispatchedPerson {
         this.monthlyPrice = monthlyPrice;
         this.otMonthlyPrice = otMonthlyPrice;
         this.notes = notes;
+        this.comboEquipmentId = comboEquipmentId;
         this.sentBy = sentBy;
     }
 

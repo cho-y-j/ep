@@ -3,6 +3,8 @@ package com.skep.quotation.dispatch;
 import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
+import com.skep.equipment.EquipmentDefaultOperator;
+import com.skep.equipment.EquipmentDefaultOperatorRepository;
 import com.skep.notification.NotificationService;
 import com.skep.person.Person;
 import com.skep.person.PersonRepository;
@@ -18,8 +20,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +37,8 @@ import java.util.stream.Collectors;
 public class DispatchedPersonService {
 
     private final DispatchedPersonRepository dispatched;
+    private final DispatchedEquipmentRepository dispatchedEquipments;
+    private final EquipmentDefaultOperatorRepository defaultOperators;
     private final QuotationRequestRepository requests;
     private final QuotationProposalRepository proposals;
     private final PersonRepository persons;
@@ -85,6 +93,10 @@ public class DispatchedPersonService {
             }
         }
 
+        // R4 조합 자동 추론 — 같은 견적에 배차된 장비 중 이 인원이 조합(교대조) 원장에 속한 장비가
+        // 정확히 1대면 combo 스냅샷, 0대·2대 이상(모호)이면 null(오탐 금지). 요청 명시값이 있으면 우선.
+        Map<Long, Long> inferredCombo = inferComboEquipment(requestId, personIds);
+
         var entities = req.items().stream()
                 .map(item -> DispatchedPerson.builder()
                         .quotationRequestId(requestId)
@@ -97,6 +109,7 @@ public class DispatchedPersonService {
                         .monthlyPrice(item.monthlyPrice())
                         .otMonthlyPrice(item.otMonthlyPrice())
                         .notes(item.notes() != null ? item.notes() : req.notes())
+                        .comboEquipmentId(item.comboEquipmentId() != null ? item.comboEquipmentId() : inferredCombo.get(item.personId()))
                         .sentBy(actor.id())
                         .build())
                 .toList();
@@ -156,6 +169,22 @@ public class DispatchedPersonService {
     /** V77: 자원 실소유가 발송자(부모)와 다르면(=자식) 자식 id, 같으면 null. */
     private static Long subOwnerOrNull(Long resourceSupplierId, Long senderCompanyId) {
         return resourceSupplierId != null && !resourceSupplierId.equals(senderCompanyId) ? resourceSupplierId : null;
+    }
+
+    /** R4: 같은 견적의 배차 장비들 × 조합 원장(equipment_default_operators) — 인원별 소속 장비가 정확히 1대일 때만 매핑. */
+    private Map<Long, Long> inferComboEquipment(Long requestId, List<Long> personIds) {
+        List<Long> equipmentIds = dispatchedEquipments.findByQuotationRequestId(requestId).stream()
+                .map(DispatchedEquipment::getEquipmentId).filter(Objects::nonNull).distinct().toList();
+        if (equipmentIds.isEmpty()) return Map.of();
+        Map<Long, Set<Long>> byPerson = new HashMap<>();
+        for (EquipmentDefaultOperator op : defaultOperators.findByEquipmentIdInOrderByEquipmentIdAscPriorityAsc(equipmentIds)) {
+            if (personIds.contains(op.getPersonId())) {
+                byPerson.computeIfAbsent(op.getPersonId(), k -> new HashSet<>()).add(op.getEquipmentId());
+            }
+        }
+        Map<Long, Long> out = new HashMap<>();
+        byPerson.forEach((pid, eqs) -> { if (eqs.size() == 1) out.put(pid, eqs.iterator().next()); });
+        return out;
     }
 
     private DispatchedPersonResponse toResponse(DispatchedPerson d, Person p) {

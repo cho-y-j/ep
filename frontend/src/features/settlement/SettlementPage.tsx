@@ -48,6 +48,8 @@ type SettlementItem = {
   work_days_source?: 'MANUAL' | 'DERIVED' | null;
   source_kind?: 'DISPATCH' | 'DEPLOYMENT' | null;
   ot_breakdown?: OtBreakdown | null;
+  combo_equipment_id?: number | null;      // R4 조합 스냅샷(표시 전용) — 금액 무관
+  combo_equipment_label?: string | null;
 };
 type OwnerSettlement = {
   owner_company_id: number;
@@ -238,10 +240,63 @@ export default function SettlementPage() {
   );
 }
 
+/** R4 조합 그룹 뷰 행 — comboChild=장비 행 아래 들여쓰기 조종원, comboParent=아래에 조종원을 거느린 장비. */
+type ComboRow = { it: SettlementItem; comboChild: boolean; comboParent: boolean };
+
+function comboKeyOfPerson(it: SettlementItem): string | null {
+  if (it.resource_type !== 'PERSON' || it.combo_equipment_id == null) return null;
+  return it.source_kind === 'DEPLOYMENT'
+    ? `F:${it.combo_equipment_id}`
+    : `D:${it.quotation_request_id}:${it.combo_equipment_id}`;
+}
+function comboKeyOfEquipment(it: SettlementItem): string | null {
+  if (it.resource_type !== 'EQUIPMENT') return null;
+  if (it.source_kind === 'DEPLOYMENT') {
+    return it.combo_equipment_id != null ? `F:${it.combo_equipment_id}` : null;
+  }
+  return it.resource_id != null ? `D:${it.quotation_request_id}:${it.resource_id}` : null;
+}
+
+/**
+ * R4 조합 그룹 — 같은 combo 의 조종원 행을 (정렬상 바로 뒤에 오는) 매칭 장비 행 아래로 재배열.
+ * 표시 전용: 행 집합·금액·합계 불변. 장비 행이 목록에 없으면(필터 등) 조종원 행은 원위치 유지.
+ */
+function groupCombo(items: SettlementItem[]): ComboRow[] {
+  const pendingIdx = new Map<string, number[]>();
+  const childrenOf = new Map<number, number[]>();
+  const attached = new Set<number>();
+  items.forEach((it, i) => {
+    const pk = comboKeyOfPerson(it);
+    if (pk) {
+      const l = pendingIdx.get(pk);
+      if (l) l.push(i); else pendingIdx.set(pk, [i]);
+      return;
+    }
+    const ek = comboKeyOfEquipment(it);
+    if (ek) {
+      const l = pendingIdx.get(ek);
+      if (l && l.length) {
+        childrenOf.set(i, [...l]);
+        l.forEach((x) => attached.add(x));
+        pendingIdx.delete(ek);
+      }
+    }
+  });
+  const out: ComboRow[] = [];
+  items.forEach((it, i) => {
+    if (attached.has(i)) return;
+    const kids = childrenOf.get(i);
+    out.push({ it, comboChild: false, comboParent: !!kids });
+    kids?.forEach((k) => out.push({ it: items[k], comboChild: true, comboParent: false }));
+  });
+  return out;
+}
+
 function OwnerTable({ owner, onSave }: {
   owner: OwnerSettlement;
   onSave: (it: SettlementItem, wd: number | null, od: number | null) => Promise<void>;
 }) {
+  const rows = groupCombo(owner.items);
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -256,8 +311,9 @@ function OwnerTable({ owner, onSave }: {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {owner.items.map((it) => (
-            <ItemRow key={`${it.source_kind ?? 'D'}:${it.resource_type}:${it.dispatch_id}`} it={it} onSave={onSave} />
+          {rows.map(({ it, comboChild, comboParent }) => (
+            <ItemRow key={`${it.source_kind ?? 'D'}:${it.resource_type}:${it.dispatch_id}`} it={it} onSave={onSave}
+              comboChild={comboChild} comboParent={comboParent} />
           ))}
         </tbody>
         <tfoot>
@@ -284,9 +340,11 @@ function fmtHours(h?: number): string {
   return String(Number(h ?? 0));
 }
 
-function ItemRow({ it, onSave }: {
+function ItemRow({ it, onSave, comboChild = false, comboParent = false }: {
   it: SettlementItem;
   onSave: (it: SettlementItem, wd: number | null, od: number | null) => Promise<void>;
+  comboChild?: boolean;   // R4: 장비 행 아래 조합(교대조) 조종원 — 들여쓰기 표시
+  comboParent?: boolean;  // R4: 아래에 조합 조종원 행을 거느린 장비
 }) {
   const initWd = it.settlement_work_days != null ? String(it.settlement_work_days) : '';
   const initOd = it.settlement_ot_days != null ? String(it.settlement_ot_days) : '';
@@ -311,12 +369,18 @@ function ItemRow({ it, onSave }: {
     <>
     <tr>
       <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1.5">
+        <div className={`flex items-center gap-1.5 ${comboChild ? 'pl-5' : ''}`}>
+          {comboChild && <span className="text-slate-300">└</span>}
           <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
             it.resource_type === 'EQUIPMENT' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
             {it.resource_type === 'EQUIPMENT' ? '장비' : '인원'}
           </span>
           <span className="font-medium text-slate-900">{it.resource_label}</span>
+          {(comboParent || it.combo_equipment_id != null) && (
+            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+              조합{!comboChild && it.resource_type === 'PERSON' && it.combo_equipment_label ? ` · ${it.combo_equipment_label}` : ''}
+            </span>
+          )}
           {it.dispatched_by_parent && (
             <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">부모 대행</span>
           )}

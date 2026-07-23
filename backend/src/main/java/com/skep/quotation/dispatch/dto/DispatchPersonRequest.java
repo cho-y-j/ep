@@ -19,6 +19,7 @@ public record DispatchPersonRequest(
             Long otDailyPrice,
             Long monthlyPrice,
             Long otMonthlyPrice,
-            String notes
+            String notes,
+            Long comboEquipmentId   // R4 optional — 명시 시 조합 자동 추론보다 우선. 미지정(null)이면 자동 추론.
     ) {}
 }

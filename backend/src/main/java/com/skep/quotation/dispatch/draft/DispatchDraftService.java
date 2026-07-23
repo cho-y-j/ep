@@ -166,7 +166,7 @@ public class DispatchDraftService {
 
     private DispatchPersonRequest toPersonRequest(DispatchDraft d) {
         var item = new DispatchPersonRequest.Item(d.getPersonId(),
-                d.getDailyPrice(), d.getOtDailyPrice(), d.getMonthlyPrice(), d.getOtMonthlyPrice(), d.getNotes());
+                d.getDailyPrice(), d.getOtDailyPrice(), d.getMonthlyPrice(), d.getOtMonthlyPrice(), d.getNotes(), null);
         return new DispatchPersonRequest(List.of(item), d.getNotes());
     }
 

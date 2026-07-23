@@ -28,7 +28,10 @@
 - **원장 = `equipment_default_operators`** (장비 1 : 조종원 N, priority = 교대 순번. 행이 없으면 `equipment.operator_person_id` 단일 폴백). 이 조합으로 서류수집·검사·투입·정산이 이어진다.
 - **관리 주체 = 소유 공급사(자기+직속 자식) + ADMIN** — BP 매칭 허용 제거(조회는 유지). 변경은 audit_logs(`EQUIPMENT_DEFAULT_OPERATORS_CHANGED`, 전/후 person_ids)에 기록.
 - **R1 판정 = 파생(저장 없음)**: `GET /api/resources/equipment/{id}/deploy-check-combo?siteId=` — 기존 4게이트(DeployCheckService)를 장비 1회 + 조종원 N회 합성. `combo_ready = 장비 ready AND 조종원 전원 ready`(0명이면 장비 단독). 접근권한은 **장비 접근권만** 검사(조종원은 내부 판정 — 장비가 보이면 조합 판정도 보임).
-- **단계 스냅샷(R2~R4 예정)**: 검사/투입/정산 단계 행에 `combo_equipment_id` 스냅샷을 남겨 조합 단위 추적. R1 은 판정+표시만(마이그레이션 없음).
+- **단계 스냅샷(R2~R4 구현 완료)**: 각 단계 행에 `combo_equipment_id` 스냅샷(장비행=자기 id, 조종원행=그 장비 id, 단독=NULL) — 원장 사후 변경이 과거 기록을 오염시키지 않음.
+  - **R2 검사(V122)**: `resource_check_requests.combo_equipment_id` + `POST /api/resource-checks/issue-combo`(장비 1×N종+조종원 N×M종 단일 트랜잭션) + 목록 조합 묶음 + 발행 다이얼로그 조합 모드.
+  - **R3 투입(V123)**: `field_deployment_requests.combo_equipment_id` + `POST /api/field-deployments/combo`(행별 단가) + `accept-combo`(BP 일괄 수락, 전건 검증·전체 롤백) + 수신함 조합 묶음 카드.
+  - **R4 배차·정산(V124, 표시 전용)**: `quotation_dispatched_persons.combo_equipment_id` — 배차 send 시 같은 견적의 배차 장비 중 그 인원의 원장 소속 장비가 **정확히 1대면 자동 추론** 세팅(모호하면 NULL, 요청 body `combo_equipment_id` 명시값 우선). 정산 `SettlementItem` 에 `combo_equipment_id/label` 표시 전용 필드(DISPATCH=배차 컬럼, DEPLOYMENT=R3 컬럼) — **금액·산식·소유자 그룹핑 무접촉**. 정산 화면은 같은 combo 조종원 행을 장비 행 아래 들여쓰기 그룹으로, 거래내역서(PDF/XLSX)는 자원 라벨에 `(조합 차량번호)` 병기.
 - **재검사 이원화 해소(R1 동반)**: 점검 재발행(`ResourceCheckService.issue`) 시 같은 자원·같은 check_type 의 기존 REJECTED 를 자동 CANCELLED — readiness/파이프라인/작업계획서 제출 술어("전부 APPROVED, CANCELLED 통과")와 deploy-check 판정이 재검사 승인 후 일치.
 
 ## 협력사(장비 협력사, V77 하위공급사) — 확정

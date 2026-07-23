@@ -121,7 +121,12 @@ public class SettlementStatementXlsxRenderer {
 
     private static String resourceLabel(SettlementItem it) {
         String kind = "EQUIPMENT".equals(it.resourceType()) ? "장비" : "인원";
-        return kind + " · " + it.resourceLabel();
+        String base = kind + " · " + it.resourceLabel();
+        // R4: 조합(교대조) 행이면 장비 라벨 병기 — 항목·금액 불변, 표기만(장비 자기 자신 라벨 중복은 생략).
+        if (it.comboEquipmentLabel() != null && !it.comboEquipmentLabel().equals(it.resourceLabel())) {
+            return base + " (조합 " + it.comboEquipmentLabel() + ")";
+        }
+        return base;
     }
 
     private static String rateLabel(SettlementItem it) {

@@ -125,7 +125,11 @@ public class SettlementService {
             if (r.getResourceType() == OwnerType.EQUIPMENT) allEquipmentIds.add(r.getResourceId());
             else if (r.getResourceType() == OwnerType.PERSON) allPersonIds.add(r.getResourceId());
         }
-        Map<Long, Equipment> eqMap = equipments.findAllById(allEquipmentIds)
+        // R4 표시 전용 — 조합 장비 라벨 로드용. 라벨 맵(eqMap)에만 합류, OT 집계 대상(allEquipmentIds)은 불변.
+        Set<Long> labelEquipmentIds = new HashSet<>(allEquipmentIds);
+        ppRows.forEach(d -> { if (d.getComboEquipmentId() != null) labelEquipmentIds.add(d.getComboEquipmentId()); });
+        deployments.forEach(r -> { if (r.getComboEquipmentId() != null) labelEquipmentIds.add(r.getComboEquipmentId()); });
+        Map<Long, Equipment> eqMap = equipments.findAllById(labelEquipmentIds)
                 .stream().collect(Collectors.toMap(Equipment::getId, e -> e));
         Map<Long, Person> personMap = persons.findAllById(allPersonIds)
                 .stream().collect(Collectors.toMap(Person::getId, p -> p));
@@ -169,7 +173,7 @@ public class SettlementService {
         for (DispatchedPerson d : ppRows) {
             Long ownerId = ownerOf(d.getSubSupplierCompanyId(), d.getSupplierCompanyId());
             byOwner.computeIfAbsent(ownerId, k -> new ArrayList<>())
-                    .add(personItem(d, qrMap, personMap, siteNames, siteSettlementDays, companyNames, companyId, completedByPerson, otBreakdowns));
+                    .add(personItem(d, qrMap, personMap, eqMap, siteNames, siteSettlementDays, companyNames, companyId, completedByPerson, otBreakdowns));
         }
         // 디커플링 원천(투입요청 수락분) — 소유자 = supplierCompanyId(투입요청엔 하위귀속 개념 없음).
         for (FieldDeploymentRequest r : deployments) {
@@ -227,11 +231,14 @@ public class SettlementService {
                 d.getSettlementWorkDays(), d.getSettlementOtDays(), p.baseAmount(), p.otAmount(), siteDay,
                 // 장비는 파생 소스 없음(무변경). source 는 수동 입력 여부만 표기.
                 null, null, d.getSettlementWorkDays() != null ? "MANUAL" : null,
-                "DISPATCH", d.getEquipmentId() != null ? otBreakdowns.get("EQUIPMENT:" + d.getEquipmentId()) : null);
+                "DISPATCH", d.getEquipmentId() != null ? otBreakdowns.get("EQUIPMENT:" + d.getEquipmentId()) : null,
+                // R4: 배차 장비 행엔 저장 조합 없음(조종원 행이 장비를 가리키는 방향) — 그룹핑은 조종원 행 combo 로.
+                null, null);
     }
 
     private SettlementItem personItem(DispatchedPerson d, Map<Long, QuotationRequest> qrMap,
-                                      Map<Long, Person> personMap, Map<Long, String> siteNames,
+                                      Map<Long, Person> personMap, Map<Long, Equipment> eqMap,
+                                      Map<Long, String> siteNames,
                                       Map<Long, Integer> siteSettlementDays,
                                       Map<Long, String> companyNames, Long selfId,
                                       Map<Long, List<WorkConfirmation>> completedByPerson,
@@ -276,7 +283,8 @@ public class SettlementService {
                 d.getSentAt(),
                 d.getSettlementWorkDays(), d.getSettlementOtDays(), pr.baseAmount(), pr.otAmount(), siteDay,
                 derivedWorkDays, derivedOtDays, source,
-                "DISPATCH", d.getPersonId() != null ? otBreakdowns.get("PERSON:" + d.getPersonId()) : null);
+                "DISPATCH", d.getPersonId() != null ? otBreakdowns.get("PERSON:" + d.getPersonId()) : null,
+                d.getComboEquipmentId(), comboLabel(d.getComboEquipmentId(), eqMap));
     }
 
     /** §3.2 디커플링 — 수락된 투입요청 1건 = 정산 1건(DEPLOYMENT). 견적 무관, 근무일수 미입력 → 금액 basis 만. */
@@ -317,7 +325,8 @@ public class SettlementService {
                 null, null, calc.baseAmount(), calc.otAmount(),
                 siteId != null ? siteSettlementDays.get(siteId) : null,
                 null, null, null,
-                "DEPLOYMENT", otBreakdowns.get(type + ":" + resourceId));
+                "DEPLOYMENT", otBreakdowns.get(type + ":" + resourceId),
+                r.getComboEquipmentId(), comboLabel(r.getComboEquipmentId(), eqMap));
     }
 
     /** 자원별 OT 5분류 breakdown 산출 — 일일 확인서를 기본 자원(장비 우선)에 1회 귀속(이중집계 방지). */
@@ -370,6 +379,14 @@ public class SettlementService {
     /** 소유자 = 자식 귀속이 있으면 자식, 없으면 대외 명의(supplier). */
     private static Long ownerOf(Long subSupplierCompanyId, Long supplierCompanyId) {
         return subSupplierCompanyId != null ? subSupplierCompanyId : supplierCompanyId;
+    }
+
+    /** R4 표시 전용 — 조합 장비 라벨(차량번호>모델>#id). 비조합(null)이면 null. */
+    private static String comboLabel(Long comboEquipmentId, Map<Long, Equipment> eqMap) {
+        if (comboEquipmentId == null) return null;
+        Equipment e = eqMap.get(comboEquipmentId);
+        if (e == null) return "#" + comboEquipmentId;
+        return e.getVehicleNo() != null ? e.getVehicleNo() : (e.getModel() != null ? e.getModel() : "#" + e.getId());
     }
 
     private static Long bpOf(QuotationRequest qr) {

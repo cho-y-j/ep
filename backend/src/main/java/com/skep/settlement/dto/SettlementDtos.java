@@ -43,7 +43,9 @@ public class SettlementDtos {
             Integer derivedOtDays,        // 자동 집계 OT일수(표시용, 인력 금액엔 미반영)
             String workDaysSource,        // MANUAL(수동입력) / DERIVED(자동집계) / null(둘 다 없음)
             String sourceKind,            // DISPATCH(견적/배차 원천) / DEPLOYMENT(현장 투입요청 원천, §3.2 디커플링)
-            OtBreakdown otBreakdown       // 일일 확인서 기반 OT 5분류 내역·금액(§3.6.3). 없으면 null. 기존 amount 엔 미반영.
+            OtBreakdown otBreakdown,      // 일일 확인서 기반 OT 5분류 내역·금액(§3.6.3). 없으면 null. 기존 amount 엔 미반영.
+            Long comboEquipmentId,        // R4 조합 스냅샷(표시 전용) — 이 행이 속한 조합의 장비 id. 비조합=null. 금액 무관.
+            String comboEquipmentLabel    // 조합 장비 라벨(차량번호). 화면·거래내역서 그룹 표시용.
     ) {}
 
     /**
