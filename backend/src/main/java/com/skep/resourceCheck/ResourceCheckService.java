@@ -198,10 +198,16 @@ public class ResourceCheckService {
                                            Long supplierCompanyId, Long bpCompanyId,
                                            ResourceCheckType checkType, LocalDate dueDate, LocalTime dueTime,
                                            String notes, Long issuedBy, Long comboEquipmentId) {
-        repo.findByOwnerTypeAndOwnerIdOrderByIdDesc(ownerType, ownerId).stream()
+        List<ResourceCheckRequest> rejected = repo.findByOwnerTypeAndOwnerIdOrderByIdDesc(ownerType, ownerId).stream()
                 .filter(c -> c.getCheckType() == checkType
                         && c.getStatus() == ResourceCheckStatus.REJECTED)
-                .forEach(ResourceCheckRequest::cancel);
+                .toList();
+        rejected.forEach(ResourceCheckRequest::cancel);
+        // 재검사 재발행(단건 issue 경로): 원 건이 조합(combo) 스냅샷이면 새 건도 상속 — 수신함/보드 묶음 유지.
+        if (comboEquipmentId == null) {
+            comboEquipmentId = rejected.stream().map(ResourceCheckRequest::getComboEquipmentId)
+                    .filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        }
 
         var entity = ResourceCheckRequest.issue(workPlanId, ownerType, ownerId,
                 supplierCompanyId, bpCompanyId, checkType, dueDate, notes, issuedBy);
