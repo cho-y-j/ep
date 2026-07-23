@@ -213,12 +213,18 @@ export function buildSet(
     ? { state: 'DONE', summary: '투입 준비됨' }
     : { state: 'PENDING', summary: memberSummary(notReady, members.length, 'readiness') };
 
+  // 세트 트랙의 '투입 중' 단계 라벨과 백엔드 요약 '미투입'이 붙으면 "투입 중 — 미투입"으로 상충 —
+  // 미투입(PENDING) 요약만 다음 행동이 읽히게 정돈(그 외 요약·판정은 백엔드 그대로).
+  const deployed: Stage = head.stages.deployed.state === 'PENDING' && head.stages.deployed.summary === '미투입'
+    ? { state: 'PENDING', summary: '투입 요청 필요' }
+    : head.stages.deployed;
+
   return {
     key: itemKey(head),
     head,
     operators: opRows,
     unknownOperators: unknown,
-    stages: { docs, review, inspection, readiness, deployed: head.stages.deployed, settlement: head.stages.settlement },
+    stages: { docs, review, inspection, readiness, deployed, settlement: head.stages.settlement },
     inspectionRejected: inspPending.some((m) => m.stages.inspection.summary.includes('반려')),
     reviewNotSent,
   };
@@ -269,7 +275,14 @@ export function setActionOf(set: ResourceSet): SetAction | null {
       return { kind: 'detail', label: '투입가능 판정 보기', resourceKey: itemKey(target) };
     }
     case 'deployed':
-      return { kind: 'link', label: '투입 요청', to: '/field-deployments/supplier' };
+      // 장비 세트는 ?equipment= 프리필 — 투입 요청 화면이 그 장비 선택 + 조합 다이얼로그를 바로 연다.
+      return {
+        kind: 'link',
+        label: '투입 요청',
+        to: head.resource_type === 'EQUIPMENT'
+          ? `/field-deployments/supplier?equipment=${head.resource_id}`
+          : '/field-deployments/supplier',
+      };
     case 'settlement':
       return { kind: 'link', label: '정산으로', to: '/settlements' };
     default:

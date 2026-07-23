@@ -3,6 +3,7 @@ package com.skep.fieldDeployment;
 import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
+import com.skep.company.CompanyService;
 import com.skep.document.OwnerType;
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentRepository;
@@ -46,6 +47,7 @@ public class FieldDeploymentService {
 
     private final FieldDeploymentRepository repo;
     private final CompanyRepository companies;
+    private final CompanyService companyService;
     private final EquipmentRepository equipments;
     private final PersonRepository persons;
     private final SiteRepository sites;
@@ -161,22 +163,23 @@ public class FieldDeploymentService {
         return supplierId;
     }
 
-    /** 단건(create)·조합(createCombo) 공용 — 본인 회사 소유 자원 가드(ADMIN 예외). */
+    /**
+     * 단건(create)·조합(createCombo) 공용 — 본인 회사(+직속 자식 협력사) 소유 자원 가드(ADMIN 예외).
+     * V77 부모→자식 단방향: 수집·검사·심사와 동일하게 selfAndChildren 스코프 — 형제/무관사는 403 유지.
+     */
     private void requireOwnResource(OwnerType resourceType, Long resourceId, Long supplierId, AuthenticatedUser actor) {
+        Long ownerCompanyId;
         if (resourceType == OwnerType.EQUIPMENT) {
-            Equipment e = equipments.findById(resourceId).orElseThrow(() ->
-                    ApiException.notFound("EQUIPMENT_NOT_FOUND", "장비 없음"));
-            if (actor.role() != Role.ADMIN && !supplierId.equals(e.getSupplierId())) {
-                throw ApiException.forbidden("DENIED", "본인 회사 자원만 요청 가능");
-            }
+            ownerCompanyId = equipments.findById(resourceId).orElseThrow(() ->
+                    ApiException.notFound("EQUIPMENT_NOT_FOUND", "장비 없음")).getSupplierId();
         } else if (resourceType == OwnerType.PERSON) {
-            Person p = persons.findById(resourceId).orElseThrow(() ->
-                    ApiException.notFound("PERSON_NOT_FOUND", "인원 없음"));
-            if (actor.role() != Role.ADMIN && !supplierId.equals(p.getSupplierId())) {
-                throw ApiException.forbidden("DENIED", "본인 회사 자원만 요청 가능");
-            }
+            ownerCompanyId = persons.findById(resourceId).orElseThrow(() ->
+                    ApiException.notFound("PERSON_NOT_FOUND", "인원 없음")).getSupplierId();
         } else {
             throw ApiException.badRequest("BAD_TYPE", "장비/인원만 가능");
+        }
+        if (actor.role() != Role.ADMIN && !companyService.selfAndChildren(supplierId).contains(ownerCompanyId)) {
+            throw ApiException.forbidden("DENIED", "본인 회사(협력사 포함) 자원만 요청 가능");
         }
     }
 
