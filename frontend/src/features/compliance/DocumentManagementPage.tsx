@@ -229,6 +229,8 @@ function MyDocsExpiryView() {
   const [sortKey, setSortKey] = useState<GroupSortKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [previewDoc, setPreviewDoc] = useState<DocRow | null>(null);
+  // "만료일 입력" 진입이면 다이얼로그가 만료일 입력에 바로 포커스.
+  const [previewFocusExpiry, setPreviewFocusExpiry] = useState(false);
   const [reuploadDoc, setReuploadDoc] = useState<DocRow | null>(null);
   const [editDoc, setEditDoc] = useState<DocRow | null>(null);
   const [pendingDelete, setPendingDelete] = useState<DocRow | null>(null);
@@ -608,13 +610,14 @@ function MyDocsExpiryView() {
       ) : (
         <div className="card p-0 overflow-hidden">
           <div className="flex items-center gap-3 px-4 sm:px-5 py-2.5 bg-slate-50 border-b border-slate-200 text-xs">
+            <span className="w-4 shrink-0" />
             <span className="w-28 shrink-0"><SortHead k="type" label="종류" /></span>
             <span className="w-24 shrink-0 font-semibold text-slate-500">사업자</span>
             <span className="flex-1 min-w-0"><SortHead k="name" label="이름" /></span>
             <div className="flex items-center gap-3 shrink-0">
               <span className="w-20 flex justify-end"><SortHead k="docs" label="서류" /></span>
               <span className="w-28 flex justify-center"><SortHead k="status" label="상태" /></span>
-              <span className="w-14" />
+              <span className="w-20" />
             </div>
           </div>
           <div className="divide-y divide-slate-100">
@@ -624,7 +627,9 @@ function MyDocsExpiryView() {
                 group={g}
                 daysFrom={daysFrom}
                 verifyableMap={verifyableMap}
-                onRowClick={(r) => setPreviewDoc(r)}
+                hasExpiryMap={hasExpiryMap}
+                onRowClick={(r) => { setPreviewFocusExpiry(false); setPreviewDoc(r); }}
+                onExpiryClick={(r) => { setPreviewFocusExpiry(true); setPreviewDoc(r); }}
                 onDelete={(r) => setPendingDelete(r)}
                 onReverified={() => setReloadKey((k) => k + 1)}
               />
@@ -639,6 +644,7 @@ function MyDocsExpiryView() {
           docType={allTypes.find((t) => t.id === previewDoc.document_type_id)}
           canReverify={verifyableMap.get(previewDoc.document_type_id) === true}
           canEdit
+          focusExpiry={previewFocusExpiry}
           onClose={() => setPreviewDoc(null)}
           onReverified={() => setReloadKey((k) => k + 1)}
           onReupload={() => { const d = previewDoc; setPreviewDoc(null); setReuploadDoc(d); }}
@@ -681,11 +687,14 @@ function MyDocsExpiryView() {
   );
 }
 
-function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onDelete, onReverified }: {
+function ResourceGroupCard({ group, daysFrom, verifyableMap, hasExpiryMap, onRowClick, onExpiryClick, onDelete, onReverified }: {
   group: { owner_type: DocRow['owner_type']; owner_id: number; owner_name: string | null; owner_sub_label: string | null; owner_assignment_status: string | null; owner_external: boolean; owner_business_name: string | null; rows: DocRow[] };
   daysFrom: (s: string | null | undefined) => number;
   verifyableMap: Map<number, boolean>;
+  hasExpiryMap: Map<number, boolean>;
   onRowClick: (r: DocRow) => void;
+  /** 만료일 비어 있는 행의 "만료일 입력" 클릭 — 다이얼로그를 만료일 입력 포커스로 연다. */
+  onExpiryClick: (r: DocRow) => void;
   onDelete: (r: DocRow) => void;
   onReverified: () => void;
 }) {
@@ -710,6 +719,10 @@ function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onDelet
   const href = group.owner_type === 'EQUIPMENT' ? `/equipment/${group.owner_id}`
     : group.owner_type === 'PERSON' ? `/persons/${group.owner_id}`
     : '/my-company';
+  // 자원 페이지 이동은 목적지를 라벨로 명시(예고 없는 페이지 점프 제거) — 서류 상세는 행 클릭(다이얼로그).
+  const resourceLinkLabel = group.owner_type === 'EQUIPMENT' ? '장비 보기'
+    : group.owner_type === 'PERSON' ? '인원 보기'
+    : '회사 보기';
   const subLabel = formatOwnerSubLabel(group.owner_type, group.owner_sub_label);
   const typeLabel = group.owner_type === 'EQUIPMENT'
     ? (subLabel ?? '장비')
@@ -740,6 +753,7 @@ function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onDelet
     <div>
       <div onClick={() => setOpen(!open)}
            className="flex items-center gap-3 px-4 sm:px-5 py-4 cursor-pointer hover:bg-slate-50 transition-colors">
+        <span className={`w-4 shrink-0 text-slate-400 text-xs transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true">▸</span>
         <span className="w-28 shrink-0">
           <span className="inline-flex max-w-full items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-semibold truncate" title={typeLabel}>{typeLabel}</span>
         </span>
@@ -772,9 +786,10 @@ function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onDelet
             <span className={`inline-flex px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap ${badge.cls}`}>{badge.label}</span>
           </span>
           <Link to={href} onClick={(e) => e.stopPropagation()}
-                className="w-14 inline-flex items-center justify-end gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 whitespace-nowrap">
-            상세
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                title="자원 페이지로 이동합니다 (서류 상세는 행을 클릭)"
+                className="w-20 inline-flex items-center justify-end gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 whitespace-nowrap">
+            {resourceLinkLabel}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="7" y1="17" x2="17" y2="7" /><polyline points="7 7 17 7 17 17" /></svg>
           </Link>
         </div>
       </div>
@@ -816,10 +831,23 @@ function ResourceGroupCard({ group, daysFrom, verifyableMap, onRowClick, onDelet
               return (
                 <tr key={r.id} className="hover:bg-blue-50/40 cursor-pointer" onClick={() => onRowClick(r)}>
                   <td className="px-4 py-2 text-slate-700">{r.document_type_name ?? '#' + r.document_type_id}</td>
-                  <td className="px-4 py-2 text-xs tabular-nums">{r.expiry_date ?? '-'}</td>
+                  <td className="px-4 py-2 text-xs tabular-nums">
+                    {r.expiry_date ?? (hasExpiryMap.get(r.document_type_id) === true ? (
+                      <button type="button"
+                        onClick={(e) => { e.stopPropagation(); onExpiryClick(r); }}
+                        className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 hover:bg-amber-200">
+                        만료일 입력
+                      </button>
+                    ) : '-')}
+                  </td>
                   <td className="px-4 py-2">{chip}</td>
                   <td className="px-4 py-2">{verifyChip}</td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-4 py-2 text-right whitespace-nowrap">
+                    <button type="button"
+                      onClick={(e) => { e.stopPropagation(); onRowClick(r); }}
+                      className="mr-1.5 px-2 py-0.5 rounded border border-slate-300 text-slate-600 text-[11px] font-semibold hover:bg-slate-100">
+                      상세
+                    </button>
                     <button type="button"
                       onClick={(e) => { e.stopPropagation(); onDelete(r); }}
                       className="px-2 py-0.5 rounded border border-rose-200 text-rose-600 text-[11px] font-semibold hover:bg-rose-50">

@@ -47,7 +47,11 @@ export default function DeployCheckCard({ ownerType, ownerId }: { ownerType: 'eq
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-base font-bold text-slate-900">현장 투입가능 판정</h3>
-          <p className="mt-0.5 text-xs text-slate-500">서류·반입검사·안전점검·이행지시를 한 번에 확인합니다.</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            기준: 필수서류 전건 검증완료·유효기한 내
+            {ownerType === 'equipment' ? ' · 반입검사(차량 안전점검) 승인' : ' · 건강검진·안전교육 승인'}
+            {' '}· 안전점검 완료 · 미해결 이행지시 없음
+          </p>
         </div>
         <label className="flex items-center gap-2 text-sm">
           <span className="shrink-0 text-xs font-semibold text-slate-500">현장</span>

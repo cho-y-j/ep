@@ -174,7 +174,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         { label: '계약 관리', to: '/contracts', icon: <IconBriefcase /> },
       ]},
       { label: '서류', icon: <IconDoc />, items: [
-        { label: '서류 관리', to: '/document-management', icon: <IconDoc />, badge: supplierCounts.supplements || undefined },
+        { label: '서류 관리(만료·검증)', to: '/document-management', icon: <IconDoc />, badge: supplierCounts.supplements || undefined },
         { label: '서류심사', to: '/document-review-send', icon: <IconDoc /> },
         { label: '서류수집', to: '/document-collections', icon: <IconDoc />, badge: supplierCounts.collections || undefined },
         { label: '자원점검', to: '/resource-checks/supplier', icon: <IconShield />, badge: supplierCounts.checks || undefined },

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AxiosError } from 'axios';
 import { api } from '../../lib/api';
 import { parseRequiredFields, type DocumentTypeResponse } from '../../types/document';
@@ -23,6 +23,8 @@ type Props = {
   canReverify: boolean;
   /** 수정 권한(만료일 수정·이미지 편집). 백엔드 ensureCanModify 가 최종 스코프 강제. */
   canEdit?: boolean;
+  /** true 면 열리자마자 만료일 입력에 포커스 ("만료일 입력" 유도 진입). */
+  focusExpiry?: boolean;
   onClose: () => void;
   onReverified: () => void;
   onReupload: () => void;
@@ -68,7 +70,7 @@ const FIELD_LABEL: Record<string, string> = {
   registration_no: '교육 등록번호',
 };
 
-export default function DocFilePreviewDialog({ doc, docType, canReverify, canEdit = false, onClose, onReverified, onReupload, onEdit }: Props) {
+export default function DocFilePreviewDialog({ doc, docType, canReverify, canEdit = false, focusExpiry = false, onClose, onReverified, onReupload, onEdit }: Props) {
   const [src, setSrc] = useState<string | null>(null);
   const [contentType, setContentType] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,7 +79,16 @@ export default function DocFilePreviewDialog({ doc, docType, canReverify, canEdi
   const [expiryDraft, setExpiryDraft] = useState(doc.expiry_date ?? '');
   const [expirySaved, setExpirySaved] = useState<string | null>(doc.expiry_date ?? null);
   const [expiryBusy, setExpiryBusy] = useState(false);
+  const expiryInputRef = useRef<HTMLInputElement | null>(null);
   const requiredFields = parseRequiredFields(docType?.required_fields);
+
+  // 미리보기(iframe PDF 뷰어)가 로드되며 포커스를 가져가므로, 로딩 완료 후 한 번 더 되찾는다.
+  useEffect(() => {
+    if (!focusExpiry || loading) return;
+    expiryInputRef.current?.focus();
+    const t = window.setTimeout(() => expiryInputRef.current?.focus(), 400);
+    return () => window.clearTimeout(t);
+  }, [focusExpiry, loading]);
 
   // extracted_data (OCR 추출 + 이전 manual 입력) 으로 inputs 초기값 prefill.
   // 키 매핑: OCR 응답 camelCase + manual_* 둘 다 시도.
@@ -238,6 +249,7 @@ export default function DocFilePreviewDialog({ doc, docType, canReverify, canEdi
                 </div>
                 <div className="flex items-center gap-2">
                   <input
+                    ref={expiryInputRef}
                     type="date"
                     value={expiryDraft}
                     onChange={(e) => setExpiryDraft(e.target.value)}
