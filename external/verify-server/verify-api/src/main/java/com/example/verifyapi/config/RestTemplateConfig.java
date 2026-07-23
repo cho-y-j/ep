@@ -20,6 +20,9 @@ public class RestTemplateConfig {
     @Value("${rims.timeout:5000}")
     private int rimsTimeout;
 
+    @Value("${ocr.paddle.timeout:60000}")
+    private int paddleTimeout;
+
     @Bean(name = "koshaRestTemplate")
     public RestTemplate koshaRestTemplate(RestTemplateBuilder builder) {
         return builder
@@ -41,6 +44,14 @@ public class RestTemplateConfig {
         return builder
                 .setConnectTimeout(Duration.ofMillis(rimsTimeout))
                 .setReadTimeout(Duration.ofMillis(rimsTimeout))
+                .build();
+    }
+
+    @Bean(name = "paddleRestTemplate")
+    public RestTemplate paddleRestTemplate(RestTemplateBuilder builder) {
+        return builder
+                .setConnectTimeout(Duration.ofMillis(paddleTimeout))
+                .setReadTimeout(Duration.ofMillis(paddleTimeout))
                 .build();
     }
 }

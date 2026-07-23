@@ -2,6 +2,7 @@ package com.example.verifyapi.config;
 
 import com.example.verifyapi.service.OCRService;
 import com.example.verifyapi.service.impl.GoogleVisionOCRService;
+import com.example.verifyapi.service.impl.PaddleOCRService;
 import com.example.verifyapi.service.impl.StubOCRService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,8 @@ import org.springframework.web.client.RestTemplate;
  * [중요] 이 구현은 "공식 KOSHA API 연동"이 아니라
  * KOSHA QR 조회 웹 절차를 서버에서 자동화/대행하는 구조이다.
  *
- * - google.vision.api-key가 존재하면 GoogleVisionOCRService 사용
+ * - ocr.engine=paddle(기본)이면 PaddleOCRService 사용 (로컬 paddle-ocr, Vision 403 대체)
+ * - 그 외: google.vision.api-key가 존재하면 GoogleVisionOCRService 사용
  * - 그렇지 않으면 StubOCRService 사용
  * - OCRService 빈은 정확히 1개만 생성됨
  */
@@ -29,8 +31,16 @@ public class OCRServiceConfig {
     @Bean
     public OCRService ocrService(
             @Qualifier("visionRestTemplate") RestTemplate visionRestTemplate,
+            @Qualifier("paddleRestTemplate") RestTemplate paddleRestTemplate,
+            @Value("${ocr.engine:paddle}") String engine,
+            @Value("${ocr.paddle.url:http://172.17.0.1:8100}") String paddleUrl,
             @Value("${google.vision.api-key:}") String apiKey,
             @Value("${google.vision.endpoint:https://vision.googleapis.com/v1/images:annotate}") String endpoint) {
+
+        if ("paddle".equalsIgnoreCase(engine)) {
+            log.info("ocr.engine=paddle - PaddleOCRService 사용: url={}", paddleUrl);
+            return new PaddleOCRService(paddleRestTemplate, paddleUrl);
+        }
 
         if (apiKey != null && !apiKey.isBlank()) {
             log.info("Google Vision API 키 감지 - GoogleVisionOCRService 사용");

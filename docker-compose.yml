@@ -148,6 +148,8 @@ services:
       TZ: Asia/Seoul
       VERIFY_API_KEY: ${VERIFY_API_KEY:-}
       GOOGLE_VISION_API_KEY: ${GOOGLE_VISION_API_KEY:-}
+      # 로컬 PaddleOCR(호스트 8100) — OCR 기본 엔진(ocr.engine=paddle), Vision 403 대체. 컨테이너에서는 도커 게이트웨이로 접근
+      PADDLE_OCR_URL: ${PADDLE_OCR_URL:-http://172.17.0.1:8100}
       PUBLIC_API_BASE_URL: https://apis.data.go.kr/B553881/lcnsCheckService
       PUBLIC_API_SERVICE_KEY: ${PUBLIC_API_SERVICE_KEY:-}
       RIMS_API_URL: ${RIMS_API_URL:-}
