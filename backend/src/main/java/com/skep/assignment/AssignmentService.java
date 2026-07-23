@@ -7,6 +7,7 @@ import com.skep.audit.AuditTargetType;
 import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
+import com.skep.company.CompanyService;
 import com.skep.document.DocumentRepository;
 import com.skep.document.DocumentType;
 import com.skep.document.DocumentTypeRepository;
@@ -57,6 +58,7 @@ public class AssignmentService {
     private final SiteRepository sites;
     private final SiteParticipantRepository participants;
     private final CompanyRepository companies;
+    private final CompanyService companyService;
     private final DocumentRepository docRepo;
     private final DocumentTypeRepository docTypeRepo;
     private final AuditLogService auditLog;
@@ -69,6 +71,7 @@ public class AssignmentService {
                              SiteRepository sites,
                              SiteParticipantRepository participants,
                              CompanyRepository companies,
+                             CompanyService companyService,
                              DocumentRepository docRepo,
                              DocumentTypeRepository docTypeRepo,
                              AuditLogService auditLog,
@@ -80,6 +83,7 @@ public class AssignmentService {
         this.sites = sites;
         this.participants = participants;
         this.companies = companies;
+        this.companyService = companyService;
         this.docRepo = docRepo;
         this.docTypeRepo = docTypeRepo;
         this.auditLog = auditLog;
@@ -480,7 +484,9 @@ public class AssignmentService {
     private void ensureCanAccessEquipment(AuthenticatedUser actor, Equipment e) {
         if (actor.role() == Role.ADMIN) return;
         if (actor.role() == Role.EQUIPMENT_SUPPLIER) {
-            if (!e.getSupplierId().equals(actor.companyId())) {
+            // V77: 배치 이력 조회도 본인 + 직속 자식(협력사) 확장 — 자원 상세(EquipmentService.ensureCanAccess)와
+            // 동일 스코프. selfAndChildren 은 부모→자식 단방향(자식이면 {본인})이라 형제/무관사는 자동 403 유지.
+            if (!companyService.selfAndChildren(actor.companyId()).contains(e.getSupplierId())) {
                 throw ApiException.forbidden("FORBIDDEN_OTHER_COMPANY", "본인 회사 장비만 조회할 수 있습니다");
             }
             return;
@@ -508,7 +514,9 @@ public class AssignmentService {
     private void ensureCanAccessPerson(AuthenticatedUser actor, Person p) {
         if (actor.role() == Role.ADMIN) return;
         if (actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER) {
-            if (!p.getSupplierId().equals(actor.companyId())) {
+            // V77: 배치 이력 조회도 본인 + 직속 자식(협력사) 확장 — 자원 상세(PersonService.ensureCanAccess)와
+            // 동일 스코프. selfAndChildren 은 부모→자식 단방향(자식이면 {본인})이라 형제/무관사는 자동 403 유지.
+            if (!companyService.selfAndChildren(actor.companyId()).contains(p.getSupplierId())) {
                 throw ApiException.forbidden("FORBIDDEN_OTHER_COMPANY", "본인 회사 인원만 조회할 수 있습니다");
             }
             return;

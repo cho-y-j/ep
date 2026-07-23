@@ -49,6 +49,9 @@ export default function ResourceAssignmentSection({
     try {
       const res = await api.get<AssignmentResponse[]>(`${baseUrl}/assignments`);
       setHistory(res.data);
+    } catch {
+      // 배치 이력 조회 권한 없음(크로스테넌트 등) 은 조용히 빈 이력 — 미처리 프로미스 거부(PAGEERROR) 방지.
+      setHistory([]);
     } finally {
       setLoading(false);
     }
