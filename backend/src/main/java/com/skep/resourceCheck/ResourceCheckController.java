@@ -21,7 +21,7 @@ public class ResourceCheckController {
 
     private final ResourceCheckService service;
 
-    /** BP 발송 — 점검 요청. */
+    /** 점검 요청 발행 — BP/공급사(자기+자식 자원)/ADMIN. */
     @PostMapping
     public ResourceCheckResponse issue(@Valid @RequestBody IssueRequest req,
                                         @CurrentUser AuthenticatedUser actor) {
@@ -45,7 +45,7 @@ public class ResourceCheckController {
         return service.submitWithFile(id, files, actor);
     }
 
-    /** BP 승인. */
+    /** 발행사(BP/공급사)/ADMIN 승인. */
     @PostMapping("/{id}/approve")
     public ResourceCheckResponse approve(@PathVariable Long id,
                                           @RequestBody(required = false) ReviewRequest req,
@@ -53,7 +53,7 @@ public class ResourceCheckController {
         return service.approve(id, req, actor);
     }
 
-    /** BP 반려. */
+    /** 발행사(BP/공급사)/ADMIN 반려. */
     @PostMapping("/{id}/reject")
     public ResourceCheckResponse reject(@PathVariable Long id,
                                          @RequestBody(required = false) ReviewRequest req,
@@ -61,7 +61,7 @@ public class ResourceCheckController {
         return service.reject(id, req, actor);
     }
 
-    /** BP 발송 목록. */
+    /** 발행 목록 (BP/공급사 자기 발행분, ADMIN 전체). */
     @GetMapping("/bp-list")
     public List<ResourceCheckResponse> listForBp(@CurrentUser AuthenticatedUser actor) {
         return service.listForBp(actor);

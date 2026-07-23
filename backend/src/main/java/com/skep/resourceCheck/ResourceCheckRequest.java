@@ -34,6 +34,7 @@ public class ResourceCheckRequest {
     @Column(name = "supplier_company_id", nullable = false)
     private Long supplierCompanyId;
 
+    /** 발행사 회사 id — BP 발행이면 BP사, 공급사 자체 발행이면 공급사 자신(재해석: "발행사"). 승인/반려 주체 판정 기준. */
     @Column(name = "bp_company_id", nullable = false)
     private Long bpCompanyId;
 

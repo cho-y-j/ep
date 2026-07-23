@@ -3,6 +3,7 @@ package com.skep.resourceCheck;
 import com.skep.common.ApiException;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
+import com.skep.company.CompanyService;
 import com.skep.document.DocumentRepository;
 import com.skep.document.DocumentService;
 import com.skep.document.DocumentTypeRepository;
@@ -43,6 +44,7 @@ public class ResourceCheckService {
     private final EquipmentRepository equipmentRepo;
     private final PersonRepository personRepo;
     private final CompanyRepository companies;
+    private final CompanyService companyService;
     private final NotificationService notifications;
     private final DocumentService documentService;
     private final com.skep.collection.DocumentUploadMerger uploadMerger;
@@ -52,11 +54,12 @@ public class ResourceCheckService {
     private final WorkPlanRepository workPlans;
     private final SiteRepository sites;
 
-    /** BP 가 자원 점검을 공급사에 요청. */
+    /** BP·공급사·ADMIN 이 자원 점검을 발행. bp_company_id = 발행사(BP 발행이면 BP사, 공급사 발행이면 자기 회사). */
     @Transactional
     public ResourceCheckResponse issue(IssueRequest req, AuthenticatedUser actor) {
-        if (actor.role() != Role.ADMIN && actor.role() != Role.BP) {
-            throw ApiException.forbidden("BP_ADMIN_ONLY", "BP/ADMIN 만 점검 요청 가능");
+        boolean supplierIssuer = actor.role() == Role.EQUIPMENT_SUPPLIER || actor.role() == Role.MANPOWER_SUPPLIER;
+        if (actor.role() != Role.ADMIN && actor.role() != Role.BP && !supplierIssuer) {
+            throw ApiException.forbidden("ISSUER_ONLY", "BP/공급사/ADMIN 만 점검 요청 가능");
         }
         Long bpCompanyId = actor.role() == Role.ADMIN ? req.supplierCompanyId() : actor.companyId();
         // ADMIN 케이스: bpCompanyId 추론 어려움 — 실제로는 workPlan 의 bpCompanyId 또는 별도 필드 필요.
@@ -65,6 +68,16 @@ public class ResourceCheckService {
             if (bpCompanyId == null) throw ApiException.badRequest("NO_COMPANY", "회사 식별 불가");
             if (bpCompanyId.equals(req.supplierCompanyId())) {
                 throw ApiException.badRequest("SAME_COMPANY", "BP 자기 회사에 보낼 수 없습니다");
+            }
+        }
+        // 공급사 발행(BP 미사용 현실 대응): 자기 회사(+직속 자식 협력사) 자원에만 발행 가능.
+        // SAME_COMPANY 가드는 미적용 — 자기/자식 자원 대상 발행이 정상 흐름. bp_company_id 에는 발행사(자기 회사) id 저장.
+        if (supplierIssuer) {
+            if (bpCompanyId == null) throw ApiException.badRequest("NO_COMPANY", "회사 식별 불가");
+            List<Long> scope = companyService.selfAndChildren(bpCompanyId);
+            if (!scope.contains(resourceSupplierId(req.ownerType(), req.ownerId()))
+                    || !scope.contains(req.supplierCompanyId())) {
+                throw ApiException.forbidden("NOT_MY_RESOURCE", "자기 회사(협력사 포함) 자원에만 발행할 수 있습니다");
             }
         }
 
@@ -99,8 +112,10 @@ public class ResourceCheckService {
         }
         var entity = repo.findById(id).orElseThrow(() ->
                 ApiException.notFound("CHECK_NOT_FOUND", "점검 요청 없음"));
-        if (actor.role() != Role.ADMIN && !entity.getSupplierCompanyId().equals(actor.companyId())) {
-            throw ApiException.forbidden("DENIED", "본인 회사의 요청만 회신 가능");
+        // V77: 부모가 자식(협력사) 수신분도 회신 가능. 형제/무관사는 selfAndChildren 밖이라 403 유지.
+        if (actor.role() != Role.ADMIN
+                && !companyService.selfAndChildren(actor.companyId()).contains(entity.getSupplierCompanyId())) {
+            throw ApiException.forbidden("DENIED", "본인 회사(협력사 포함)의 요청만 회신 가능");
         }
         if (entity.getStatus() != ResourceCheckStatus.REQUESTED
                 && entity.getStatus() != ResourceCheckStatus.REJECTED) {
@@ -130,8 +145,10 @@ public class ResourceCheckService {
         }
         var entity = repo.findById(id).orElseThrow(() ->
                 ApiException.notFound("CHECK_NOT_FOUND", "점검 요청 없음"));
-        if (actor.role() != Role.ADMIN && !entity.getSupplierCompanyId().equals(actor.companyId())) {
-            throw ApiException.forbidden("DENIED", "본인 회사의 요청만 회신 가능");
+        // V77: 부모가 자식(협력사) 수신분도 회신 가능. 형제/무관사는 selfAndChildren 밖이라 403 유지.
+        if (actor.role() != Role.ADMIN
+                && !companyService.selfAndChildren(actor.companyId()).contains(entity.getSupplierCompanyId())) {
+            throw ApiException.forbidden("DENIED", "본인 회사(협력사 포함)의 요청만 회신 가능");
         }
         if (entity.getStatus() != ResourceCheckStatus.REQUESTED
                 && entity.getStatus() != ResourceCheckStatus.REJECTED) {
@@ -166,21 +183,24 @@ public class ResourceCheckService {
                         "점검 회신용 문서 타입 미시드: " + typeName));
     }
 
+    /** 승인 주체 = 발행사(bp_company_id — BP 또는 공급사 자신)/ADMIN. 승인자·시각은 reviewed_by/reviewed_at 로 기록. */
     @Transactional
     public ResourceCheckResponse approve(Long id, ReviewRequest req, AuthenticatedUser actor) {
-        if (actor.role() != Role.ADMIN && actor.role() != Role.BP) {
-            throw ApiException.forbidden("BP_ADMIN_ONLY", "BP/ADMIN 만 승인 가능");
+        if (actor.role() != Role.ADMIN && actor.role() != Role.BP
+                && actor.role() != Role.EQUIPMENT_SUPPLIER && actor.role() != Role.MANPOWER_SUPPLIER) {
+            throw ApiException.forbidden("ISSUER_ADMIN_ONLY", "발행사/ADMIN 만 승인 가능");
         }
         var entity = repo.findById(id).orElseThrow(() ->
                 ApiException.notFound("CHECK_NOT_FOUND", "점검 요청 없음"));
-        if (actor.role() == Role.BP && !entity.getBpCompanyId().equals(actor.companyId())) {
-            throw ApiException.forbidden("DENIED", "본인 회사의 요청만 승인 가능");
+        if (actor.role() != Role.ADMIN && !entity.getBpCompanyId().equals(actor.companyId())) {
+            throw ApiException.forbidden("DENIED", "발행사(본인 회사)의 요청만 승인 가능");
         }
         if (entity.getStatus() != ResourceCheckStatus.SUBMITTED) {
             throw ApiException.badRequest("INVALID_STATE", "회신 완료 상태에서만 승인 가능");
         }
         entity.approve(actor.id(), req != null ? req.note() : null);
-        // BP 승인 시 회신 서류도 VERIFIED 처리. 그래야 작업계획서 제출 게이트가 풀림.
+        // 발행사(공급사 포함) 승인 시 회신 서류도 VERIFIED 처리(정책 유지). 승인자는 verified_by 로 기록.
+        // 그래야 작업계획서 제출 게이트가 풀림.
         if (entity.getDocumentId() != null) {
             docRepo.findById(entity.getDocumentId()).ifPresent(d -> {
                 d.markVerifiedBy(actor.id());
@@ -192,13 +212,14 @@ public class ResourceCheckService {
 
     @Transactional
     public ResourceCheckResponse reject(Long id, ReviewRequest req, AuthenticatedUser actor) {
-        if (actor.role() != Role.ADMIN && actor.role() != Role.BP) {
-            throw ApiException.forbidden("BP_ADMIN_ONLY", "BP/ADMIN 만 반려 가능");
+        if (actor.role() != Role.ADMIN && actor.role() != Role.BP
+                && actor.role() != Role.EQUIPMENT_SUPPLIER && actor.role() != Role.MANPOWER_SUPPLIER) {
+            throw ApiException.forbidden("ISSUER_ADMIN_ONLY", "발행사/ADMIN 만 반려 가능");
         }
         var entity = repo.findById(id).orElseThrow(() ->
                 ApiException.notFound("CHECK_NOT_FOUND", "점검 요청 없음"));
-        if (actor.role() == Role.BP && !entity.getBpCompanyId().equals(actor.companyId())) {
-            throw ApiException.forbidden("DENIED", "본인 회사의 요청만 반려 가능");
+        if (actor.role() != Role.ADMIN && !entity.getBpCompanyId().equals(actor.companyId())) {
+            throw ApiException.forbidden("DENIED", "발행사(본인 회사)의 요청만 반려 가능");
         }
         if (entity.getStatus() != ResourceCheckStatus.SUBMITTED) {
             throw ApiException.badRequest("INVALID_STATE", "회신 완료 상태에서만 반려 가능");
@@ -215,6 +236,7 @@ public class ResourceCheckService {
         return toResponse(entity);
     }
 
+    /** 발행 목록 — bp_company_id = 발행사라 공급사 발행분도 자기 회사 분기로 그대로 조회. findAll 은 ADMIN 전용. */
     @Transactional(readOnly = true)
     public List<ResourceCheckResponse> listForBp(AuthenticatedUser actor) {
         Long bpId = actor.role() == Role.ADMIN ? null : actor.companyId();
@@ -227,7 +249,8 @@ public class ResourceCheckService {
     @Transactional(readOnly = true)
     public List<ResourceCheckResponse> listForSupplier(AuthenticatedUser actor) {
         if (actor.companyId() == null) return List.of();
-        return repo.findBySupplierCompanyIdOrderByIdDesc(actor.companyId()).stream()
+        // V77: 부모가 자식(협력사) 수신분도 보고 회신할 수 있게 self+children 확장.
+        return repo.findBySupplierCompanyIdInOrderByIdDesc(companyService.selfAndChildren(actor.companyId())).stream()
                 .map(this::toResponse).toList();
     }
 
@@ -260,6 +283,19 @@ public class ResourceCheckService {
         String supplierName = companies.findById(r.getSupplierCompanyId())
                 .map(Company::getName).orElse(null);
         return ResourceCheckResponse.from(r, ownerLabel, supplierName);
+    }
+
+    /** 공급사 발행 스코프 가드용 — 대상 자원의 실제 보유사 id. */
+    private Long resourceSupplierId(OwnerType type, Long ownerId) {
+        if (type == OwnerType.EQUIPMENT) {
+            return equipmentRepo.findById(ownerId).map(Equipment::getSupplierId)
+                    .orElseThrow(() -> ApiException.notFound("RESOURCE_NOT_FOUND", "대상 자원 없음"));
+        }
+        if (type == OwnerType.PERSON) {
+            return personRepo.findById(ownerId).map(Person::getSupplierId)
+                    .orElseThrow(() -> ApiException.notFound("RESOURCE_NOT_FOUND", "대상 자원 없음"));
+        }
+        throw ApiException.badRequest("UNSUPPORTED_OWNER", "장비/인원 자원만 점검 발행 가능");
     }
 
     private String ownerLabel(OwnerType type, Long id) {

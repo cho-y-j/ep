@@ -3,6 +3,9 @@ import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
 import AppShell from '../../components/layout/AppShell';
 import { PageHeader, FilterBar, FilterSelect } from '../../components/ui';
+import { useAuth } from '../auth/AuthContext';
+import IssueResourceCheckDialog from './IssueResourceCheckDialog';
+import SupplierResourcePickerDialog, { type PickedResource } from './SupplierResourcePickerDialog';
 import {
   CHECK_TYPE_LABEL, CHECK_STATUS_LABEL, CHECK_STATUS_CHIP_CLS,
   type ResourceCheckResponse,
@@ -13,6 +16,9 @@ const TYPE_OPTIONS = Object.entries(CHECK_TYPE_LABEL).map(([value, label]) => ({
 const STATUS_OPTIONS = Object.entries(CHECK_STATUS_LABEL).map(([value, label]) => ({ value, label }));
 
 export default function ResourceCheckBpList() {
+  const { user } = useAuth();
+  // 공급사도 자기+자식 자원에 직접 발행·승인(BP 미사용 현실 대응) — 발행 진입점은 공급사에게만 노출.
+  const isSupplier = user?.role === 'EQUIPMENT_SUPPLIER' || user?.role === 'MANPOWER_SUPPLIER';
   const [items, setItems] = useState<ResourceCheckResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
@@ -20,6 +26,9 @@ export default function ResourceCheckBpList() {
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  // 공급사 발행: 자원 선택 → IssueResourceCheckDialog (계획서 없이 발행 — BpReceivedReviewsPage 경로 재사용).
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [checkTarget, setCheckTarget] = useState<PickedResource | null>(null);
   // A2 연결뷰: target(owner) 별 SafetyInspection 상태 병기. key = `${owner_type}:${owner_id}`.
   const [inspByTarget, setInspByTarget] = useState<Map<string, InspectionResponse[]>>(new Map());
 
@@ -33,8 +42,9 @@ export default function ResourceCheckBpList() {
   useEffect(() => { void load(); }, []);
 
   // distinct target 만 by-target 조회. 신규 엔드포인트 미배포(404)면 해당 항목은 map 에 안 담겨 병기 생략.
+  // by-target 은 BP 본인 현장 스코프 전용(B5) — 공급사 발행 뷰에선 호출 자체를 생략(403 소음 방지).
   useEffect(() => {
-    if (items.length === 0) { setInspByTarget(new Map()); return; }
+    if (items.length === 0 || isSupplier) { setInspByTarget(new Map()); return; }
     let cancelled = false;
     const distinct = new Map<string, { targetType: 'VEHICLE' | 'PERSON'; targetId: number }>();
     for (const r of items) {
@@ -58,7 +68,7 @@ export default function ResourceCheckBpList() {
       setInspByTarget(map);
     });
     return () => { cancelled = true; };
-  }, [items]);
+  }, [items, isSupplier]);
 
   const inspStatusFor = (r: ResourceCheckResponse): { label: string; cls: string } | null => {
     const list = inspByTarget.get(`${r.owner_type}:${r.owner_id}`);
@@ -100,7 +110,12 @@ export default function ResourceCheckBpList() {
     <AppShell>
       <PageHeader
         title="보낸 점검 요청"
-        subtitle="공급사에 보낸 자동차 안전점검·건강검진·안전교육 등 — 회신 검토"
+        subtitle="자원에 발행한 자동차 안전점검·건강검진·안전교육 등 — 회신 검토"
+        actions={isSupplier ? (
+          <button type="button" onClick={() => setPickerOpen(true)} className="btn-primary text-sm">
+            검사 통보
+          </button>
+        ) : undefined}
       />
 
       <FilterBar
@@ -166,6 +181,29 @@ export default function ResourceCheckBpList() {
             );
           })}
         </div>
+      )}
+
+      {/* 공급사 발행 — 자원 선택 후 검사·교육·검진 날짜 통보 (계획서 없이 발행) */}
+      {pickerOpen && (
+        <SupplierResourcePickerDialog
+          open
+          includeEquipment={user?.role === 'EQUIPMENT_SUPPLIER'}
+          onClose={() => setPickerOpen(false)}
+          onPick={(t) => { setPickerOpen(false); setCheckTarget(t); }}
+        />
+      )}
+      {checkTarget && (
+        <IssueResourceCheckDialog
+          open
+          onClose={() => setCheckTarget(null)}
+          onIssued={() => { void load(); }}
+          workPlanId={null}
+          ownerType={checkTarget.ownerType}
+          ownerId={checkTarget.ownerId}
+          ownerLabel={checkTarget.ownerLabel}
+          supplierCompanyId={checkTarget.supplierCompanyId}
+          supplierCompanyName={checkTarget.supplierCompanyName}
+        />
       )}
     </AppShell>
   );

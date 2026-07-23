@@ -8,11 +8,11 @@ import java.util.List;
 
 public interface ResourceCheckRequestRepository extends JpaRepository<ResourceCheckRequest, Long> {
 
-    /** BP 발송 목록 (자기 회사 발송분). */
+    /** 발행 목록 (자기 회사 발행분 — bp_company_id = 발행사, BP/공급사 공통). */
     List<ResourceCheckRequest> findByBpCompanyIdOrderByIdDesc(Long bpCompanyId);
 
-    /** 공급사 수신함 (자기 회사가 받은 것). */
-    List<ResourceCheckRequest> findBySupplierCompanyIdOrderByIdDesc(Long supplierCompanyId);
+    /** 공급사 수신함 (본인 + 직속 자식 협력사가 받은 것 — V77 self+children). */
+    List<ResourceCheckRequest> findBySupplierCompanyIdInOrderByIdDesc(Collection<Long> supplierCompanyIds);
 
     /** 작업계획서별 점검 요청 (BP/공급사 공통 조회용). */
     List<ResourceCheckRequest> findByWorkPlanIdOrderByIdDesc(Long workPlanId);

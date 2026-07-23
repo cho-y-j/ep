@@ -178,6 +178,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         { label: '서류심사', to: '/document-review-send', icon: <IconDoc /> },
         { label: '서류수집', to: '/document-collections', icon: <IconDoc />, badge: supplierCounts.collections || undefined },
         { label: '자원점검', to: '/resource-checks/supplier', icon: <IconShield />, badge: supplierCounts.checks || undefined },
+        { label: '검사 관리', to: '/resource-checks/bp', icon: <IconShield /> },
         { label: '이행지시', to: '/compliance-orders', icon: <IconShield />, badge: supplierCounts.compliance || undefined },
       ]},
       { label: '현장 운영', icon: <IconBuilding />, items: [
