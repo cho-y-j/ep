@@ -554,6 +554,11 @@ public class DocumentCollectionService {
     public void publicSubmit(String token) {
         DocumentCollectionRequest r = requireToken(token);
         if (r.isExpired()) throw ApiException.badRequest("EXPIRED", "링크가 만료되었습니다");
+        // 빈 제출 차단 — 담기(스테이징)만 하고 업로드 안 한 채 제출한 운영 사고(요청 28) 재발 방지 최종 방어선.
+        int missing = requiredRemaining(itemRepo.findByRequestIdOrderBySortOrderAscIdAsc(r.getId()));
+        if (missing > 0) {
+            throw ApiException.badRequest("MISSING_REQUIRED", "필수 서류 " + missing + "건이 아직 업로드되지 않았습니다");
+        }
         r.markSubmitted();
         notifySubmitted(r);
     }

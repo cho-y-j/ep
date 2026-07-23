@@ -140,14 +140,15 @@ export default function CollectPublicPage() {
     });
   }
   /** [업로드] — 담아둔 장 전체를 한 번에 병합 전송. 성공하면 스테이징·만료일 입력을 비운다. */
-  async function uploadStaged(itemId: number) {
+  async function uploadStaged(itemId: number): Promise<boolean> {
     const cur = staged[itemId] ?? [];
-    if (cur.length === 0) return;
+    if (cur.length === 0) return true;
     const ok = await upload(itemId, cur.map((x) => x.file));
     if (ok) {
       clearStaged(itemId);
       setExpiry((s) => { const next = { ...s }; delete next[itemId]; return next; });
     }
+    return ok;
   }
 
   /** 4모서리 확정 → 원근보정(warp) 후, 바로 올리지 않고 가리기(마스킹) 단계를 연다. */
@@ -212,12 +213,25 @@ export default function CollectPublicPage() {
     }
   }
 
+  /** 제출 — [업로드]를 안 누르고 담아만 둔 항목이 있으면 먼저 자동 업로드(순차)한 뒤 제출한다(빈 제출 방지). */
   async function submit() {
-    if (!token) return;
+    if (!token || !info) return;
     setSubmitting(true); setError(null);
+    for (const t of info.targets) {
+      for (const it of t.items) {
+        if ((staged[it.id] ?? []).length === 0) continue;
+        const ok = await uploadStaged(it.id);
+        if (!ok) {
+          setError(`${it.name} 서류 업로드 실패 — 다시 시도해 주세요`);
+          setSubmitting(false);
+          return;
+        }
+      }
+    }
     try {
       await api.post(`/api/collect/${token}/submit`);
-      alert('제출되었습니다. 감사합니다.');
+      // 완료 화면 전환 — 새로고침해도 status=SUBMITTED 라 같은 화면이 유지된다.
+      setInfo((prev) => (prev ? { ...prev, status: 'SUBMITTED' } : prev));
     } catch (err) {
       setError(err instanceof AxiosError ? (err.response?.data?.message ?? '제출 실패') : '제출 실패');
     } finally { setSubmitting(false); }
@@ -247,6 +261,20 @@ export default function CollectPublicPage() {
   const uploaded = info.targets.reduce((n, t) => n + uploadedOf(t), 0);
   const requiredLeft = info.targets.reduce((n, t) => n + requiredLeftOf(t), 0);
   const disabled = info.expired || info.status === 'CANCELLED';
+
+  // 제출 완료 화면 — 작은 alert 대신 결과·다음 행동이 확실히 보이게. 새로고침해도 SUBMITTED 면 유지.
+  if (info.status === 'SUBMITTED') {
+    return (
+      <Centered>
+        <div className="mx-4 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-4xl font-bold text-emerald-600">✓</div>
+          <h1 className="mt-4 text-xl font-bold text-slate-900">서류 제출 완료</h1>
+          <p className="mt-2 text-sm text-slate-600">제출하신 서류 {uploaded}건을 담당자가 확인합니다.</p>
+          <p className="mt-1 text-sm text-slate-500">이 창은 닫으셔도 됩니다.</p>
+        </div>
+      </Centered>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 pb-10">
@@ -451,6 +479,7 @@ function ItemRow({ item, disabled, uploading, staged, expiry, onExpiryChange, on
           )}
         </div>
         {item.uploaded && <div className="mt-0.5 truncate text-xs text-emerald-600">✓ 업로드됨{item.file_name ? ` · ${item.file_name}` : ''}</div>}
+        {count > 0 && <div className="mt-0.5 text-xs font-semibold text-amber-600">담김 {count}장 · 업로드 필요</div>}
       </div>
 
       {/* 담은 장 목록 — 한 장씩 쌓이고, 각 썸네일에서 개별 삭제. */}
