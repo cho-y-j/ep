@@ -70,6 +70,7 @@ public class DocumentCollectionService {
     private final com.skep.equipment.EquipmentTypeService equipmentTypes;
     /** 무로그인 업로드 직후 자동 진위확인/만료일 백필 이벤트 발행용. */
     private final org.springframework.context.ApplicationEventPublisher events;
+    private final com.skep.notification.NotificationService notifications;
 
     @Value("${SKEP_PUBLIC_BASE_URL:http://localhost:8082}")
     private String publicBaseUrl;
@@ -87,7 +88,8 @@ public class DocumentCollectionService {
                                      com.skep.equipment.EquipmentService equipmentService,
                                      com.skep.person.PersonService personService,
                                      com.skep.equipment.EquipmentTypeService equipmentTypes,
-                                     org.springframework.context.ApplicationEventPublisher events) {
+                                     org.springframework.context.ApplicationEventPublisher events,
+                                     com.skep.notification.NotificationService notifications) {
         this.reqRepo = reqRepo;
         this.targetRepo = targetRepo;
         this.itemRepo = itemRepo;
@@ -109,6 +111,7 @@ public class DocumentCollectionService {
         this.personService = personService;
         this.equipmentTypes = equipmentTypes;
         this.events = events;
+        this.notifications = notifications;
     }
 
     /** 대상 참조(장비/인원) — 생성/추천 요청 검증 공용 키. */
@@ -552,6 +555,23 @@ public class DocumentCollectionService {
         DocumentCollectionRequest r = requireToken(token);
         if (r.isExpired()) throw ApiException.badRequest("EXPIRED", "링크가 만료되었습니다");
         r.markSubmitted();
+        notifySubmitted(r);
+    }
+
+    /** 제출 완료 알림 — 요청 생성자(없으면 요청 회사)에게. 실패해도 제출을 막지 않는다(fail-open). */
+    private void notifySubmitted(DocumentCollectionRequest r) {
+        try {
+            String who = r.getRecipientName() != null && !r.getRecipientName().isBlank() ? r.getRecipientName() : "협력사";
+            String title = r.getTitle() != null && !r.getTitle().isBlank() ? r.getTitle() : "서류 수집 요청";
+            String msg = "『" + title + "』 " + who + " 서류 제출이 완료되었습니다. 수집 요청에서 확인하세요.";
+            if (r.getCreatedBy() != null) {
+                notifications.sendToUser(r.getCreatedBy(), com.skep.notification.NotificationType.COLLECTION_SUBMITTED,
+                        "서류 제출 완료", msg, "DOCUMENT_COLLECTION", r.getId(), null, who);
+            } else if (r.getSupplierCompanyId() != null) {
+                notifications.sendToCompany(r.getSupplierCompanyId(), com.skep.notification.NotificationType.COLLECTION_SUBMITTED,
+                        "서류 제출 완료", msg, "DOCUMENT_COLLECTION", r.getId(), null, who);
+            }
+        } catch (Exception ignored) { /* 알림 실패는 제출에 영향 없음 */ }
     }
 
     // ── helpers ──────────────────────────────────────────────

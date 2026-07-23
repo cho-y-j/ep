@@ -66,6 +66,9 @@ public final class NotificationType {
     /** V117: 공개 랜딩 상담 요청 접수 → ADMIN. */
     public static final String CONSULTATION_REQUESTED = "CONSULTATION_REQUESTED";
 
+    /** 무로그인 수집 링크 서류 제출 완료 → 요청 생성자(없으면 요청 회사). */
+    public static final String COLLECTION_SUBMITTED = "COLLECTION_SUBMITTED";
+
     /** V117: 독립(부모 없는) 자가가입 → ADMIN 승인 대기. (하위공급사는 SUB_SUPPLIER_SIGNUP 로 부모사에.) */
     public static final String USER_SIGNUP = "USER_SIGNUP";
 }
