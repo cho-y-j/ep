@@ -55,6 +55,7 @@ public class VerificationService {
 
     private final VerifyClient client;
     private final NtsBizClient ntsClient;
+    private final PaddleOcrClient paddleClient;
     private final DocumentRepository docRepo;
     private final DocumentTypeRepository typeRepo;
     private final EquipmentRepository equipmentRepo;
@@ -66,6 +67,7 @@ public class VerificationService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public VerificationService(VerifyClient client, NtsBizClient ntsClient,
+                               PaddleOcrClient paddleClient,
                                DocumentRepository docRepo, DocumentTypeRepository typeRepo,
                                EquipmentRepository equipmentRepo, PersonRepository personRepo,
                                CompanyRepository companyRepo,
@@ -73,6 +75,7 @@ public class VerificationService {
                                NotificationService notifications) {
         this.client = client;
         this.ntsClient = ntsClient;
+        this.paddleClient = paddleClient;
         this.docRepo = docRepo;
         this.typeRepo = typeRepo;
         this.equipmentRepo = equipmentRepo;
@@ -135,6 +138,28 @@ public class VerificationService {
         // 우선순위: userInputs (이번 호출 인자) > manual_* (upload 시 저장) > OCR
         extractedFields.putAll(manualFields);
         if (userInputs != null) extractedFields.putAll(userInputs);
+
+        // 무로그인 수집 업로드 보강: 영역템플릿 보유 타입은 위에서 Vision OCR 을 건너뛰므로,
+        // manual_*/userInputs 가 없는 수집 링크 자동검증은 전부 빈 값으로 정부API 400 → OCR_REVIEW_REQUIRED 로 빠진다.
+        // 검증 필수 필드가 비어 있을 때만 서버가 paddle 영역 OCR 로 추출해 빈 필드를 채운다(있는 값은 안 덮음
+        // → 로그인 플로우 무회귀). 추출 실패·paddle 미가동이면 기존 흐름 그대로 — fail-open.
+        if (hasRegionTemplate && missingVerifyFields(type.getVerifyEndpoint(), extractedFields)
+                && doc.getContentType() != null && doc.getContentType().toLowerCase().startsWith("image/")) {
+            Map<String, String> regionFields = runRegionOcr(doc, type.getOcrRegionTemplate());
+            if (regionFields != null && !regionFields.isEmpty()) {
+                log.info("region OCR fallback doc={} extracted fields={}", doc.getId(), regionFields.keySet());
+                for (var e : regionFields.entrySet()) {
+                    String cur = extractedFields.get(e.getKey());
+                    if ((cur == null || cur.isBlank()) && e.getValue() != null && !e.getValue().isBlank()) {
+                        extractedFields.put(e.getKey(), e.getValue());
+                    }
+                }
+                // 추출 결과 저장 (audit·재검증 prefill 용) — manual_* 보존 합본.
+                Map<String, Object> merged = new HashMap<>(regionFields);
+                merged.putAll(manualFields);
+                doc.setExtractedData(safeJson(objectMapper.valueToTree(merged)));
+            }
+        }
 
         // 만료일 자동 추출(우선순위 ①): OCR/보충 필드에 만료일이 있고 expiry_date 가 비어 있을 때만 세팅.
         // 협력사 입력·관리자 수기 등 이미 있는 값은 절대 덮지 않는다. 진위 API 응답에는 만료일 필드가 없다(main-api 확인).
@@ -431,6 +456,37 @@ public class VerificationService {
         } catch (Exception e) {
             log.warn("file read failed for doc {} key {}: {}", doc.getId(), doc.getFileKey(), e.getMessage());
             throw ApiException.badRequest("FILE_READ_ERROR", "파일을 읽지 못했습니다");
+        }
+    }
+
+    /**
+     * 정부API 필수 필드가 비어 있는지 — 비어 있으면 영역 OCR 보강 대상.
+     * KOSHA(이미지 자체 검증)·NTS_BIZ(회사 사업자번호 fallback 보유)는 대상 아님.
+     * 키 fallback 체인은 verifyDocument 의 해당 endpoint 분기와 동일하게 유지할 것.
+     */
+    private static boolean missingVerifyFields(String endpoint, Map<String, String> f) {
+        return switch (endpoint) {
+            case "RIMS_LICENSE" -> firstNonBlank(
+                    f.get("manualLicenseNumber"), f.get("manualLicenseNo"),
+                    f.get("license_no"), f.get("licenseNumber"), f.get("licenseNo")).isEmpty()
+                    || firstNonBlank(f.get("manualName"), f.get("name")).isEmpty();
+            case "CARGO_LICENSE" -> firstNonBlank(
+                    f.get("manualLicenseNo"), f.get("manualLicenseNumber"),
+                    f.get("license_no"), f.get("licenseNumber"), f.get("licenseNo")).isEmpty()
+                    || firstNonBlank(f.get("manualName"), f.get("name")).isEmpty()
+                    || firstNonBlank(f.get("manualBirthDate"), f.get("birth_date"), f.get("birthDate")).isEmpty();
+            default -> false;
+        };
+    }
+
+    /** 영역템플릿 기반 로컬 paddle OCR 필드 추출. 실패·미가동 시 null (fail-open). */
+    private Map<String, String> runRegionOcr(Document doc, String templateJson) {
+        try {
+            byte[] bytes = readFileBytes(doc);
+            return paddleClient.extractRegions(bytes, doc.getFileName(), null, templateJson);
+        } catch (Exception e) {
+            log.warn("region OCR extract failed doc={}: {}", doc.getId(), e.getMessage());
+            return null;
         }
     }
 
