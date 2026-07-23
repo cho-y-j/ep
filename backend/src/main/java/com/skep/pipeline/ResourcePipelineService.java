@@ -206,10 +206,10 @@ public class ResourcePipelineService {
         return new Stage(checksDone && safetyDone ? DONE : PENDING, String.join(" · ", parts));
     }
 
-    /** 3) 투입대기 — readiness 판정 그대로. */
+    /** 3) 투입대기 — readiness 판정 그대로. (라벨은 검사 목록 "투입 준비됨" 뱃지와 정합.) */
     private Stage readinessStage(ResourceReadinessResponse r) {
         if (r == null) return new Stage(PENDING, "확인 불가");
-        if (r.ready()) return new Stage(DONE, "투입 대기");
+        if (r.ready()) return new Stage(DONE, "투입 준비됨");
         return new Stage(PENDING, r.pending().isEmpty() ? "준비중" : String.join(" · ", r.pending()));
     }
 

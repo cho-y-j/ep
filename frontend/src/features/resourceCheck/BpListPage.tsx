@@ -8,9 +8,10 @@ import IssueResourceCheckDialog from './IssueResourceCheckDialog';
 import SupplierResourcePickerDialog, { type PickedResource } from './SupplierResourcePickerDialog';
 import {
   CHECK_TYPE_LABEL, CHECK_STATUS_LABEL, CHECK_STATUS_CHIP_CLS,
-  type ResourceCheckResponse,
+  type ResourceCheckResponse, type ResourceCheckType,
 } from '../../types/resourceCheck';
 import type { InspectionResponse } from '../../types/safety';
+import type { DeployCheckResult } from '../readiness/DeployCheckCard';
 
 const TYPE_OPTIONS = Object.entries(CHECK_TYPE_LABEL).map(([value, label]) => ({ value, label }));
 const STATUS_OPTIONS = Object.entries(CHECK_STATUS_LABEL).map(([value, label]) => ({ value, label }));
@@ -27,10 +28,14 @@ export default function ResourceCheckBpList() {
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   // 공급사 발행: 자원 선택 → IssueResourceCheckDialog (계획서 없이 발행 — BpReceivedReviewsPage 경로 재사용).
+  // 재검사 통보는 initialTypes 로 반려 건의 종류만 프리필해 같은 다이얼로그를 연다.
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [checkTarget, setCheckTarget] = useState<PickedResource | null>(null);
+  const [checkTarget, setCheckTarget] =
+    useState<(PickedResource & { initialTypes?: ResourceCheckType[] }) | null>(null);
   // A2 연결뷰: target(owner) 별 SafetyInspection 상태 병기. key = `${owner_type}:${owner_id}`.
   const [inspByTarget, setInspByTarget] = useState<Map<string, InspectionResponse[]>>(new Map());
+  // 투입 준비 뱃지: target 별 deploy-check(기존 4게이트 판정 그대로) 결과. key 동일.
+  const [deployByTarget, setDeployByTarget] = useState<Map<string, DeployCheckResult>>(new Map());
 
   const load = async () => {
     setLoading(true);
@@ -70,6 +75,33 @@ export default function ResourceCheckBpList() {
     return () => { cancelled = true; };
   }, [items, isSupplier]);
 
+  // 투입 준비 뱃지 — distinct target 별 deploy-check(신규 판정 없음, 기존 API 재사용).
+  // 접근 불가(BP 스코프 밖 등)·미배포 404 는 catch 로 생략 — 해당 행만 뱃지 미표시.
+  useEffect(() => {
+    if (items.length === 0) { setDeployByTarget(new Map()); return; }
+    let cancelled = false;
+    const distinct = new Map<string, { path: 'equipment' | 'person'; id: number }>();
+    for (const r of items) {
+      distinct.set(`${r.owner_type}:${r.owner_id}`, {
+        path: r.owner_type === 'EQUIPMENT' ? 'equipment' : 'person',
+        id: r.owner_id,
+      });
+    }
+    void Promise.all(
+      Array.from(distinct.entries()).map(([key, t]) =>
+        api.get<DeployCheckResult>(`/api/resources/${t.path}/${t.id}/deploy-check`)
+          .then((res) => [key, res.data] as const)
+          .catch(() => null),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      const map = new Map<string, DeployCheckResult>();
+      for (const row of results) if (row) map.set(row[0], row[1]);
+      setDeployByTarget(map);
+    });
+    return () => { cancelled = true; };
+  }, [items]);
+
   const inspStatusFor = (r: ResourceCheckResponse): { label: string; cls: string } | null => {
     const list = inspByTarget.get(`${r.owner_type}:${r.owner_id}`);
     if (!list) return null;
@@ -77,6 +109,25 @@ export default function ResourceCheckBpList() {
     if (list.some((i) => i.status === 'COMPLETED')) return { label: '완료', cls: 'bg-emerald-100 text-emerald-800' };
     return { label: '일정 대기', cls: 'bg-amber-100 text-amber-800' };
   };
+
+  // 투입 준비 뱃지 텍스트 — ready 면 초록 "투입 준비됨", 아니면 회색으로 부족 게이트 요약(2건 초과는 "외 N건").
+  const readinessFor = (r: ResourceCheckResponse): { label: string; cls: string; title?: string } | null => {
+    const d = deployByTarget.get(`${r.owner_type}:${r.owner_id}`);
+    if (!d) return null;
+    if (d.ready) return { label: '투입 준비됨', cls: 'bg-emerald-100 text-emerald-800' };
+    const labels = d.blocks.map((b) => b.label);
+    const rest = labels.length - 2;
+    return {
+      label: `투입 준비까지 ${labels.length}건 — ${labels.slice(0, 2).join(' · ')}${rest > 0 ? ` 외 ${rest}건` : ''}`,
+      cls: 'bg-slate-100 text-slate-600',
+      title: labels.join('\n'),
+    };
+  };
+
+  // 재검사 판정 — 같은 자원·같은 종류의 이전(id 더 작은) 건에 REJECTED 가 있으면 재발행 건. 클라이언트 판정(백엔드 무변경).
+  const isRecheck = (r: ResourceCheckResponse): boolean =>
+    items.some((o) => o.id < r.id && o.owner_type === r.owner_type && o.owner_id === r.owner_id
+      && o.check_type === r.check_type && o.status === 'REJECTED');
 
   const review = async (id: number, action: 'approve' | 'reject') => {
     let note: string | null = null;
@@ -137,6 +188,7 @@ export default function ResourceCheckBpList() {
         <div className="space-y-2">
           {filtered.map((r) => {
             const si = inspStatusFor(r);
+            const rd = readinessFor(r);
             return (
             <div key={r.id} className="card p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
@@ -145,9 +197,19 @@ export default function ResourceCheckBpList() {
                   <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${CHECK_STATUS_CHIP_CLS[r.status]}`}>
                     {CHECK_STATUS_LABEL[r.status]}
                   </span>
+                  {isRecheck(r) && (
+                    <span className="px-1.5 py-0.5 text-[10px] rounded-full font-semibold bg-violet-100 text-violet-800">
+                      재검사
+                    </span>
+                  )}
                   {si && (
                     <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${si.cls}`}>
                       안전점검 {si.label}
+                    </span>
+                  )}
+                  {rd && (
+                    <span title={rd.title} className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${rd.cls}`}>
+                      {rd.label}
                     </span>
                   )}
                 </div>
@@ -168,13 +230,27 @@ export default function ResourceCheckBpList() {
                   <>
                     <button onClick={() => void review(r.id, 'approve')} disabled={busy === r.id}
                             className="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
-                      승인 → 투입 대기
+                      승인
                     </button>
                     <button onClick={() => void review(r.id, 'reject')} disabled={busy === r.id}
                             className="px-3 py-1.5 text-xs rounded border border-rose-500 text-rose-700 hover:bg-rose-50 disabled:opacity-50">
                       반려
                     </button>
                   </>
+                )}
+                {r.status === 'REJECTED' && (
+                  <button
+                    onClick={() => setCheckTarget({
+                      ownerType: r.owner_type,
+                      ownerId: r.owner_id,
+                      ownerLabel: r.owner_label,
+                      supplierCompanyId: r.supplier_company_id,
+                      supplierCompanyName: r.supplier_company_name,
+                      initialTypes: [r.check_type],
+                    })}
+                    className="px-3 py-1.5 text-xs rounded bg-amber-600 text-white hover:bg-amber-700">
+                    재검사 통보
+                  </button>
                 )}
               </div>
             </div>
@@ -203,6 +279,7 @@ export default function ResourceCheckBpList() {
           ownerLabel={checkTarget.ownerLabel}
           supplierCompanyId={checkTarget.supplierCompanyId}
           supplierCompanyName={checkTarget.supplierCompanyName}
+          initialTypes={checkTarget.initialTypes ?? null}
         />
       )}
     </AppShell>

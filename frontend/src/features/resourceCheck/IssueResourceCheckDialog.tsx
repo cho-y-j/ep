@@ -20,6 +20,8 @@ type Props = {
   supplierCompanyId: number;
   supplierCompanyName?: string | null;
   personPhone?: string | null;
+  /** 재검사 통보 등 프리필 — 열 때 이 종류만 선택(미지정이면 자원별 추천 선택). */
+  initialTypes?: ResourceCheckType[] | null;
 };
 
 const TYPES_FOR_EQUIPMENT: ResourceCheckType[] = ['VEHICLE_SAFETY', 'OTHER'];
@@ -32,7 +34,7 @@ const ALIMTALK_TYPES: ResourceCheckType[] = ['HEALTH_CHECK', 'VEHICLE_SAFETY'];
 
 export default function IssueResourceCheckDialog({
   open, onClose, onIssued, workPlanId, ownerType, ownerId, ownerLabel,
-  supplierCompanyId, supplierCompanyName, personPhone,
+  supplierCompanyId, supplierCompanyName, personPhone, initialTypes,
 }: Props) {
   const allowed = ownerType === 'EQUIPMENT' ? TYPES_FOR_EQUIPMENT : TYPES_FOR_PERSON;
   const [selected, setSelected] = useState<Set<ResourceCheckType>>(new Set());
@@ -47,11 +49,12 @@ export default function IssueResourceCheckDialog({
   const showAlimtalk = [...selected].some((t) => ALIMTALK_TYPES.includes(t));
   const dupTypes = [...selected].filter((t) => existingRequested.has(t));
 
-  // F4: 열 때 자원 종류별 추천 프리셀렉트.
+  // F4: 열 때 자원 종류별 추천 프리셀렉트. 재검사 통보는 initialTypes(해당 종류만)로 프리필.
   useEffect(() => {
     if (!open) return;
+    if (initialTypes && initialTypes.length > 0) { setSelected(new Set(initialTypes)); return; }
     setSelected(new Set(ownerType === 'EQUIPMENT' ? RECOMMENDED_FOR_EQUIPMENT : RECOMMENDED_FOR_PERSON));
-  }, [open, ownerType]);
+  }, [open, ownerType, initialTypes]);
 
   // F4: 기존 동일 자원 REQUESTED 요청을 bp-list 에서 클라 필터해 중복 경고.
   useEffect(() => {
