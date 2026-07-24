@@ -1,19 +1,15 @@
 package com.skep.document;
 
-import com.itextpdf.io.font.PdfEncodings;
-import com.itextpdf.kernel.font.PdfFont;
-import com.itextpdf.kernel.font.PdfFontFactory;
-import com.itextpdf.kernel.geom.PageSize;
-import com.itextpdf.kernel.pdf.PdfDocument;
-import com.itextpdf.kernel.pdf.PdfWriter;
-import com.itextpdf.layout.element.Paragraph;
-import com.itextpdf.layout.properties.TextAlignment;
-import com.skep.collection.PdfMergeService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.skep.common.ApiException;
 import com.skep.common.SafeText;
 import com.skep.company.Company;
 import com.skep.company.CompanyRepository;
 import com.skep.company.CompanyType;
+import com.skep.compliance.ComplianceService;
+import com.skep.compliance.dto.ComplianceItem;
+import com.skep.compliance.dto.ResourceCompliance;
 import com.skep.document.dto.ReviewBundlePdfRequest;
 import com.skep.equipment.Equipment;
 import com.skep.equipment.EquipmentService;
@@ -29,18 +25,17 @@ import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -48,8 +43,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 장비 1대 + 그 교대조 조종원의 서류를 장비별 병합 PDF 한 개로 묶어 이메일/BP사로 발송한다.
- * 각 자원 내부는 현재 유효본(chain head)만 DocumentType.sort_order 순으로, 자원마다 구분면 1페이지를 앞에 끼운다.
+ * 장비 1대 + 그 교대조 조종원의 서류를 "관련서류 그리드" PDF 한 개로 묶어 이메일/BP사로 발송한다.
+ * 자원마다 1페이지: 상단 제목(자원 라벨) + 2열 그리드(항목명 + 서류 사진), 필수인데 없는 서류는 "미제출".
+ * 그리드 렌더는 GridBundleRenderer 에 위임(개별 조회·낱장 뷰어·ZIP 은 원본 그대로 무변경).
  * 산출물은 저장하지 않고 즉석 생성. BP사는 기존 DocumentReview 봉투 이력으로만 남는다.
  */
 @Service
@@ -60,7 +56,6 @@ public class DocumentBundlePdfService {
     private final DocumentRepository docs;
     private final DocumentTypeRepository docTypes;
     private final FileStorage storage;
-    private final PdfMergeService pdfMerge;
     private final DocumentZipService zipService;
     private final EquipmentService equipmentService;
     private final PersonRepository personRepo;
@@ -70,9 +65,10 @@ public class DocumentBundlePdfService {
     private final NotificationService notifications;
     private final UserRepository userRepo;
     private final ReviewMailComposer composer;
+    private final ComplianceService compliance;
+    private final GridBundleRenderer gridRenderer;
 
-    /** 구분면 한글 폰트(Nanum) 바이트 캐시 — 자원마다 재로드하지 않게. */
-    private volatile byte[] fontBytes;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public record BundlePdfResult(int bundles, int recipients, boolean bpDelivered, int totalDocs, int skippedEmpty) {}
 
@@ -107,16 +103,20 @@ public class DocumentBundlePdfService {
                 throw ApiException.badRequest("NOT_BP_COMPANY", "BP사가 아닌 회사로는 보낼 수 없습니다");
             }
         }
-        boolean separator = req.separatorPage() == null || req.separatorPage();
-
         // 장비 접근 검증(selfAndChildren) + 허용 조종원 집합(priority 순). 타사/없는 장비는 여기서 거부/제외.
         List<Long> equipmentIds = bundles.stream().map(ReviewBundlePdfRequest.Bundle::equipmentId)
                 .filter(Objects::nonNull).distinct().toList();
         Map<Long, List<Long>> allowedOps = equipmentService.defaultOperatorsByEquipmentIds(equipmentIds, actor);
 
-        // DocumentType.sort_order 정렬표 — 소량 마스터라 전체 로드.
+        // DocumentType 마스터 소량 — 정렬순서·이름·검증 엔드포인트 맵을 한 번에 로드.
         Map<Long, Integer> sortOrder = new HashMap<>();
-        for (DocumentType t : docTypes.findAll()) sortOrder.put(t.getId(), t.getSortOrder());
+        Map<Long, String> nameByType = new HashMap<>();
+        Map<Long, String> endpointByType = new HashMap<>();
+        for (DocumentType t : docTypes.findAll()) {
+            sortOrder.put(t.getId(), t.getSortOrder());
+            nameByType.put(t.getId(), t.getName());
+            endpointByType.put(t.getId(), t.getVerifyEndpoint());
+        }
 
         // 조종원 이름 배치 로드(전 묶음 통합).
         Set<Long> allOpIds = new HashSet<>();
@@ -136,17 +136,17 @@ public class DocumentBundlePdfService {
             if (senderCompanyId == null) senderCompanyId = e.getSupplierId();
             String eqLabel = equipmentLabel(e);
 
-            List<PdfMergeService.Part> parts = new ArrayList<>();
+            List<GridBundleRenderer.ResourceSection> sections = new ArrayList<>();
             List<EnvelopeItem> resources = new ArrayList<>();
             int bundleDocs = 0;
 
-            // 장비 서류 (유효본만, sort_order 순)
+            // 장비 서류 (유효본만, sort_order 순) — 그리드 1페이지
             List<Document> eqDocs = sortedActive(OwnerType.EQUIPMENT, e.getId(), sortOrder);
             if (eqDocs.isEmpty()) {
                 skippedEmpty++;
             } else {
-                if (separator) parts.add(separatorPart("장비 " + eqLabel));
-                for (Document d : eqDocs) addDocPart(parts, d);
+                sections.add(buildSection("장비 " + eqLabel, OwnerType.EQUIPMENT, e.getId(),
+                        eqDocs, nameByType, endpointByType, actor));
                 resources.add(new EnvelopeItem(OwnerType.EQUIPMENT, e.getId(), eqLabel, eqDocs.size()));
                 bundleDocs += eqDocs.size();
             }
@@ -158,14 +158,14 @@ public class DocumentBundlePdfService {
                 String pLabel = personName.getOrDefault(pid, "인원" + pid);
                 List<Document> pDocs = sortedActive(OwnerType.PERSON, pid, sortOrder);
                 if (pDocs.isEmpty()) { skippedEmpty++; continue; }
-                if (separator) parts.add(separatorPart("조종원 " + pLabel));
-                for (Document d : pDocs) addDocPart(parts, d);
+                sections.add(buildSection("조종원 " + pLabel, OwnerType.PERSON, pid,
+                        pDocs, nameByType, endpointByType, actor));
                 resources.add(new EnvelopeItem(OwnerType.PERSON, pid, pLabel, pDocs.size()));
                 bundleDocs += pDocs.size();
             }
 
             if (bundleDocs == 0) continue; // 이 묶음은 유효 서류 전무 → 첨부 생성 안 함
-            byte[] pdf = pdfMerge.merge(parts);
+            byte[] pdf = gridRenderer.render(sections);
             // 파일명 = "차량번호_조종원이름(들)" — PDF 에 실제 포함된 조종원만.
             StringBuilder fileName = new StringBuilder(eqLabel);
             for (EnvelopeItem it : resources) {
@@ -220,9 +220,87 @@ public class DocumentBundlePdfService {
                 .toList();
     }
 
-    private void addDocPart(List<PdfMergeService.Part> parts, Document d) {
+    /**
+     * 자원 1건의 그리드 섹션 — present 서류는 사진 셀, 필수인데 없는 서류는 "미제출" 셀.
+     * 카탈로그(필수 여부·정렬·이름)는 ComplianceService 재사용. present 서류는 항상 전부 렌더(낱장 병합과 동일).
+     */
+    private GridBundleRenderer.ResourceSection buildSection(
+            String title, OwnerType ownerType, Long ownerId, List<Document> presentDocs,
+            Map<Long, String> nameByType, Map<Long, String> endpointByType, AuthenticatedUser actor) {
+        Map<Long, Document> presentByType = new LinkedHashMap<>();
+        for (Document d : presentDocs) presentByType.putIfAbsent(d.getDocumentTypeId(), d);
+
+        List<GridBundleRenderer.GridCell> cells = new ArrayList<>();
+        Set<Long> rendered = new HashSet<>();
+
+        ResourceCompliance rc = ownerType == OwnerType.EQUIPMENT
+                ? compliance.forEquipment(ownerId, actor)
+                : compliance.forPerson(ownerId, actor);
+        for (ComplianceItem it : rc.items()) {
+            Document d = presentByType.get(it.documentTypeId());
+            if (d != null) {
+                cells.add(presentCell(it.documentTypeName(), d, endpointByType));
+                rendered.add(it.documentTypeId());
+            } else if (it.required()) {
+                cells.add(new GridBundleRenderer.GridCell(it.documentTypeName(), null, null, null, null, true));
+            }
+        }
+        // 카탈로그에 없는 present 서류(예외적 매핑)도 누락 없이 렌더.
+        for (Document d : presentDocs) {
+            if (rendered.contains(d.getDocumentTypeId())) continue;
+            cells.add(presentCell(nameByType.getOrDefault(d.getDocumentTypeId(), "서류"), d, endpointByType));
+            rendered.add(d.getDocumentTypeId());
+        }
+        return new GridBundleRenderer.ResourceSection(title, cells);
+    }
+
+    /** present 서류 셀 — 사진 + (정부 진위확인 스탬프 or 만료일). */
+    private GridBundleRenderer.GridCell presentCell(String heading, Document d, Map<Long, String> endpointByType) {
         byte[] bytes = readBytes(d.getFileKey());
-        if (bytes != null) parts.add(new PdfMergeService.Part(bytes, d.getContentType(), d.getFileName()));
+        String badge = null, sub = null;
+        String agency = governmentVerifiedAgency(d, endpointByType);
+        if (agency != null) {
+            badge = agency + " 진위확인";
+            String date = d.getVerifiedAt() != null ? d.getVerifiedAt().toLocalDate().toString() : null;
+            sub = "정부기관 자동조회(원온)" + (date != null ? " · " + date : "");
+        } else if (d.getExpiryDate() != null) {
+            sub = "만료일 " + d.getExpiryDate();
+        }
+        return new GridBundleRenderer.GridCell(heading, bytes, d.getContentType(), badge, sub, false);
+    }
+
+    /**
+     * 이 서류를 "정부기관 진위확인"으로 표시할 수 있는 검증기관명 — 아니면 null.
+     * 조건: VERIFIED + verified_at 존재 + 검증결과 JSON 이 실제 통과를 담음(수동 표시·오버라이드 배제)
+     * + 매핑되는 정부 엔드포인트. 우리(원온)가 검증 주체가 아니라 정부 API 자동조회 결과임을 명확히 하려는 것.
+     */
+    private String governmentVerifiedAgency(Document d, Map<Long, String> endpointByType) {
+        if (d.getVerificationStatus() != VerificationStatus.VERIFIED || d.getVerifiedAt() == null) return null;
+        if (!governmentConfirmed(d.getVerificationResult())) return null;
+        return agencyOf(endpointByType.get(d.getDocumentTypeId()));
+    }
+
+    private static String agencyOf(String verifyEndpoint) {
+        if (verifyEndpoint == null) return null;
+        return switch (verifyEndpoint) {
+            case "RIMS_LICENSE" -> "경찰청";
+            case "CARGO_LICENSE" -> "한국교통안전공단";
+            case "KOSHA" -> "한국산업안전보건공단";
+            case "NTS_BIZ" -> "국세청";
+            default -> null;
+        };
+    }
+
+    /** 검증결과 JSON 이 정부 API 통과(verified:true 또는 result:VALID)를 담고 있는가. */
+    private boolean governmentConfirmed(String verificationResultJson) {
+        if (verificationResultJson == null || verificationResultJson.isBlank()) return false;
+        try {
+            JsonNode r = objectMapper.readTree(verificationResultJson);
+            if (r.has("verified") && r.get("verified").asBoolean()) return true;
+            return r.has("result") && "VALID".equalsIgnoreCase(r.get("result").asText());
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private byte[] readBytes(String key) {
@@ -232,36 +310,6 @@ public class DocumentBundlePdfService {
             log.warn("bundle pdf — 파일 읽기 실패 {}: {}", key, e.getMessage());
             return null;
         }
-    }
-
-    /** 자원 구분면 Part — "장비 12가1234" / "조종원 홍길동" 한 페이지. */
-    private PdfMergeService.Part separatorPart(String title) {
-        return new PdfMergeService.Part(separatorPdf(title), "application/pdf", title);
-    }
-
-    private byte[] separatorPdf(String title) {
-        try (ByteArrayOutputStream out = new ByteArrayOutputStream();
-             PdfWriter writer = new PdfWriter(out);
-             PdfDocument pdf = new PdfDocument(writer);
-             com.itextpdf.layout.Document doc = new com.itextpdf.layout.Document(pdf, PageSize.A4)) {
-            doc.setFont(koreanFont());
-            doc.add(new Paragraph(title).setFontSize(28)
-                    .setTextAlignment(TextAlignment.CENTER).setMarginTop(280));
-            doc.close();
-            return out.toByteArray();
-        } catch (Exception e) {
-            throw new IllegalStateException("구분면 PDF 생성 실패: " + e.getMessage());
-        }
-    }
-
-    private PdfFont koreanFont() throws java.io.IOException {
-        if (fontBytes == null) {
-            try (var in = new ClassPathResource("fonts/NanumGothicBold.ttf").getInputStream()) {
-                fontBytes = in.readAllBytes();
-            }
-        }
-        return PdfFontFactory.createFont(fontBytes, PdfEncodings.IDENTITY_H,
-                PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED);
     }
 
     private String equipmentLabel(Equipment e) {
@@ -308,7 +356,7 @@ public class DocumentBundlePdfService {
             helper.setSubject("[" + subjectCompany + "] 서류 검토 요청 — 장비 " + built.size() + "건 / 서류 " + totalDocs + "건");
             List<ReviewMailComposer.Line> lines = built.stream()
                     .map(x -> new ReviewMailComposer.Line(x.label(), x.docCount())).toList();
-            String note = "장비별 병합 PDF " + built.size() + "개"
+            String note = "관련서류 그리드 PDF " + built.size() + "개"
                     + (zips.isEmpty() ? "" : " 및 자원별 압축(ZIP) " + zips.size() + "개");
             helper.setText(composer.renderHtml(prep, message, lines, totalDocs, note), true);
             for (BuiltBundle x : built) {

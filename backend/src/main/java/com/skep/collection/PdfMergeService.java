@@ -62,6 +62,22 @@ public class PdfMergeService {
         return out.toByteArray();
     }
 
+    /**
+     * 서류 1건(PDF/이미지) → PDF 바이트. 심사 그리드 셀에서 PDF 첫 페이지를 렌더하기 위한 정규화용.
+     * PDF 는 그대로, 이미지는 imageToPdf(iText→LibreOffice 폴백). 지원 안 되는 타입이면 null.
+     */
+    public byte[] singleToPdf(byte[] bytes, String contentType) {
+        if (bytes == null || bytes.length == 0) return null;
+        String ct = contentType == null ? "" : contentType.toLowerCase();
+        try {
+            if (ct.contains("pdf")) return bytes;
+            if (ct.startsWith("image/")) return imageToPdf(bytes, ct);
+        } catch (Exception e) {
+            log.warn("singleToPdf 실패 ({}): {}", ct, e.getMessage());
+        }
+        return null;
+    }
+
     /** 이미지 1장 → PDF. iText 가 못 읽는 포맷(HEIC/WEBP 등)은 LibreOffice 로 폴백 변환. */
     private byte[] imageToPdf(byte[] imageBytes, String contentType) throws Exception {
         try {

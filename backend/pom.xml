@@ -73,6 +73,14 @@
             <type>pom</type>
         </dependency>
 
+        <!-- Apache PDFBox — 심사 그리드 PDF 셀에 PDF 서류 첫 페이지를 이미지로 렌더. openhtmltopdf-pdfbox 가
+             이미 끌어오는 버전을 명시 고정(직접 컴파일 사용이므로 transitive 의존 대신 선언). -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>2.0.24</version>
+        </dependency>
+
         <!-- Phase S-4 단계 2: verify-api / main-api 호출용 reactive WebClient -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

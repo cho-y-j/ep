@@ -51,7 +51,6 @@ export default function DocumentReviewSendPage() {
   const mode: 'zip' | 'bundle' = formats.has('bundle') ? 'bundle' : 'zip';
   const [operators, setOperators] = useState<Record<number, Array<{ person_id: number; person_name?: string | null }>>>({});
   const [opSel, setOpSel] = useState<Record<number, Set<number>>>({});
-  const [separatorPage, setSeparatorPage] = useState(true);
   // 클라이언트 검색·필터 — 차량번호/이름 + 종류(owner_sub_label). SupplierInboxPage 패턴.
   const [q, setQ] = useState('');
   const [subFilter, setSubFilter] = useState('');
@@ -219,7 +218,6 @@ export default function DocumentReviewSendPage() {
         emails,
         message: message.trim() || undefined,
         bp_company_id: bpId ? Number(bpId) : undefined,
-        separator_page: separatorPage,
         include_zip: formats.has('zip'), // 둘 다 선택 시 같은 메일에 자원별 ZIP 도 첨부
       }, { timeout: 120_000 }); // 서류 병합 PDF 생성 + 메일 첨부라 전역 10초로는 부족
       const d = res.data as { bundles: number; recipients: number; bp_delivered: boolean; total_docs: number; skipped_empty: number };
@@ -275,7 +273,7 @@ export default function DocumentReviewSendPage() {
         <PageHeader
           title="서류 심사 보내기"
           subtitle={mode === 'bundle'
-            ? '장비를 고르면 그 교대조 조종원 서류까지 하나의 PDF로 병합해 발송합니다. 조종원은 개별 선택할 수 있습니다.'
+            ? '장비를 고르면 그 교대조 조종원 서류까지 자원별 한 페이지 그리드(항목명+사진)로 정리한 관련서류 PDF로 발송합니다. 조종원은 개별 선택할 수 있습니다.'
             : '보낼 자원(장비·인원)을 고르면 각 자원의 서류를 자원별 압축파일(zip)로 묶어 입력한 이메일로 발송합니다. 받는 분이 시스템에 가입되어 있지 않아도 됩니다.'}
         />
 
@@ -283,7 +281,7 @@ export default function DocumentReviewSendPage() {
         <section className="card p-4 space-y-3">
           <div className="text-sm font-semibold text-slate-700">출력 형식 <span className="font-normal text-xs text-slate-400">(복수 선택 가능)</span></div>
           <div className="inline-flex overflow-hidden rounded-lg border border-slate-300">
-            {([['bundle', '장비묶음 병합 PDF'], ['zip', '자원별 압축(ZIP)']] as const).map(([m, label]) => (
+            {([['bundle', '관련서류 그리드 PDF'], ['zip', '자원별 압축(ZIP)']] as const).map(([m, label]) => (
               <button key={m} type="button" onClick={() => toggleFormat(m)}
                       className={`px-4 py-2 text-sm font-semibold ${formats.has(m) ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                 {formats.has(m) ? '✓ ' : ''}{label}
@@ -291,14 +289,7 @@ export default function DocumentReviewSendPage() {
             ))}
           </div>
           {formats.has('bundle') && formats.has('zip') && (
-            <div className="text-xs text-slate-500">병합 PDF와 자원별 ZIP 을 한 메일에 함께 첨부해 발송합니다.</div>
-          )}
-          {mode === 'bundle' && (
-            <label className="flex w-fit items-center gap-2 text-sm text-slate-600 cursor-pointer">
-              <input type="checkbox" checked={separatorPage} onChange={(e) => setSeparatorPage(e.target.checked)}
-                     className="h-4 w-4 accent-brand-600" />
-              자원마다 구분면(이름) 페이지 넣기
-            </label>
+            <div className="text-xs text-slate-500">관련서류 그리드 PDF와 자원별 ZIP 을 한 메일에 함께 첨부해 발송합니다.</div>
           )}
         </section>
 
