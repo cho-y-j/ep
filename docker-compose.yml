@@ -89,6 +89,8 @@ services:
       MAIL_PORT: ${MAIL_PORT:-465}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      # 심사 메일 본인계정 발송 — 담당자 앱비밀번호 AES-256-GCM 암호화 마스터키(한번 정하면 불변, .env 주입·커밋 금지)
+      MAIL_CRED_KEY: ${MAIL_CRED_KEY:-}
       # 사인 페이지 BASE URL — 운영 배포 시 sk.on1.kr 등으로 치환
       SKEP_PUBLIC_BASE_URL: ${SKEP_PUBLIC_BASE_URL:-http://localhost:8082}
       # WHY: /app/uploads 는 docker volume 이라 mount 후 root:root 가 돼 skep user (uid 10001) 가
