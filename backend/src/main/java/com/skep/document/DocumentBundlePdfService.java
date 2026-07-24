@@ -28,10 +28,9 @@ import com.skep.user.UserRepository;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -70,14 +69,7 @@ public class DocumentBundlePdfService {
     private final DocumentReviewItemRepository reviewItemRepo;
     private final NotificationService notifications;
     private final UserRepository userRepo;
-    private final ObjectProvider<JavaMailSender> mailSenderProvider;
-
-    /** 네이버/지메일 SMTP 는 From 이 반드시 인증 계정 본인이어야 함. */
-    @Value("${MAIL_USERNAME:}")
-    private String defaultFrom;
-
-    @Value("${SKEP_PUBLIC_BASE_URL:http://localhost:8082}")
-    private String publicBaseUrl;
+    private final ReviewMailComposer composer;
 
     /** 구분면 한글 폰트(Nanum) 바이트 캐시 — 자원마다 재로드하지 않게. */
     private volatile byte[] fontBytes;
@@ -209,12 +201,12 @@ public class DocumentBundlePdfService {
 
         // 이메일 — 묶음마다 병합 PDF 첨부(있을 때만). BP 지정 시 그 회사 소속 사용자 이메일을 자동 CC.
         if (!emails.isEmpty()) {
-            JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
-            if (mailSender == null) throw ApiException.badRequest("MAIL_DISABLED", "메일 발송이 설정되지 않았습니다");
+            // 발송 계정 결정(본인 등록계정 or 시스템 기본). 미등록인데 기본 미설정이면 여기서 400.
+            ReviewMailComposer.Prepared prep = composer.prepare(actor);
             List<String> cc = hasBp ? bpCcEmails(req.bpCompanyId(), emails) : List.of();
             // ZIP 동시 발송 — 같은 메일에 자원별 압축도 첨부(자원 중복 제거).
             List<ZipFile> zips = Boolean.TRUE.equals(req.includeZip()) ? buildZips(built) : List.of();
-            sendEmail(mailSender, emails, cc, req.message(), built, zips, totalDocs, actor.email());
+            sendEmail(prep, emails, cc, req.message(), built, zips, totalDocs);
         }
 
         return new BundlePdfResult(built.size(), emails.size(), bpDelivered, totalDocs, skippedEmpty);
@@ -303,28 +295,22 @@ public class DocumentBundlePdfService {
         return zips;
     }
 
-    private void sendEmail(JavaMailSender mailSender, List<String> emails, List<String> cc, String message,
-                           List<BuiltBundle> built, List<ZipFile> zips, int totalDocs, String replyTo) {
+    private void sendEmail(ReviewMailComposer.Prepared prep, List<String> emails, List<String> cc, String message,
+                           List<BuiltBundle> built, List<ZipFile> zips, int totalDocs) {
+        JavaMailSender mailSender = prep.sender();
         try {
             MimeMessage msg = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
-            if (defaultFrom != null && !defaultFrom.isBlank()) helper.setFrom(defaultFrom);
-            // 답장은 발송자(로그인 이메일)에게 — SMTP From 은 인증 계정 고정이라 Reply-To 로 회신 경로 지정.
-            if (replyTo != null && isSafeHeader(replyTo) && !replyTo.equalsIgnoreCase(defaultFrom)) {
-                helper.setReplyTo(replyTo);
-            }
+            composer.applyFrom(helper, prep); // From(표시명)·Reply-To — 등록계정 or 시스템 기본 분기
             helper.setTo(emails.toArray(new String[0]));
             if (cc != null && !cc.isEmpty()) helper.setCc(cc.toArray(new String[0]));
-            helper.setSubject("[서류 검토] 장비 묶음 " + built.size() + "건 / 서류 " + totalDocs + "건");
-            StringBuilder body = new StringBuilder();
-            if (message != null && !message.isBlank()) body.append(message.trim()).append("\n\n");
-            body.append("장비별로 서류를 하나로 병합한 PDF를 첨부합니다.\n");
-            for (BuiltBundle x : built) {
-                body.append(" - ").append(x.label()).append(" (서류 ").append(x.docCount()).append("건)\n");
-            }
-            if (!zips.isEmpty()) body.append("\n자원별 압축(ZIP)도 함께 첨부합니다.\n");
-            body.append("\n웹에서 바로 확인: ").append(publicBaseUrl).append("/document-reviews/received\n");
-            helper.setText(body.toString());
+            String subjectCompany = prep.companyName() != null ? prep.companyName() : "서류";
+            helper.setSubject("[" + subjectCompany + "] 서류 검토 요청 — 장비 " + built.size() + "건 / 서류 " + totalDocs + "건");
+            List<ReviewMailComposer.Line> lines = built.stream()
+                    .map(x -> new ReviewMailComposer.Line(x.label(), x.docCount())).toList();
+            String note = "장비별 병합 PDF " + built.size() + "개"
+                    + (zips.isEmpty() ? "" : " 및 자원별 압축(ZIP) " + zips.size() + "개");
+            helper.setText(composer.renderHtml(prep, message, lines, totalDocs, note), true);
             for (BuiltBundle x : built) {
                 helper.addAttachment(safeFileName(x.fileName()) + ".pdf", new ByteArrayResource(x.pdf()));
             }
@@ -332,6 +318,14 @@ public class DocumentBundlePdfService {
                 helper.addAttachment(z.name(), new ByteArrayResource(z.bytes()));
             }
             mailSender.send(msg);
+        } catch (MailAuthenticationException e) {
+            // 본인 계정 발송인데 인증 실패 — 조용한 기본폴백 없이 명확히 알린다(발송자 의도 존중).
+            log.warn("bundle pdf mail auth failed (registered={})", prep.registered());
+            throw ApiException.badRequest("MAIL_AUTH_FAIL", prep.registered()
+                    ? "발송 메일 인증 실패 — 앱 비밀번호를 확인하세요"
+                    : "메일 서버 인증에 실패했습니다");
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             log.warn("bundle pdf mail send failed: {}", e.getMessage());
             throw ApiException.badRequest("MAIL_FAIL", "메일 발송에 실패했습니다");

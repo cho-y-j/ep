@@ -57,6 +57,18 @@ public class User {
     @Column(name = "fcm_token", length = 512)
     private String fcmToken;
 
+    /** 발송 메일 계정(심사 메일 From) — 본인 메일로 보내려는 사용자만 등록. 미설정 시 시스템 기본 계정 발송. */
+    @Column(name = "mail_sender_email", length = 255)
+    private String mailSenderEmail;
+
+    /** 발송 메일 계정 앱 비밀번호 — AES-GCM 암호문(평문 저장 금지). */
+    @Column(name = "mail_sender_password_enc", length = 512)
+    private String mailSenderPasswordEnc;
+
+    /** 보낸사람 표시명 — 없으면 사용자명으로 대체. */
+    @Column(name = "mail_sender_name", length = 100)
+    private String mailSenderName;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -117,5 +129,19 @@ public class User {
 
     public void updateFcmToken(String token) {
         this.fcmToken = token;
+    }
+
+    /** 발송 메일 계정 등록/갱신. passwordEnc 는 이미 암호화된 값. */
+    public void updateMailSender(String email, String passwordEnc, String name) {
+        this.mailSenderEmail = email;
+        this.mailSenderPasswordEnc = passwordEnc;
+        this.mailSenderName = name;
+    }
+
+    /** 발송 메일 계정 해제 — 시스템 기본 계정 발송으로 폴백. */
+    public void clearMailSender() {
+        this.mailSenderEmail = null;
+        this.mailSenderPasswordEnc = null;
+        this.mailSenderName = null;
     }
 }

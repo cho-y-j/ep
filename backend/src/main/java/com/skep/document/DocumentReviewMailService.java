@@ -18,9 +18,8 @@ import com.skep.user.UserRepository;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -49,15 +48,7 @@ public class DocumentReviewMailService {
     private final CompanyService companyService;
     private final NotificationService notifications;
     private final UserRepository userRepo;
-    private final ObjectProvider<JavaMailSender> mailSenderProvider;
-
-    /** 네이버/지메일 SMTP 는 From 이 반드시 인증 계정 본인이어야 함. */
-    @Value("${MAIL_USERNAME:}")
-    private String defaultFrom;
-
-    /** 심사 메일 "웹에서 확인" 링크 base — 서명메일과 동일 프로퍼티(dev=http://localhost:5185). */
-    @Value("${SKEP_PUBLIC_BASE_URL:http://localhost:8082}")
-    private String publicBaseUrl;
+    private final ReviewMailComposer composer;
 
     public record ReviewMailResult(int recipients, int resources, int totalDocs, boolean bpDelivered) {}
 
@@ -147,13 +138,11 @@ public class DocumentReviewMailService {
 
         // 이메일 발송 — 이메일이 입력된 경우에만. 실패 시 예외로 위 저장까지 롤백된다.
         if (!emails.isEmpty()) {
-            JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
-            if (mailSender == null) {
-                throw ApiException.badRequest("MAIL_DISABLED", "메일 발송이 설정되지 않았습니다");
-            }
+            // 발송 계정 결정(본인 등록계정 or 시스템 기본). 미등록인데 기본 미설정이면 여기서 400.
+            ReviewMailComposer.Prepared prep = composer.prepare(actor);
             // BP사 지정 시 그 회사 소속 사용자 이메일을 자동 CC.
             List<String> ccEmails = hasBp ? bpCcEmails(req.bpCompanyId(), emails) : List.of();
-            sendEmail(mailSender, emails, ccEmails, req.message(), resources, totalDocs, actor.email());
+            sendEmail(prep, emails, ccEmails, req.message(), resources, totalDocs);
         }
 
         return new ReviewMailResult(emails.size(), resources.size(), totalDocs, bpDelivered);
@@ -171,8 +160,8 @@ public class DocumentReviewMailService {
                 .toList();
     }
 
-    private void sendEmail(JavaMailSender mailSender, List<String> emails, List<String> ccEmails, String message,
-                           List<Resource> resources, int totalDocs, String replyTo) {
+    private void sendEmail(ReviewMailComposer.Prepared prep, List<String> emails, List<String> ccEmails,
+                           String message, List<Resource> resources, int totalDocs) {
         record Attachment(String name, byte[] bytes) {}
         List<Attachment> attachments = new ArrayList<>();
         for (Resource r : resources) {
@@ -183,32 +172,31 @@ public class DocumentReviewMailService {
             log.warn("review mail aborted — 첨부 zip 생성 전멸");
             throw ApiException.badRequest("ZIP_FAIL", "첨부할 서류 압축 생성에 실패했습니다");
         }
+        JavaMailSender mailSender = prep.sender();
         try {
             MimeMessage msg = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
-            if (defaultFrom != null && !defaultFrom.isBlank()) helper.setFrom(defaultFrom);
-            // 답장은 발송자(로그인 이메일)에게 — SMTP From 은 인증 계정 고정이라 Reply-To 로 회신 경로 지정.
-            if (replyTo != null && isSafeHeader(replyTo) && !replyTo.equalsIgnoreCase(defaultFrom)) {
-                helper.setReplyTo(replyTo);
-            }
+            composer.applyFrom(helper, prep); // From(표시명)·Reply-To — 등록계정 or 시스템 기본 분기
             helper.setTo(emails.toArray(new String[0]));
             if (ccEmails != null && !ccEmails.isEmpty()) helper.setCc(ccEmails.toArray(new String[0]));
-            helper.setSubject("[서류 검토] 자원 " + attachments.size() + "건 / 서류 " + totalDocs + "건");
-            StringBuilder body = new StringBuilder();
-            if (message != null && !message.isBlank()) {
-                body.append(message.trim()).append("\n\n");
-            }
-            body.append("첨부된 자원별 압축파일(zip)을 확인해 주세요.\n");
-            for (Resource r : resources) {
-                body.append(" - ").append(r.label()).append(" (서류 ").append(r.docCount()).append("건)\n");
-            }
-            // 수신 BP 는 웹 수신함에서 인라인 열람·승인/반려 가능.
-            body.append("\n웹에서 바로 확인: ").append(publicBaseUrl).append("/document-reviews/received\n");
-            helper.setText(body.toString());
+            String subjectCompany = prep.companyName() != null ? prep.companyName() : "서류";
+            helper.setSubject("[" + subjectCompany + "] 서류 검토 요청 — 자원 " + attachments.size() + "건 / 서류 " + totalDocs + "건");
+            List<ReviewMailComposer.Line> lines = resources.stream()
+                    .map(r -> new ReviewMailComposer.Line(r.label(), r.docCount())).toList();
+            String note = "자원별 압축파일(ZIP) " + attachments.size() + "개";
+            helper.setText(composer.renderHtml(prep, message, lines, totalDocs, note), true);
             for (Attachment a : attachments) {
                 helper.addAttachment(a.name(), new ByteArrayResource(a.bytes()));
             }
             mailSender.send(msg);
+        } catch (MailAuthenticationException e) {
+            // 본인 계정 발송인데 인증 실패 — 조용한 기본폴백 없이 명확히 알린다(발송자 의도 존중).
+            log.warn("review mail auth failed (registered={})", prep.registered());
+            throw ApiException.badRequest("MAIL_AUTH_FAIL", prep.registered()
+                    ? "발송 메일 인증 실패 — 앱 비밀번호를 확인하세요"
+                    : "메일 서버 인증에 실패했습니다");
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             log.warn("review mail send failed: {}", e.getMessage());
             throw ApiException.badRequest("MAIL_FAIL", "메일 발송에 실패했습니다");
