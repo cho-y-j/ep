@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
+import SearchInput from '../../components/ui/SearchInput';
 import { PERSON_ROLE_LABEL, type PersonRole } from '../../types/person';
 import { type ComboOperatorCheck } from '../readiness/DeployCheckCard';
 
@@ -26,6 +27,7 @@ export default function EquipmentDefaultOperators({ equipmentId, supplierId, can
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState(''); // 추가 후보 이름 필터(즉시, 클라이언트)
 
   useEffect(() => {
     load();
@@ -127,22 +129,30 @@ export default function EquipmentDefaultOperators({ equipmentId, supplierId, can
         </ul>
       )}
 
-      {canEdit && (
-        <div className="mt-3 pt-3 border-t border-slate-100">
-          <div className="text-xs font-medium text-slate-600 mb-2">
-            추가할 수 있는 인원 ({candidates.filter((c) => !items.some((it) => it.person_id === c.id)).length}명)
-          </div>
-          <ul className="space-y-1">
-            {(() => {
-              const available = candidates.filter((c) => !items.some((it) => it.person_id === c.id));
-              if (available.length === 0) {
-                return (
-                  <li className="text-xs text-slate-400 italic py-3 text-center border border-dashed border-slate-200 rounded">
-                    추가할 인원이 없습니다
-                  </li>
-                );
-              }
-              return available.map((c) => (
+      {canEdit && (() => {
+        const notAdded = candidates.filter((c) => !items.some((it) => it.person_id === c.id));
+        const q = query.trim().toLowerCase();
+        const available = q ? notAdded.filter((c) => (c.name ?? '').toLowerCase().includes(q)) : notAdded;
+        return (
+          <div className="mt-3 pt-3 border-t border-slate-100">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="text-xs font-medium text-slate-600">
+                추가할 수 있는 인원 ({available.length}명)
+              </div>
+              {notAdded.length > 0 && (
+                <SearchInput value={query} onChange={setQuery} placeholder="이름 검색" className="w-40 shrink-0" />
+              )}
+            </div>
+            <ul className="space-y-1">
+              {notAdded.length === 0 ? (
+                <li className="text-xs text-slate-400 italic py-3 text-center border border-dashed border-slate-200 rounded">
+                  추가할 인원이 없습니다
+                </li>
+              ) : available.length === 0 ? (
+                <li className="text-xs text-slate-400 italic py-3 text-center border border-dashed border-slate-200 rounded">
+                  '{query.trim()}' 검색 결과 없음
+                </li>
+              ) : available.map((c) => (
                 <li key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded border border-slate-200 bg-white hover:bg-slate-50">
                   <span className="text-sm text-slate-900 flex-1 truncate">{c.name}</span>
                   {c.roles && c.roles.length > 0 && (
@@ -162,11 +172,11 @@ export default function EquipmentDefaultOperators({ equipmentId, supplierId, can
                     + 추가
                   </button>
                 </li>
-              ));
-            })()}
-          </ul>
-        </div>
-      )}
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
 
       {error && <p className="text-xs text-rose-600 mt-2">{error}</p>}
     </section>

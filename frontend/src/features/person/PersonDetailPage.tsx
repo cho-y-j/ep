@@ -398,6 +398,9 @@ export default function PersonDetailPage() {
           </div>
         </div>
 
+        {/* 매칭 장비 — 세트 허브 양방향(조종원→장비). 기본 정보 바로 아래로 올려 첫 화면에서 확인. 조종원 아니거나 매칭 없으면 숨김. */}
+        <PersonMatchedEquipment personId={person.id} />
+
         {/* 등록 서류 카드 */}
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           {(canEdit || isParentOfOwner) && (
@@ -441,9 +444,6 @@ export default function PersonDetailPage() {
 
         {/* 검진·교육 이력 — 자원별 점검 요청/승인 이력 */}
         <PersonCheckHistory personId={person.id} />
-
-        {/* 매칭 장비 — 세트 허브 양방향(조종원→장비). 조종원 아니거나 매칭 없으면 숨김. */}
-        <PersonMatchedEquipment personId={person.id} />
 
         {/* 앱 로그인 계정 */}
         {canEdit && <PersonCredentialCard person={person} onUpdated={setPerson} />}

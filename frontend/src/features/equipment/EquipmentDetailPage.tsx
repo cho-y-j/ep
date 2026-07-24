@@ -421,6 +421,9 @@ export default function EquipmentDetailPage() {
           </div>
         </div>
 
+        {/* 매칭 조종원 상단 요약 — combo.operators(하단 조합 섹션과 동일 데이터) 재사용, 신규 판정 없음. */}
+        <MatchedOperatorsSummary combo={combo} />
+
         {/* 상태 대시 — 응답에 이미 있는 값 표시만(새 계산 없음) */}
         <StatusDashboard equipment={equipment} reportedHourMeter={reportedHourMeter} />
 
@@ -513,13 +516,16 @@ export default function EquipmentDetailPage() {
         </div>
 
         {/* R1 조합(교대조) 조종원 — 차량 서류 바로 아래 배치해 세트(차량+조종원+각자 서류)를 한 화면에.
-            견적/작업계획서 자동 prefill. 수정은 소유 공급사(자기+직속자식)+ADMIN 만(BP 조회만). */}
-        <EquipmentDefaultOperators
-          equipmentId={equipment.id}
-          supplierId={equipment.supplier_id}
-          canEdit={canEdit}
-          operatorChecks={combo?.operators}
-        />
+            견적/작업계획서 자동 prefill. 수정은 소유 공급사(자기+직속자식)+ADMIN 만(BP 조회만).
+            id: 상단 매칭 조종원 요약의 '아래에서 추가' 스크롤 앵커. */}
+        <div id="combo-operators">
+          <EquipmentDefaultOperators
+            equipmentId={equipment.id}
+            supplierId={equipment.supplier_id}
+            canEdit={canEdit}
+            operatorChecks={combo?.operators}
+          />
+        </div>
 
         {/* P4: 차량 관리 — 검사·오일·등록 만료 + 일상점검 이력 + R3 가동시간 추이 */}
         <EquipmentDuePanel equipment={equipment} canEdit={canEdit} history={dailyInsp} onSaved={() => void load()} />
@@ -678,6 +684,44 @@ function SetReadinessCard({ combo }: { combo: ComboDeployCheckResult | null }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** 매칭 조종원 상단 요약 — combo.operators(하단 EquipmentDefaultOperators 와 동일 데이터) 재사용, 신규 판정 없음.
+ *  서류색만: DOCUMENT 게이트 0건이면 완비(green), 있으면 미비(amber). 매칭 0명이면 '아래에서 추가' 안내(하단 앵커로 스크롤). */
+function MatchedOperatorsSummary({ combo }: { combo: ComboDeployCheckResult | null }) {
+  if (!combo) return null; // combo 미로드/실패 시 숨김(과잉·오표시 방지)
+  const scrollToCombo = () => document.getElementById('combo-operators')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  if (combo.operators.length === 0) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <span className="text-sm font-semibold text-slate-700">매칭 조종원</span>
+        <span className="text-sm text-slate-400">매칭된 조종원 없음</span>
+        <button type="button" onClick={scrollToCombo}
+          className="text-xs px-2 py-0.5 rounded border border-slate-300 text-slate-600 hover:bg-slate-50">
+          아래에서 추가 ›
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <span className="shrink-0 text-sm font-semibold text-slate-700">매칭 조종원</span>
+      {combo.operators.map((op) => {
+        const docMissing = op.blocks.filter((b) => b.kind === 'DOCUMENT').length;
+        return (
+          <Link key={op.person_id} to={`/persons/${op.person_id}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium hover:opacity-80 ${
+              docMissing === 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${docMissing === 0 ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+            <span className="max-w-[8rem] truncate">{op.person_name}</span>
+            <span className="text-[10px] opacity-80">{docMissing === 0 ? '서류 완비' : `서류 ${docMissing}건 미비`}</span>
+          </Link>
+        );
+      })}
     </div>
   );
 }
