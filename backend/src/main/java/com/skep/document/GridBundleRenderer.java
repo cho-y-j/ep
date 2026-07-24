@@ -121,6 +121,7 @@ public class GridBundleRenderer {
         }
 
         Image img = gridImage(c.rawBytes(), c.contentType());
+        boolean previewOk = img != null;
         if (img != null) {
             img.setHorizontalAlignment(HorizontalAlignment.CENTER);
             cell.add(img);
@@ -128,13 +129,14 @@ public class GridBundleRenderer {
             cell.add(new Paragraph("원본 파일 별첨 · 미리보기 불가").setFontColor(GRAY).setFontSize(9)
                     .setTextAlignment(TextAlignment.CENTER).setMarginTop(50).setMarginBottom(50));
         }
-        if (c.stampBadge() != null) {
+        // 사진이 실제로 렌더된 셀에만 진위 스탬프 — 미리보기 불가 칸에 도장만 찍혀 공신력이 어긋나 보이는 것 방지.
+        if (previewOk && c.stampBadge() != null) {
             cell.add(new Paragraph(c.stampBadge())
                     .setFontColor(ColorConstants.WHITE).setBackgroundColor(STAMP_BG)
                     .setFontSize(8.5f).setPaddingLeft(4).setPaddingRight(4)
                     .setPaddingTop(1).setPaddingBottom(1).setMarginTop(4));
         }
-        if (c.stampSub() != null) {
+        if (previewOk && c.stampSub() != null) {
             cell.add(new Paragraph(c.stampSub()).setFontColor(GRAY).setFontSize(7.5f).setMarginTop(1));
         }
         return cell;
