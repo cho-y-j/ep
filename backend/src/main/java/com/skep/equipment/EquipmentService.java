@@ -109,6 +109,22 @@ public class EquipmentService {
         return out;
     }
 
+    /**
+     * R1 역방향 — 이 인원이 조합(교대조)으로 묶인 장비들. 인력 상세(세트 허브 양방향)에서 [장비 보기]로 연결.
+     * 접근: 인원 조회 스코프(personService.get — 크로스테넌트 403). 반환 장비는 actor 가 실제 조회 가능한 것만
+     * (장비 스코프 밖 장비는 링크가 403 이므로 제외 — 만료 없는 read-only). 저장 없음.
+     */
+    @Transactional(readOnly = true)
+    public List<Equipment> matchedEquipmentForPerson(Long personId, AuthenticatedUser actor) {
+        personService.get(personId, actor); // 인원 접근 검증(크로스테넌트 403)
+        List<Long> equipmentIds = defaultOperators.findByPersonId(personId).stream()
+                .map(EquipmentDefaultOperator::getEquipmentId).distinct().toList();
+        if (equipmentIds.isEmpty()) return List.of();
+        return repo.findAllById(equipmentIds).stream()
+                .filter(e -> canAccess(actor, e.getSupplierId()))
+                .toList();
+    }
+
     public List<EquipmentDefaultOperator> setDefaultOperators(Long equipmentId, List<Long> personIds, AuthenticatedUser actor) {
         Equipment e = repo.findById(equipmentId).orElseThrow(() ->
                 ApiException.notFound("EQUIPMENT_NOT_FOUND", "장비 " + equipmentId + " 없음"));
@@ -439,6 +455,19 @@ public class EquipmentService {
         }
         // MANPOWER_SUPPLIER / WORKER 는 장비 도메인 차단.
         throw ApiException.forbidden("EQUIPMENT_DENIED", "장비 조회 권한이 없습니다");
+    }
+
+    /** 조회 스코프 boolean(예외 없이) — matchedEquipmentForPerson 필터용. ensureCanAccess 와 동일 판정. */
+    private boolean canAccess(AuthenticatedUser actor, Long supplierId) {
+        if (actor.role() == Role.ADMIN) return true;
+        if (actor.companyId() == null) return false;
+        if (actor.role() == Role.EQUIPMENT_SUPPLIER) {
+            return companyService.selfAndChildren(actor.companyId()).contains(supplierId);
+        }
+        if (actor.role() == Role.BP) {
+            return visibleEquipmentSupplierIdsForBp(actor.companyId()).contains(supplierId);
+        }
+        return false;
     }
 
     private void ensureCanModify(AuthenticatedUser actor, Long supplierId) {

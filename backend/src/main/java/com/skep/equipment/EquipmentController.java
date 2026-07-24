@@ -176,6 +176,19 @@ public class EquipmentController {
         return new DefaultOperatorsBatchResponse(results);
     }
 
+    /**
+     * R1 역방향 — 이 인원이 조합(교대조)으로 매칭된 장비들(세트 허브 양방향: 인력 상세→매칭 장비).
+     * 접근권한은 인원 조회 스코프(크로스테넌트 403). 한 인원이 여러 장비에 매칭될 수 있어 복수 반환.
+     */
+    @GetMapping("/matched-by-person/{personId}")
+    public List<MatchedEquipmentItem> matchedByPerson(@PathVariable Long personId, @CurrentUser AuthenticatedUser actor) {
+        return service.matchedEquipmentForPerson(personId, actor).stream()
+                .map(e -> new MatchedEquipmentItem(e.getId(), e.getVehicleNo(), e.getCategory(), e.getModel()))
+                .toList();
+    }
+
+    public record MatchedEquipmentItem(Long id, String vehicleNo, String category, String model) {}
+
     public record SetDefaultOperatorsRequest(
             @com.fasterxml.jackson.annotation.JsonProperty("person_ids") List<Long> personIds) {}
 
