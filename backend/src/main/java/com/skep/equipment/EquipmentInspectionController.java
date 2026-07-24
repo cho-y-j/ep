@@ -29,6 +29,7 @@ public class EquipmentInspectionController {
     private final FieldTokenAuth fieldAuth;
     private final FieldTokenRateLimiter rateLimiter;
     private final com.skep.site.SiteRepository siteRepo;
+    private final com.skep.company.CompanyService companyService;
 
     /** 작업자(폰, X-Field-Token) 일상점검 제출. */
     @PostMapping("/api/field-auth/equipment-inspection")
@@ -94,8 +95,8 @@ public class EquipmentInspectionController {
 
     private void ensureCanView(AuthenticatedUser actor, Equipment e) {
         if (actor.role() == Role.ADMIN) return;
-        // 공급사: 본인 소유 장비만.
-        if (actor.companyId() != null && actor.companyId().equals(e.getSupplierId())) return;
+        // 공급사: 본인+직속 자식(협력사) 소유 장비. 장비 GET·combo 판정과 스코프 정합.
+        if (actor.companyId() != null && companyService.selfAndChildren(actor.companyId()).contains(e.getSupplierId())) return;
         // BP: 장비가 현재 자기 회사 현장에 배치된 경우만 (타사 장비 점검이력 열람 차단).
         if (actor.role() == Role.BP && actor.companyId() != null && e.getCurrentSiteId() != null) {
             Long bp = siteRepo.findById(e.getCurrentSiteId())
