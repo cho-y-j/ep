@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 import { IconAlertTriangle, IconXCircle, IconClock, IconCheck } from '../../components/icons';
 import type { DocumentResponse, DocumentTypeResponse } from '../../types/document';
 import BusinessRegUploadDialog from './BusinessRegUploadDialog';
+import MailSenderSettings from './MailSenderSettings';
 
 /**
  * S-9-G: 회사 사용자 (BP / EQUIPMENT_SUPPLIER / MANPOWER_SUPPLIER) 가
@@ -169,6 +170,8 @@ export default function MyCompanyPage() {
           </div>
           <DocumentSection ownerType="COMPANY" ownerId={company.id} canEdit={true} title="회사 서류" />
         </section>
+
+        <MailSenderSettings />
 
         {bizCertTypeId && (
           <BusinessRegUploadDialog
