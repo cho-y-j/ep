@@ -22,6 +22,7 @@ import {
 import {
   CHECK_TYPE_LABEL, CHECK_STATUS_LABEL, CHECK_STATUS_CHIP_CLS, type ResourceCheckResponse,
 } from '../../types/resourceCheck';
+import { equipmentCategoryLabel } from '../../types/equipment';
 
 const STATUS_BADGE: Record<PersonStatus, string> = {
   WORKING: 'bg-emerald-100 text-emerald-700',
@@ -441,6 +442,9 @@ export default function PersonDetailPage() {
         {/* 검진·교육 이력 — 자원별 점검 요청/승인 이력 */}
         <PersonCheckHistory personId={person.id} />
 
+        {/* 매칭 장비 — 세트 허브 양방향(조종원→장비). 조종원 아니거나 매칭 없으면 숨김. */}
+        <PersonMatchedEquipment personId={person.id} />
+
         {/* 앱 로그인 계정 */}
         {canEdit && <PersonCredentialCard person={person} onUpdated={setPerson} />}
 
@@ -551,6 +555,51 @@ function PersonCheckHistory({ personId }: { personId: number }) {
             <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${CHECK_STATUS_CHIP_CLS[c.status]}`}>
               {CHECK_STATUS_LABEL[c.status]}
             </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+type MatchedEquipment = { id: number; vehicle_no?: string | null; category: string; model?: string | null };
+
+/** 매칭 장비 — GET /api/equipment/matched-by-person (조합 원장 역조회, 권한=인원 조회 스코프).
+ *  조종원이 아니거나 매칭 없으면 응답이 비어 섹션 숨김. 실패도 조용히 숨김(과잉 표시 방지). */
+function PersonMatchedEquipment({ personId }: { personId: number }) {
+  const [items, setItems] = useState<MatchedEquipment[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get<MatchedEquipment[]>(`/api/equipment/matched-by-person/${personId}`)
+      .then((r) => { if (!cancelled) setItems(r.data); })
+      .catch(() => { if (!cancelled) setItems([]); });
+    return () => { cancelled = true; };
+  }, [personId]);
+
+  if (items === null || items.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <h2 className="mb-1 text-lg font-bold text-slate-900">매칭 장비</h2>
+      <p className="mb-4 text-xs text-slate-500">
+        이 조종원이 조합(교대조)으로 묶인 장비입니다. 장비 상세에서 세트(차량+조종원+각자 서류)를 함께 관리합니다.
+      </p>
+      <ul className="divide-y divide-slate-100">
+        {items.map((e) => (
+          <li key={e.id} className="flex items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-slate-800">
+                {e.vehicle_no || e.model || equipmentCategoryLabel(e.category)}
+              </div>
+              <div className="mt-0.5 text-xs text-slate-500">
+                {equipmentCategoryLabel(e.category)}{e.model && e.vehicle_no ? ` · ${e.model}` : ''}
+              </div>
+            </div>
+            <Link to={`/equipment/${e.id}`}
+              className="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+              장비 보기
+            </Link>
           </li>
         ))}
       </ul>

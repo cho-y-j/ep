@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { PERSON_ROLE_LABEL, type PersonRole } from '../../types/person';
+import { type ComboOperatorCheck } from '../readiness/DeployCheckCard';
 
 interface OperatorItem { id: number; person_id: number; person_name?: string | null; priority: number; }
 interface PersonOption { id: number; name: string; supplier_id?: number; roles?: string[]; team?: string; }
@@ -12,10 +14,12 @@ interface Props {
   supplierId: number;
   /** true 면 편집 가능. false 면 readonly 표시. */
   canEdit: boolean;
+  /** R1 조합 판정(deploy-check-combo) 조종원별 결과 — 서류 상태 배지 산출용(부모가 1회 fetch 재사용). */
+  operatorChecks?: ComboOperatorCheck[];
 }
 
 /** V36: 장비의 기본 조종원 목록 (우선순위 N명). 견적/작업계획서 자동 prefill 대상. */
-export default function EquipmentDefaultOperators({ equipmentId, supplierId, canEdit }: Props) {
+export default function EquipmentDefaultOperators({ equipmentId, supplierId, canEdit, operatorChecks }: Props) {
   const { user } = useAuth();
   const [items, setItems] = useState<OperatorItem[]>([]);
   const [candidates, setCandidates] = useState<PersonOption[]>([]);
@@ -63,6 +67,14 @@ export default function EquipmentDefaultOperators({ equipmentId, supplierId, can
   const personLabel = (it: OperatorItem) =>
     it.person_name ?? candidates.find((c) => c.id === it.person_id)?.name ?? `인원 #${it.person_id}`;
 
+  // 조종원별 서류 상태 — combo 판정의 DOCUMENT 게이트(그 인원의 미검증/만료 필수서류 종류 수) 재사용.
+  // combo 미로드/판정 밖이면 null → 배지 숨김(과장 표시 방지).
+  const docMissingOf = (personId: number): number | null => {
+    const check = operatorChecks?.find((o) => o.person_id === personId);
+    if (!check) return null;
+    return check.blocks.filter((b) => b.kind === 'DOCUMENT').length;
+  };
+
   const handleRemove = (pid: number) => {
     save(items.filter((it) => it.person_id !== pid).map((it) => it.person_id));
   };
@@ -87,13 +99,24 @@ export default function EquipmentDefaultOperators({ equipmentId, supplierId, can
         <ul className="space-y-1">
           {items.map((it) => {
             const cand = candidates.find((c) => c.id === it.person_id);
+            const docMissing = docMissingOf(it.person_id);
             return (
-              <li key={it.id} className="flex items-center gap-2 px-2 py-1.5 rounded border border-slate-200 bg-slate-50">
+              <li key={it.id} className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded border border-slate-200 bg-slate-50">
                 <span className="w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0" />
-                <span className="text-sm text-slate-900 flex-1 truncate">{personLabel(it)}</span>
+                <span className="text-sm text-slate-900 flex-1 min-w-0 truncate">{personLabel(it)}</span>
                 {cand?.team && (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">{cand.team}</span>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 shrink-0">{cand.team}</span>
                 )}
+                {docMissing != null && (
+                  <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${
+                    docMissing === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+                    {docMissing === 0 ? '서류 완비' : `서류 ${docMissing}건 미비`}
+                  </span>
+                )}
+                <Link to={`/persons/${it.person_id}`}
+                  className="text-xs px-2 py-0.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 shrink-0">
+                  서류 보기
+                </Link>
                 {canEdit && (
                   <button type="button" onClick={() => handleRemove(it.person_id)} disabled={saving}
                     className="text-xs px-2 py-0.5 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-30">제거</button>

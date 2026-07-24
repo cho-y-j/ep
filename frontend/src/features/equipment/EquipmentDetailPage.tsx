@@ -17,7 +17,7 @@ import { equipmentCategoryLabel, type EquipmentResponse } from '../../types/equi
 import ClientOrgHistory from '../../components/ClientOrgHistory';
 import EquipmentDefaultOperators from './EquipmentDefaultOperators';
 import EquipmentDuePanel, { type DailyInsp } from './EquipmentDuePanel';
-import DeployCheckCard from '../readiness/DeployCheckCard';
+import DeployCheckCard, { type ComboDeployCheckResult } from '../readiness/DeployCheckCard';
 import OnboardingBadge from '../onboarding/OnboardingBadge';
 import { useEquipmentTypes } from './useEquipmentTypes';
 
@@ -51,6 +51,7 @@ export default function EquipmentDetailPage() {
   const [collectOpen, setCollectOpen] = useState(false);
   const [supplementOpen, setSupplementOpen] = useState(false);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const [combo, setCombo] = useState<ComboDeployCheckResult | null>(null);
   const [dailyInsp, setDailyInsp] = useState<DailyInsp[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -102,6 +103,16 @@ export default function EquipmentDetailPage() {
   }, [id]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // R1 세트(차량+조종원) 투입 준비 종합 — 상단 요약 카드 + 조종원 서류 배지 공용(현장 미지정 기준 1회, 신규 판정 없음).
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    api.get<ComboDeployCheckResult>(`/api/resources/equipment/${id}/deploy-check-combo`)
+      .then((r) => { if (!cancelled) setCombo(r.data); })
+      .catch(() => { if (!cancelled) setCombo(null); });
+    return () => { cancelled = true; };
+  }, [id]);
 
   // R3: 조종원 일상점검 이력(가동시간·운행거리 포함)을 페이지 단위로 1회 로드 — 상태대시 + 차량관리 패널 공용.
   useEffect(() => {
@@ -413,6 +424,9 @@ export default function EquipmentDetailPage() {
         {/* 상태 대시 — 응답에 이미 있는 값 표시만(새 계산 없음) */}
         <StatusDashboard equipment={equipment} reportedHourMeter={reportedHourMeter} />
 
+        {/* R1 세트(차량+조종원) 투입 준비 종합 — deploy-check-combo 재사용(신규 판정 없음). */}
+        <SetReadinessCard combo={combo} />
+
         {editMode ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-6">
             <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -498,6 +512,15 @@ export default function EquipmentDetailPage() {
           </p>
         </div>
 
+        {/* R1 조합(교대조) 조종원 — 차량 서류 바로 아래 배치해 세트(차량+조종원+각자 서류)를 한 화면에.
+            견적/작업계획서 자동 prefill. 수정은 소유 공급사(자기+직속자식)+ADMIN 만(BP 조회만). */}
+        <EquipmentDefaultOperators
+          equipmentId={equipment.id}
+          supplierId={equipment.supplier_id}
+          canEdit={canEdit}
+          operatorChecks={combo?.operators}
+        />
+
         {/* P4: 차량 관리 — 검사·오일·등록 만료 + 일상점검 이력 + R3 가동시간 추이 */}
         <EquipmentDuePanel equipment={equipment} canEdit={canEdit} history={dailyInsp} onSaved={() => void load()} />
 
@@ -533,13 +556,6 @@ export default function EquipmentDetailPage() {
             {tab === 'note' && <NoteTab items={timeline?.notes ?? []} />}
           </div>
         </div>
-
-        {/* R1 조합(교대조) 조종원 — 견적/작업계획서 자동 prefill. 수정은 소유 공급사(자기+직속자식)+ADMIN 만(BP 조회만). */}
-        <EquipmentDefaultOperators
-          equipmentId={equipment.id}
-          supplierId={equipment.supplier_id}
-          canEdit={canEdit}
-        />
 
         {/* 현장 배치 섹션 */}
         <ResourceAssignmentSection
@@ -611,6 +627,57 @@ function StatusDashboard({ equipment, reportedHourMeter }: {
           <div className="mt-1 font-semibold text-slate-900 truncate">{t.node}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** R1 세트(차량+조종원) 투입 준비 종합 — combo(deploy-check-combo) 결과를 요약만(신규 판정 없음).
+ *  combo_ready / equipment.blocks / operators[].blocks 를 그대로 표시. 현장별·상세 판정은 하단 DeployCheckCard 담당. */
+function SetReadinessCard({ combo }: { combo: ComboDeployCheckResult | null }) {
+  if (!combo) return null;
+  const opCount = combo.operators.length;
+  const ready = combo.combo_ready && opCount > 0; // 세트 준비 = 차량 + 조종원(최소 1명) 전원 통과
+
+  if (ready) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">✓</span>
+        <div className="min-w-0">
+          <div className="text-sm font-bold text-emerald-800">세트 투입 준비됨</div>
+          <div className="text-xs text-emerald-700">차량 + 조종원 {opCount}명 전원 통과 (서류·검사·안전점검·이행지시)</div>
+        </div>
+      </div>
+    );
+  }
+
+  // 부족 사유 요약 — 차량(equipment.blocks) + 준비 안 된 조종원별(blocks).
+  const reasons: { who: string; detail: string }[] = [];
+  if (!combo.equipment.ready) {
+    reasons.push({ who: '차량', detail: combo.equipment.blocks.map((b) => b.label).join(', ') });
+  }
+  combo.operators.filter((o) => !o.ready).forEach((o) => {
+    reasons.push({ who: o.person_name, detail: o.blocks.map((b) => b.label).join(', ') });
+  });
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <div className="flex items-center gap-2">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400 text-sm text-white">!</span>
+        <div className="text-sm font-bold text-amber-800">세트 투입 준비 미완 — 아래를 해결하세요</div>
+      </div>
+      {opCount === 0 && (
+        <p className="mt-2 text-xs text-amber-700">매칭된 조종원이 없습니다 — 아래 '조합(교대조) 조종원'에서 추가하세요.</p>
+      )}
+      {reasons.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {reasons.map((r, i) => (
+            <li key={i} className="flex gap-2 text-xs text-amber-800">
+              <span className="shrink-0 font-semibold">{r.who}:</span>
+              <span className="min-w-0">{r.detail}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

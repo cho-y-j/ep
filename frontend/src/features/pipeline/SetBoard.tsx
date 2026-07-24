@@ -13,6 +13,7 @@ import {
   buildSet,
   currentSetIndex,
   currentSetStage,
+  resourcePath,
   setActionOf,
 } from './pipeline';
 
@@ -198,11 +199,11 @@ function SetCard({ set, showSupplier, onSelectResource, onCheck }: {
                 : head.resource_type === 'EQUIPMENT' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
               {isCombo ? '세트' : head.resource_type === 'EQUIPMENT' ? '장비' : '인원'}
             </span>
-            <button onClick={() => onSelectResource(set.key)}
+            <Link to={resourcePath(head)}
               className="truncate text-left font-medium text-slate-900 hover:text-brand-700 hover:underline"
-              title="자원별 상세 보기">
+              title="세트 허브(자원 상세)로 이동">
               {head.label}
-            </button>
+            </Link>
           </div>
           {opNames.length > 0 && (
             <div className="mt-0.5 truncate text-xs text-slate-500" title={opNames.join(', ')}>
